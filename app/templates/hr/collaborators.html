@@ -1,0 +1,61 @@
+{% extends "app_base.html" %}
+{% block app_content %}
+<div class="page-heading"><div><span class="eyebrow">Personal</span><h1>Colaboradores</h1><p>Los asesores comerciales se organizan por proyecto: IMPACTO o NOVAX.</p></div></div>
+<div class="row g-4">
+  <div class="col-xl-4">
+    <section class="panel-card">
+      <h2 class="h5">Nuevo colaborador</h2>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input name="name" class="form-control mb-2" placeholder="Nombre" required>
+        <input name="email" type="email" class="form-control mb-2" placeholder="Correo" required>
+        <input name="password" type="password" class="form-control mb-2" placeholder="Contraseña inicial">
+        <input name="phone" class="form-control mb-2" placeholder="Teléfono">
+        <input name="job_title" class="form-control mb-2" placeholder="Cargo">
+        <input name="department" class="form-control mb-2" placeholder="Área / departamento">
+        <select name="role_id" class="form-select mb-2">{% for r in roles %}<option value="{{ r.id }}">{{ r.label }}</option>{% endfor %}</select>
+        <select name="advisor_project_id" class="form-select mb-2">
+          <option value="">Proyecto comercial (si aplica)</option>
+          {% for p in advisor_projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+        </select>
+        <small class="text-secondary d-block mb-2">Para el rol Asesor Comercial debes seleccionar IMPACTO o NOVAX.</small>
+        <select name="supervisor_id" class="form-select mb-2"><option value="">Sin supervisor</option>{% for c in supervisors %}<option value="{{ c.id }}">{{ c.user.name }}</option>{% endfor %}</select>
+        <input name="join_date" type="date" class="form-control mb-2">
+        <input name="base_salary" type="number" step="0.01" class="form-control mb-2" placeholder="Salario/base">
+        <button class="btn btn-brand w-100">Crear</button>
+      </form>
+    </section>
+  </div>
+  <div class="col-xl-8">
+    <section class="panel-card">
+      <form class="row g-2 mb-3">
+        <div class="col-md-9">
+          <select name="advisor_project_id" class="form-select">
+            <option value="">Todos los proyectos</option>
+            {% for p in advisor_projects %}<option value="{{ p.id }}" {% if selected_project_id==p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3"><button class="btn btn-dark w-100">Filtrar</button></div>
+      </form>
+      <div class="table-responsive">
+        <table class="table modern-table">
+          <thead><tr><th>Colaborador</th><th>Cargo</th><th>Área</th><th>Proyecto</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
+          <tbody>
+          {% for c in collaborators %}
+            <tr>
+              <td>{{ c.user.name }}<small class="d-block text-secondary">{{ c.user.email }}</small></td>
+              <td>{{ c.job_title }}</td>
+              <td>{{ c.department or '—' }}</td>
+              <td>{% if c.advisor_project %}<span class="badge-soft info">{{ c.advisor_project.name }}</span>{% else %}—{% endif %}</td>
+              <td>{{ c.user.role.label if c.user.role else '—' }}</td>
+              <td>{{ c.status|title }}</td>
+              <td><a href="{{ url_for('hr.collaborator_detail', collaborator_id=c.id) }}">Ver</a></td>
+            </tr>
+          {% else %}<tr><td colspan="7" class="text-center py-4">No hay colaboradores para este filtro.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

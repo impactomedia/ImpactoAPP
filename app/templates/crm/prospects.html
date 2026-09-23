@@ -1,0 +1,15 @@
+{% extends "app_base.html" %}
+{% block app_content %}
+<div class="page-heading"><div><span class="eyebrow">CRM Comercial</span><h1>Prospectos y seguimientos</h1><p>Gestiona oportunidades antes de convertirlas en clientes y sepáralas por IMPACTO / NOVAX.</p></div><div><a class="btn btn-outline-secondary" href="{{ url_for('crm.pipeline') }}">Pipeline</a> <a class="btn btn-brand" href="{{ url_for('crm.new_prospect') }}">Nuevo prospecto</a></div></div>
+<section class="panel-card">
+  <form class="row g-2 mb-3">
+    <div class="col-md-4"><input class="form-control" name="q" value="{{ search }}" placeholder="Buscar negocio, contacto, teléfono o correo"></div>
+    <div class="col-md-3"><select class="form-select" name="stage"><option value="">Todas las etapas</option>{% for s in stages %}<option value="{{ s }}" {% if stage==s %}selected{% endif %}>{{ s.replace('_',' ')|title }}</option>{% endfor %}</select></div>
+    <div class="col-md-3"><select class="form-select" name="advisor_project_id"><option value="">IMPACTO + NOVAX</option>{% for p in advisor_projects %}<option value="{{ p.id }}" {% if advisor_project_id==p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><button class="btn btn-dark w-100">Filtrar</button></div>
+  </form>
+  <div class="table-responsive"><table class="table modern-table"><thead><tr><th>Negocio</th><th>Contacto</th><th>Etapa</th><th>Prioridad</th><th>Responsable</th><th>Proyecto</th><th>Próximo paso</th></tr></thead><tbody>
+  {% for c in clients %}<tr><td><a href="{{ url_for('crm.detail', client_id=c.id) }}"><strong>{{ c.business_name }}</strong></a><small class="d-block text-secondary">{{ c.code }}</small></td><td>{{ c.contact_name }}<small class="d-block text-secondary">{{ c.phone or c.email }}</small></td><td><span class="badge-soft info">{{ c.pipeline_stage.replace('_',' ')|title }}</span></td><td>{{ c.priority|title }}</td><td>{{ c.owner.user.name if c.owner else 'Sin asignar' }}</td><td>{{ c.owner.advisor_project.name if c.owner and c.owner.advisor_project else '—' }}</td><td>{% set future = c.interactions|selectattr('next_followup_at')|list %}{{ future[-1].next_followup_at.strftime('%d/%m/%Y %H:%M') if future else '—' }}</td></tr>{% else %}<tr><td colspan="7" class="text-center py-4">No hay prospectos.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

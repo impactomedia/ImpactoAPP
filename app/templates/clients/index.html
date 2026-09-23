@@ -1,0 +1,15 @@
+{% extends "app_base.html" %}
+{% block app_content %}
+<div class="page-heading"><div><span class="eyebrow">Clientes</span><h1>Control de clientes</h1><p>Ficha operativa, servicios, pagos, responsables y proyecto comercial.</p></div><div><a class="btn btn-light border" href="{{ url_for('clients.import_csv') }}">Importar CSV</a> <a class="btn btn-outline-secondary" href="{{ url_for('clients.export_csv') }}">Exportar</a></div></div>
+<section class="panel-card">
+  <form class="row g-2 mb-3">
+    <div class="col-md-5"><input class="form-control" name="q" value="{{ search }}" placeholder="Buscar cliente"></div>
+    <div class="col-md-3"><select name="status" class="form-select"><option value="">Todos los estados</option><option value="activo" {% if status=='activo' %}selected{% endif %}>Activo</option><option value="inactivo" {% if status=='inactivo' %}selected{% endif %}>Inactivo</option><option value="caducado" {% if status=='caducado' %}selected{% endif %}>Caducado</option></select></div>
+    <div class="col-md-2"><select name="advisor_project_id" class="form-select"><option value="">IMPACTO + NOVAX</option>{% for p in advisor_projects %}<option value="{{ p.id }}" {% if advisor_project_id==p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><button class="btn btn-dark w-100">Filtrar</button></div>
+  </form>
+  <div class="table-responsive"><table class="table modern-table"><thead><tr><th>Negocio</th><th>Contacto</th><th>Estado</th><th>Asesor</th><th>Proyecto</th><th>Servicios</th><th>Saldo</th><th></th></tr></thead><tbody>
+  {% for c in clients %}<tr><td><strong>{{ c.business_name }}</strong><small class="d-block text-secondary">{{ c.code }}</small></td><td>{{ c.contact_name }}<small class="d-block text-secondary">{{ c.phone or c.email }}</small></td><td><span class="badge-soft {{ 'success' if c.client_status=='activo' else 'warning' if c.client_status=='caducado' else 'muted' }}">{{ c.client_status|title }}</span></td><td>{{ c.owner.user.name if c.owner else '—' }}</td><td>{{ c.owner.advisor_project.name if c.owner and c.owner.advisor_project else '—' }}</td><td>{{ c.contracts|length }}</td><td>{{ c.outstanding_balance|money }}</td><td><a class="btn btn-sm btn-light border" href="{{ url_for('clients.detail', client_id=c.id) }}">Ficha</a></td></tr>{% else %}<tr><td colspan="8" class="text-center py-4">No hay clientes.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

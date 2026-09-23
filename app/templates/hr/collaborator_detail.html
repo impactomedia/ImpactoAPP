@@ -1,0 +1,28 @@
+{% extends "app_base.html" %}
+{% block app_content %}
+<div class="page-heading"><div><span class="eyebrow">Expediente</span><h1>{{ collaborator.user.name }}</h1><p>{{ collaborator.job_title }} · {{ collaborator.department or 'Sin área' }}{% if collaborator.advisor_project %} · {{ collaborator.advisor_project.name }}{% endif %}</p></div></div>
+<div class="row g-4">
+  <div class="col-xl-8">
+    <section class="panel-card mb-4">
+      <h2 class="h5">Información laboral</h2>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-2">
+          <div class="col-md-6"><label>Cargo</label><input name="job_title" class="form-control" value="{{ collaborator.job_title }}"></div>
+          <div class="col-md-6"><label>Área</label><input name="department" class="form-control" value="{{ collaborator.department or '' }}"></div>
+          <div class="col-md-6"><label>Proyecto comercial</label><select name="advisor_project_id" class="form-select"><option value="">Sin proyecto</option>{% for p in advisor_projects %}<option value="{{ p.id }}" {% if collaborator.advisor_project_id==p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select><small class="text-secondary">Usar IMPACTO o NOVAX para asesores comerciales.</small></div>
+          <div class="col-md-6"><label>Estado</label><select name="status" class="form-select"><option {% if collaborator.status=='activo' %}selected{% endif %}>activo</option><option {% if collaborator.status=='inactivo' %}selected{% endif %}>inactivo</option><option {% if collaborator.status=='suspendido' %}selected{% endif %}>suspendido</option></select></div>
+          <div class="col-md-4"><label>Salario/base</label><input name="base_salary" type="number" step="0.01" class="form-control" value="{{ collaborator.base_salary }}"></div>
+          <div class="col-md-4"><label>Saldo vacaciones</label><input name="vacation_balance" type="number" step="0.01" class="form-control" value="{{ collaborator.vacation_balance }}"></div>
+        </div>
+        <button class="btn btn-brand mt-3">Guardar</button>
+      </form>
+    </section>
+    <section class="panel-card"><h2 class="h5">Evaluaciones</h2>{% for e in collaborator.evaluations %}<div class="border-bottom py-2">{{ e.evaluation_date }} · <strong>{{ e.score }}</strong> · {{ e.period or '' }}<small class="d-block text-secondary">{{ e.notes or '' }}</small></div>{% else %}<p>Sin evaluaciones.</p>{% endfor %}</section>
+  </div>
+  <div class="col-xl-4">
+    <section class="panel-card"><h2 class="h5">Documentos internos</h2>{% for d in collaborator.documents %}<div class="border-bottom py-2">{{ d.document_type }}<small class="d-block text-secondary">{{ d.file_name }}</small></div>{% else %}<p>Sin documentos.</p>{% endfor %}<form method="post" enctype="multipart/form-data" action="{{ url_for('hr.upload_document', collaborator_id=collaborator.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="document_type" class="form-control mb-2" placeholder="Tipo de documento"><input name="file" type="file" class="form-control mb-2"><label class="form-check mb-2"><input name="sensitive" type="checkbox" class="form-check-input" checked> Sensible</label><button class="btn btn-light border w-100">Subir</button></form></section>
+  </div>
+</div>
+<section class="panel-card mt-4"><h2 class="h5">Ajuste de saldo de vacaciones</h2><form method="post" action="{{ url_for('hr.vacation_adjust', collaborator_id=collaborator.id) }}" class="row g-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="col-md-3"><input name="days" type="number" step="0.01" class="form-control" placeholder="Días (+/-)" required></div><div class="col-md-7"><input name="reason" class="form-control" placeholder="Motivo del ajuste" required></div><div class="col-md-2"><button class="btn btn-dark w-100">Ajustar</button></div></form></section>
+{% endblock %}
