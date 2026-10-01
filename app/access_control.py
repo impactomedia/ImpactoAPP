@@ -160,8 +160,14 @@ def _required_permission(endpoint, method):
     if endpoint in HR_VIEW_ENDPOINTS:
         return "hr.view"
 
-    blueprint = request.blueprint
-    return DEFAULT_VIEW_PERMISSIONS.get(blueprint)
+    return DEFAULT_VIEW_PERMISSIONS.get(request.blueprint)
+
+
+def _team_collaborator_ids():
+    collaborator = current_user.collaborator
+    if not collaborator:
+        return set()
+    return {collaborator.id, *(row.id for row in collaborator.subordinates)}
 
 
 def _commercial_client_allowed(client):
@@ -169,17 +175,15 @@ def _commercial_client_allowed(client):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
+    if role not in {"advisor", "supervisor"}:
+        return True
     if not collaborator:
-        return role not in {"advisor", "supervisor"}
+        return False
 
     if role == "advisor":
         return client.owner_id == collaborator.id
 
-    if role == "supervisor":
-        allowed_ids = {collaborator.id, *(c.id for c in collaborator.subordinates)}
-        return client.owner_id in allowed_ids
-
-    return True
+    return client.owner_id in _team_collaborator_ids()
 
 
 def _sale_allowed(sale):
@@ -194,8 +198,55 @@ def _sale_allowed(sale):
     if role == "advisor":
         return sale.advisor_id == collaborator.id or _commercial_client_allowed(sale.client)
 
-    allowed_ids = {collaborator.id, *(c.id for c in collaborator.subordinates)}
-    return sale.advisor_id in allowed_ids or _commercial_client_allowed(sale.client)
+    team_ids = _team_collaborator_ids()
+    return sale.advisor_id in team_ids or _commercial_client_allowed(sale.client)
+
+
+def _project_allowed(project):
+    role = current_user.role.name if current_user.role else ""
+    collaborator = current_user.collaborator
+
+    if role in {"superadmin", "admin", "manager"}:
+        return True
+    if not collaborator:
+        return role not in {"advisor", "supervisor", "production"}
+
+    if role in {"advisor", "supervisor"}:
+        return _commercial_client_allowed(project.client)
+
+    if role == "production":
+        return project.coordinator_id == collaborator.id or collaborator in project.members
+
+    return True
+
+
+def _task_allowed(task):
+    role = current_user.role.name if current_user.role else ""
+    collaborator = current_user.collaborator
+
+    if role in {"superadmin", "admin", "manager"}:
+        return True
+    if not collaborator:
+        return False
+
+    if task.assignee_id == collaborator.id or collaborator in task.collaborators:
+        return True
+
+    if role == "supervisor":
+        team_ids = _team_collaborator_ids()
+        if task.assignee_id in team_ids:
+            return True
+        if any(member.id in team_ids for member in task.collaborators):
+            return True
+        return bool(task.project and _commercial_client_allowed(task.project.client))
+
+    if role == "advisor":
+        return bool(task.project and _commercial_client_allowed(task.project.client))
+
+    if role == "production":
+        return bool(task.project and _project_allowed(task.project))
+
+    return False
 
 
 def _enforce_record_scope(endpoint):
@@ -204,7 +255,6 @@ def _enforce_record_scope(endpoint):
         return
 
     role = current_user.role.name if current_user.role else ""
-    collaborator = current_user.collaborator
     args = request.view_args or {}
 
     # CRM: asesor = su cartera; supervisor = su equipo.
@@ -251,33 +301,23 @@ def _enforce_record_scope(endpoint):
         if sale is not None and not _sale_allowed(sale):
             abort(403)
 
-    # Operaciones: tareas personales para perfiles no privilegiados y proyectos asignados a Producción.
-    if request.blueprint == "operations" and collaborator:
+    # Operaciones: alcance de proyectos y tareas por función real.
+    if request.blueprint == "operations":
         from app.models import Project, Task
 
-        privileged = {"superadmin", "admin", "manager", "supervisor"}
+        if "project_id" in args:
+            project = Project.query.get(args["project_id"])
+            if project is not None and not _project_allowed(project):
+                abort(403)
 
-        if endpoint == "operations.task_kanban" and role not in privileged:
-            abort(403)
-
-        if "task_id" in args and role not in privileged:
+        if "task_id" in args:
             task = Task.query.get(args["task_id"])
-            if task and task.assignee_id != collaborator.id and collaborator not in task.collaborators:
-                abort(403)
-
-        if "project_id" in args and role == "production":
-            project = Project.query.get(args["project_id"])
-            if project and project.coordinator_id != collaborator.id and collaborator not in project.members:
-                abort(403)
-
-        if "project_id" in args and role == "advisor":
-            project = Project.query.get(args["project_id"])
-            if project and not _commercial_client_allowed(project.client):
+            if task is not None and not _task_allowed(task):
                 abort(403)
 
     # Imprenta: asesor/supervisor solo acceden a órdenes de su cartera/equipo.
     if request.blueprint == "printing" and role in {"advisor", "supervisor"}:
-        from app.models import DesignVersion, PrintIncident, PrintItem, PrintOrder, Shipment
+        from app.models import PrintIncident, PrintItem, PrintOrder, Shipment
 
         order = None
         if "order_id" in args:
@@ -301,6 +341,24 @@ def _enforce_record_scope(endpoint):
 
         ticket = SupportTicket.query.get(args["ticket_id"])
         if ticket is not None and not _commercial_client_allowed(ticket.client):
+            abort(403)
+
+    # RR. HH.: un supervisor solo puede abrir registros de su propio equipo.
+    if request.blueprint == "hr" and role == "supervisor":
+        from app.models import AttendanceMark, Collaborator, LeaveRequest
+
+        team_ids = _team_collaborator_ids()
+        target_id = None
+        if "collaborator_id" in args:
+            target_id = args["collaborator_id"]
+        elif "leave_id" in args:
+            row = LeaveRequest.query.get(args["leave_id"])
+            target_id = row.collaborator_id if row else None
+        elif "mark_id" in args:
+            row = AttendanceMark.query.get(args["mark_id"])
+            target_id = row.collaborator_id if row else None
+
+        if target_id is not None and target_id not in team_ids:
             abort(403)
 
 

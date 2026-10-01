@@ -5,19 +5,14 @@ from app.extensions import db
 from app.helpers import audit, notify, next_code
 from app.models import (
     AccountReceivable,
-    Client,
     ClientContract,
     Commission,
     CommissionRule,
-    Collaborator,
-    Deduction,
     Income,
     Payment,
     PrintItem,
     PrintOrder,
-    ProductService,
     Project,
-    Quote,
     Renewal,
     Sale,
     SaleItem,
@@ -44,19 +39,19 @@ def recalc_sale(sale):
     confirmed = sum((D(p.amount) for p in sale.payments if p.status == "confirmado"), Decimal("0"))
     sale.amount_paid = confirmed
     sale.balance = max(Decimal("0"), D(sale.total) - confirmed)
-    ar = sale.receivable
-    if ar:
-        ar.total_amount = sale.total
-        ar.paid_amount = confirmed
+    receivable = sale.receivable
+    if receivable:
+        receivable.total_amount = sale.total
+        receivable.paid_amount = confirmed
         today = date.today()
         if sale.balance <= 0:
-            ar.status = "pagado"
-        elif ar.due_date and ar.due_date < today:
-            ar.status = "vencido"
-        elif ar.due_date and (ar.due_date - today).days <= 7:
-            ar.status = "proximo_vencer"
+            receivable.status = "pagado"
+        elif receivable.due_date and receivable.due_date < today:
+            receivable.status = "vencido"
+        elif receivable.due_date and (receivable.due_date - today).days <= 7:
+            receivable.status = "proximo_vencer"
         else:
-            ar.status = "al_dia"
+            receivable.status = "al_dia"
     recalc_commission(sale)
     return sale
 
@@ -70,9 +65,8 @@ def choose_commission_rule(sale, commission_base):
             continue
         if maximum is not None and commission_base > maximum:
             continue
-        if rule.product_id:
-            if not any(item.product_id == rule.product_id for item in sale.items):
-                continue
+        if rule.product_id and not any(item.product_id == rule.product_id for item in sale.items):
+            continue
         return rule
     return None
 
@@ -80,11 +74,17 @@ def choose_commission_rule(sale, commission_base):
 def recalc_commission(sale):
     if not sale.advisor_id:
         return None
+
+    # Una comisión ya pagada se congela. No debe cambiar su monto por ajustes
+    # posteriores de la venta sin una intervención financiera explícita.
+    commission = sale.commission
+    if commission and commission.status == "pagada":
+        return commission
+
     deductions = sum((D(d.amount) for d in sale.deductions if d.affects_commission), Decimal("0"))
     full_base = max(Decimal("0"), D(sale.total) - deductions)
     rule = choose_commission_rule(sale, full_base)
     if not rule:
-        commission = sale.commission
         if commission:
             commission.base_amount = full_base
             commission.amount = Decimal("0")
@@ -108,7 +108,6 @@ def recalc_commission(sale):
     minimum_applied = bool(raw < minimum and base > 0)
     amount = max(raw, minimum) if base > 0 else Decimal("0")
 
-    commission = sale.commission
     if not commission:
         commission = Commission(sale_id=sale.id, advisor_id=sale.advisor_id)
         db.session.add(commission)
@@ -117,17 +116,34 @@ def recalc_commission(sale):
     commission.percentage = rule.percentage
     commission.minimum_applied = minimum_applied
     commission.amount = amount
-    if commission.status != "pagada":
-        commission.status = status
+    commission.status = status
     return commission
 
 
-def add_payment(sale, amount, method, effective_date=None, reference=None, status="confirmado", notes=None, registered_by_id=None):
+def add_payment(
+    sale,
+    amount,
+    method,
+    effective_date=None,
+    reference=None,
+    status="confirmado",
+    notes=None,
+    registered_by_id=None,
+):
+    amount = D(amount)
+    if amount <= 0:
+        raise ValueError("El monto del pago debe ser mayor que cero.")
+
+    if status == "confirmado" and amount > D(sale.balance):
+        raise ValueError(
+            f"El pago excede el saldo pendiente de {sale.currency} {D(sale.balance):,.2f}."
+        )
+
     payment = Payment(
         client_id=sale.client_id,
         sale_id=sale.id,
         effective_date=effective_date or date.today(),
-        amount=D(amount),
+        amount=amount,
         currency=sale.currency,
         method=method,
         reference=reference,
@@ -137,6 +153,7 @@ def add_payment(sale, amount, method, effective_date=None, reference=None, statu
     )
     db.session.add(payment)
     db.session.flush()
+
     if status == "confirmado":
         income = Income(
             effective_date=payment.effective_date,
@@ -151,6 +168,7 @@ def add_payment(sale, amount, method, effective_date=None, reference=None, statu
             status="confirmado",
         )
         db.session.add(income)
+
     recalc_sale(sale)
     audit("registrar_pago", "Sale", sale.id, after={"amount": str(payment.amount), "method": method})
     return payment
@@ -158,7 +176,10 @@ def add_payment(sale, amount, method, effective_date=None, reference=None, statu
 
 def create_sale_from_quote(quote, initial_payment=0, payment_method="transferencia", due_date=None, user_id=None):
     if quote.status not in {"aceptada", "enviada", "borrador"}:
-        raise ValueError("La cotización no puede convertirse en venta desde su estado actual")
+        raise ValueError("La cotización no puede convertirse en venta desde su estado actual.")
+    if not quote.items:
+        raise ValueError("La cotización no contiene ítems para convertir en venta.")
+
     client = quote.client
     sale = Sale(
         sale_no=next_code("VEN", Sale),
@@ -175,21 +196,26 @@ def create_sale_from_quote(quote, initial_payment=0, payment_method="transferenc
     )
     db.session.add(sale)
     db.session.flush()
-    for qi in quote.items:
+
+    for quote_item in quote.items:
         item = SaleItem(
             sale_id=sale.id,
-            product_id=qi.product_id,
-            description=qi.description,
-            quantity=qi.quantity,
-            list_price=qi.unit_price,
+            product_id=quote_item.product_id,
+            description=quote_item.description,
+            quantity=quote_item.quantity,
+            list_price=quote_item.unit_price,
             discount=0,
-            unit_price=qi.unit_price,
-            total=D(qi.quantity) * D(qi.unit_price),
+            unit_price=quote_item.unit_price,
+            total=D(quote_item.quantity) * D(quote_item.unit_price),
         )
         db.session.add(item)
+
     db.session.flush()
     recalc_sale(sale)
-    ar = AccountReceivable(
+    if D(sale.total) <= 0:
+        raise ValueError("La cotización debe tener un total mayor que cero.")
+
+    receivable = AccountReceivable(
         client_id=client.id,
         sale_id=sale.id,
         total_amount=sale.total,
@@ -197,7 +223,7 @@ def create_sale_from_quote(quote, initial_payment=0, payment_method="transferenc
         due_date=due_date,
         status="al_dia",
     )
-    db.session.add(ar)
+    db.session.add(receivable)
     client.record_type = "cliente"
     client.pipeline_stage = "venta_cerrada"
     client.client_status = "activo"
@@ -218,6 +244,7 @@ def generate_operational_work(sale):
         product = item.product
         if not product:
             continue
+
         duration = product.duration_months or 0
         end_date = date.today() + timedelta(days=duration * 30) if duration else None
         contract = ClientContract(
@@ -231,9 +258,17 @@ def generate_operational_work(sale):
             principal=False,
         )
         db.session.add(contract)
+
         if product.renewal_required or end_date:
             renewal_due = end_date or (date.today() + timedelta(days=365))
-            db.session.add(Renewal(client_id=sale.client_id, contract=contract, renewal_type=product.name, due_date=renewal_due))
+            db.session.add(
+                Renewal(
+                    client_id=sale.client_id,
+                    contract=contract,
+                    renewal_type=product.name,
+                    due_date=renewal_due,
+                )
+            )
 
         if product.is_physical:
             order = PrintOrder(
@@ -245,7 +280,14 @@ def generate_operational_work(sale):
             )
             db.session.add(order)
             db.session.flush()
-            db.session.add(PrintItem(order_id=order.id, name=item.description, quantity=int(D(item.quantity)), design_status="pendiente"))
+            db.session.add(
+                PrintItem(
+                    order_id=order.id,
+                    name=item.description,
+                    quantity=max(1, int(D(item.quantity))),
+                    design_status="pendiente",
+                )
+            )
         else:
             project = Project(
                 project_no=next_code("PRJ", Project),
@@ -263,29 +305,33 @@ def generate_operational_work(sale):
             db.session.flush()
             template = TaskTemplate.query.filter_by(product_id=product.id, active=True).first()
             if template and template.items:
-                for ti in template.items:
-                    db.session.add(Task(
-                        title=ti.title,
-                        description=ti.description,
-                        task_type=ti.task_type,
+                for template_item in template.items:
+                    db.session.add(
+                        Task(
+                            title=template_item.title,
+                            description=template_item.description,
+                            task_type=template_item.task_type,
+                            client_id=sale.client_id,
+                            project_id=project.id,
+                            priority=template_item.priority,
+                            status="pendiente",
+                            due_at=datetime.utcnow() + timedelta(days=template_item.due_days or 3),
+                            checklist="[ ] Requisito obligatorio" if template_item.required else None,
+                        )
+                    )
+            else:
+                db.session.add(
+                    Task(
+                        title=f"Onboarding: {product.name}",
+                        description="Recopilar información, accesos, materiales y aprobación inicial del cliente.",
+                        task_type="cliente",
                         client_id=sale.client_id,
                         project_id=project.id,
-                        priority=ti.priority,
+                        priority="alta",
                         status="pendiente",
-                        due_at=datetime.utcnow() + timedelta(days=ti.due_days or 3),
-                        checklist="[ ] Requisito obligatorio" if ti.required else None,
-                    ))
-            else:
-                db.session.add(Task(
-                    title=f"Onboarding: {product.name}",
-                    description="Recopilar información, accesos, materiales y aprobación inicial del cliente.",
-                    task_type="cliente",
-                    client_id=sale.client_id,
-                    project_id=project.id,
-                    priority="alta",
-                    status="pendiente",
-                    due_at=datetime.utcnow() + timedelta(days=3),
-                ))
+                        due_at=datetime.utcnow() + timedelta(days=3),
+                    )
+                )
 
 
 def update_print_order_status(order):
@@ -296,7 +342,7 @@ def update_print_order_status(order):
         order.status = "recibido"
     elif order.incidents and any(i.status == "abierta" for i in order.incidents):
         order.status = "incidencia"
-    elif any(s.status == "en_transito" for s in order.shipments):
+    elif any(s.status in {"en_transito", "parcial"} for s in order.shipments):
         order.status = "en_transito"
     elif all(i.shipping_approved_at for i in items) and not order.shipments:
         order.status = "aprobado_envio"
@@ -309,9 +355,9 @@ def update_print_order_status(order):
 
 def refresh_overdue_receivables():
     today = date.today()
-    for ar in AccountReceivable.query.filter(AccountReceivable.status != "pagado").all():
-        if ar.due_date and ar.due_date < today:
-            ar.status = "vencido"
+    for receivable in AccountReceivable.query.filter(AccountReceivable.status != "pagado").all():
+        if receivable.due_date and receivable.due_date < today:
+            receivable.status = "vencido"
 
 
 def refresh_expired_contracts():
@@ -330,11 +376,18 @@ def ensure_renewal_notifications(days=(60, 30, 15, 7, 0)):
             owner = renewal.client.owner
             if owner and owner.user_id:
                 title = f"Renovación: {renewal.client.business_name}"
-                msg = f"{renewal.renewal_type} vence en {delta} día(s) ({renewal.due_date})."
-                already = False
-                for n in owner.user.notifications:
-                    if n.title == title and n.message == msg and not n.read:
-                        already = True
-                        break
+                message = f"{renewal.renewal_type} vence en {delta} día(s) ({renewal.due_date})."
+                already = any(
+                    notification.title == title
+                    and notification.message == message
+                    and not notification.read
+                    for notification in owner.user.notifications
+                )
                 if not already:
-                    notify(owner.user_id, title, msg, link=f"/clients/{renewal.client_id}", priority="alta" if delta <= 7 else "normal")
+                    notify(
+                        owner.user_id,
+                        title,
+                        message,
+                        link=f"/clients/{renewal.client_id}",
+                        priority="alta" if delta <= 7 else "normal",
+                    )
