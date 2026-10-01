@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.1 — Corrección Clientes V2 · Fase 4
+
+- Corregido el reconocimiento de `Google Business Profile / Maps` dentro del parser del Excel operativo.
+- Cuando la ficha del Excel indica Google pendiente de verificación, ahora se crea correctamente `ClientPlatform(platform_key="google_business", status="pendiente")`.
+- No hay cambios de esquema ni nueva migración.
+- La corrección responde al único fallo detectado por GitHub Actions en la v1.7.0: 69 pruebas pasaron y 1 falló por ausencia de la plataforma Google.
+
 ## 1.7.0 — Clientes V2 · Fase 4
 
 - Nueva importación controlada del Excel operativo con flujo Vista previa → Confirmación → Ejecución.

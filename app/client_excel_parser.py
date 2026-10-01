@@ -21,6 +21,7 @@ _NS_PKG_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 _SECRET_LABELS = ("clave", "contrasena", "contraseña", "password", "passcode", "secret")
 _PLATFORM_LABELS = {
+    "google_business": ("google business", "google", "maps"),
     "facebook": ("facebook", "fb"),
     "instagram": ("instagram",),
     "youtube": ("youtube", "you tube"),

@@ -1,47 +1,30 @@
-# Impacto APP 1.7.0 — Clientes V2 Fase 4
+# Impacto APP 1.7.1 — Hotfix Fase 4
 
-## Objetivo
-Sustituir la carga manual de la hoja operativa por una importación controlada, segura y auditable.
+## Problema detectado
+GitHub Actions de la v1.7.0 ejecutó 70 pruebas:
+- 69 pasaron.
+- 1 falló.
 
-## Flujo
-1. Administración/Gerencia carga el `.xlsx`.
-2. El sistema procesa únicamente `CLIENTES`.
-3. `TAREAS` queda excluida para la fase de entregables.
-4. `CONTRASEÑAS` nunca se procesa.
-5. Las filas `CLAVE` y `CONTRASEÑA DEL CORREO` se eliminan antes de guardar la vista previa.
-6. Se genera un lote saneado.
-7. El usuario revisa coincidencias, asesor, plan y advertencias.
-8. Solo después de confirmar se modifica la base de datos.
+La única falla fue que la prueba esperaba la plataforma `google_business`, pero el parser no reconocía la etiqueta "Google Business Profile / Maps" porque `google` no estaba incluido en `_PLATFORM_LABELS`.
 
-## Qué importa
-- Datos base del cliente.
-- Teléfonos, correo, dirección y website.
-- Facebook e Instagram.
-- Perfil operativo de Clientes V2.
-- Google Business/Maps y plataformas adicionales.
-- Responsable comercial cuando puede identificarse.
-- Contratos únicamente cuando el mapeo y las fechas son confiables.
+## Corrección
+Se agregó:
 
-## Qué NO importa automáticamente
-- Contraseñas.
-- Hoja CONTRASEÑAS.
-- Hoja TAREAS.
-- Ventas.
-- Pagos.
-- Descuentos.
-- Créditos entre planes.
-- Inversiones secundarias.
+`"google_business": ("google business", "google", "maps")`
 
-La información financiera histórica sí queda saneada dentro del lote para revisión posterior.
-
-## Protección contra duplicados
-La conciliación compara correo, teléfono, nombre normalizado y nombre muy similar. Los casos ambiguos se omiten.
+al mapa de plataformas.
 
 ## Base de datos
-Nueva tabla: `client_import_batches`
-
-El XLSX original no se almacena.
+No hay cambios de esquema.
+No hay nueva migración.
 
 ## Railway
-Pre-Deploy temporal:
+No necesitas agregar un nuevo Pre-Deploy para la v1.7.1.
+
+Si todavía tienes configurado el Pre-Deploy de Fase 4:
 `python -m scripts.upgrade_clients_v2_phase4`
+
+puede ejecutarse nuevamente porque es idempotente; después de confirmar que v1.7.1 está en verde, elimínalo.
+
+## Importante
+No uses todavía el importador real hasta que GitHub Actions de v1.7.1 termine en SUCCESS.
