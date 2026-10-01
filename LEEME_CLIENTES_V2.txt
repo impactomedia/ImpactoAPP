@@ -1,0 +1,19 @@
+IMPACTO APP — CLIENTES V2 / FASE 1 — v1.4.0
+
+1. Copia TODO el contenido de esta carpeta sobre tu proyecto ImpactoAPP.
+2. Reemplaza los archivos existentes.
+3. Sube los cambios a GitHub.
+4. En Railway agrega temporalmente Pre-Deploy Command:
+
+   python -m scripts.upgrade_clients_v2
+
+5. NO modifiques Start Command.
+6. Ejecuta/deja que Railway despliegue el último commit.
+7. Verifica que el deployment finalice correctamente.
+8. Verifica GitHub Actions.
+9. Después del primer deployment correcto, elimina el Pre-Deploy Command.
+
+IMPORTANTE:
+- No se importan contraseñas del Excel.
+- No se elimina información existente.
+- Las ventas continúan siendo el historial oficial de inversiones y pagos.

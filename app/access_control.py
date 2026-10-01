@@ -50,6 +50,10 @@ ENDPOINT_PERMISSIONS = {
     "clients.export_csv": "clients.export",
     "clients.import_csv": "clients.create",
     "clients.upload_attachment": "clients.edit",
+    "clients.update_operational_profile": "clients.edit",
+    "clients.save_platform": "clients.edit",
+    "clients.delete_platform": "clients.edit",
+    "clients.update_contract": "clients.edit",
 
     # Ventas
     "sales.new_sale": "sales.create",

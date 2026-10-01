@@ -19,6 +19,7 @@ from app.models import (
     Task,
     TaskTemplate,
 )
+from app.client_v2_models import ClientContractDetail
 
 
 def D(value):
@@ -258,6 +259,15 @@ def generate_operational_work(sale):
             principal=False,
         )
         db.session.add(contract)
+        db.session.flush()
+        db.session.add(
+            ClientContractDetail(
+                contract_id=contract.id,
+                modality_snapshot=product.modality,
+                maintenance_snapshot=product.maintenance,
+                benefits_snapshot=product.components,
+            )
+        )
 
         if product.renewal_required or end_date:
             renewal_due = end_date or (date.today() + timedelta(days=365))

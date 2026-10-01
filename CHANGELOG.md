@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.0 — Clientes V2 · Fase 1
+
+- Nueva ficha operativa de cliente organizada por pestañas: Resumen, Datos, Compras, Servicios, Pagos, Operaciones, Plataformas, Equipo, Archivos e Historial.
+- La pestaña Operaciones respeta el alcance individual de proyectos y tareas para evitar mostrar trabajo no asignado a perfiles restringidos.
+- Nuevo perfil operativo por cliente: días y horarios de atención, experiencia, cobertura, métodos de pago, política de estimados, correos operativos/corporativos, servicios a promocionar, estado del logotipo y colores de marca.
+- Fechas estructuradas de activación/renovación de dominio y hosting, más notas operativas.
+- Nueva tabla de plataformas adicionales para Google Business/Maps, YouTube, TikTok, Vimeo, Pinterest, LinkedIn y directorios, sin guardar contraseñas.
+- Los paquetes/servicios conservan snapshots de modalidad, mantenimiento, beneficios, cortesías y motivo de estado mediante una tabla de detalle histórico.
+- Las ventas existentes continúan siendo la fuente única para 1.ª, 2.ª, 3.ª y futuras inversiones; no se duplican montos en una tabla paralela.
+- El flujo automático de Ventas genera el detalle V2 de cada nuevo contrato.
+- Script MySQL-safe e idempotente `python -m scripts.upgrade_clients_v2` para crear las nuevas tablas y completar detalles históricos de contratos existentes.
+- Nuevas pruebas de permisos, perfil operativo, plataformas y snapshots de contratos.
+- No se migran contraseñas del Excel en texto plano; la bóveda de credenciales queda reservada para una fase segura independiente.
+
 ## 1.3.2 — Cierre de auditoría automatizada
 
 - Las páginas 403 y 404 ya funcionan correctamente también para visitantes sin sesión iniciada.

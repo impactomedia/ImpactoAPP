@@ -1,7 +1,7 @@
 import csv
 import io
 import unicodedata
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
@@ -10,6 +10,7 @@ from sqlalchemy import or_
 
 from app.extensions import db
 from app.decorators import permission_required, roles_required
+from app.access_control import _project_allowed, _task_allowed
 from app.helpers import audit, next_code, save_upload
 from app.models import (
     Client,
@@ -34,9 +35,33 @@ from app.models import (
     SupportTicket,
 )
 
+from app.client_v2_models import (
+    ClientOperationalProfile,
+    ClientPlatform,
+    ClientContractDetail,
+)
+
 bp = Blueprint("clients", __name__, url_prefix="/clients")
 
 CLIENT_STATUSES = {"activo", "inactivo", "caducado", "archivado"}
+CONTRACT_STATUSES = {"activo", "inactivo", "caducado"}
+PLATFORM_STATUSES = {"activo", "pendiente", "inactivo", "no_aplica"}
+PLATFORM_DEFINITIONS = {
+    "google_business": "Google Business Profile / Maps",
+    "youtube": "YouTube",
+    "tiktok": "TikTok",
+    "vimeo": "Vimeo",
+    "pinterest": "Pinterest",
+    "linkedin": "LinkedIn",
+    "manta": "Manta",
+    "houzz": "Houzz",
+    "porch": "Porch",
+    "buildzoom": "BuildZoom",
+    "merchantcircle": "MerchantCircle",
+    "mapquest": "MapQuest",
+    "yelp": "Yelp",
+    "yellow_pages": "Yellow Pages",
+}
 
 
 def _normalize_text(value):
@@ -77,6 +102,25 @@ def _decimal_or_none(value):
         return Decimal(raw)
     except (InvalidOperation, ValueError):
         return None
+
+
+def _date_or_none(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _clean_url(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if not raw.lower().startswith(("http://", "https://")):
+        raw = f"https://{raw}"
+    return raw[:500]
 
 
 def _visible_client_query(query=None):
@@ -206,6 +250,8 @@ def _client_has_history(client_id):
         ("tickets", SupportTicket.query.filter_by(client_id=client_id).first()),
         ("archivos", Attachment.query.filter_by(entity_type="Client", entity_id=client_id).first()),
         ("historial de responsable", OwnershipHistory.query.filter_by(client_id=client_id).first()),
+        ("perfil operativo", ClientOperationalProfile.query.filter_by(client_id=client_id).first()),
+        ("plataformas", ClientPlatform.query.filter_by(client_id=client_id).first()),
     ]
     return [label for label, row in checks if row is not None]
 
@@ -359,15 +405,47 @@ def detail(client_id):
 
     timeline.sort(key=lambda x: x[0] or date.min, reverse=True)
     attachments = Attachment.query.filter_by(entity_type="Client", entity_id=client.id).order_by(Attachment.created_at.desc()).all()
+    operational_profile = ClientOperationalProfile.query.filter_by(client_id=client.id).first()
+    platforms = ClientPlatform.query.filter_by(client_id=client.id).order_by(ClientPlatform.label).all()
+    upcoming_renewals = sorted(
+        [row for row in client.renewals if row.status not in {"renovado", "cancelado"}],
+        key=lambda row: row.due_date or date.max,
+    )[:8]
+
+    visible_projects = []
+    if current_user.has_permission("projects.view"):
+        visible_projects = [row for row in client.projects if _project_allowed(row)]
+
+    visible_tasks = []
+    if current_user.has_permission("tasks.view"):
+        visible_tasks = [row for row in client.tasks if _task_allowed(row)]
+    open_tasks = sorted(
+        [row for row in visible_tasks if row.status not in {"completada", "cancelada"}],
+        key=lambda row: row.due_at or datetime.max,
+    )[:10]
+
+    open_tickets = (
+        [row for row in client.tickets if row.status not in {"resuelto", "cerrado"}]
+        if current_user.has_permission("support.view")
+        else []
+    )
 
     return render_template(
         "clients/detail.html",
         client=client,
         collaborators=collaborators,
         products=products,
-        timeline=timeline[:40],
+        timeline=timeline[:60],
         attachments=attachments,
         comments=comments,
+        operational_profile=operational_profile,
+        platforms=platforms,
+        platform_definitions=PLATFORM_DEFINITIONS,
+        upcoming_renewals=upcoming_renewals,
+        visible_projects=visible_projects,
+        open_tasks=open_tasks,
+        open_tickets=open_tickets,
+        today=date.today(),
     )
 
 
@@ -540,29 +618,170 @@ def remove_assignment(client_id, assignment_id):
     return redirect(url_for("clients.detail", client_id=client_id))
 
 
-@bp.route("/<int:client_id>/contract", methods=["POST"])
+@bp.route("/<int:client_id>/contracts", methods=["POST"])
 @login_required
 def add_contract(client_id):
     client = db.get_or_404(Client, client_id)
     product_id = request.form.get("product_id", type=int)
-    starts = request.form.get("starts_on")
-    ends = request.form.get("ends_on")
+    product = db.session.get(ProductService, product_id) if product_id else None
+    if not product or not product.active:
+        flash("Selecciona un producto o paquete activo.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id))
+
+    status = request.form.get("status", "activo")
+    if status not in CONTRACT_STATUSES:
+        status = "activo"
+
+    starts_on = _date_or_none(request.form.get("starts_on")) or date.today()
+    ends_on = _date_or_none(request.form.get("ends_on"))
+    if ends_on and ends_on < starts_on:
+        flash("La fecha de vencimiento no puede ser anterior a la activación.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id))
+
+    agreed_price = _decimal_or_none(request.form.get("agreed_price"))
+    if agreed_price is not None and agreed_price < 0:
+        flash("El precio acordado no puede ser negativo.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id))
+
+    status_reason = (request.form.get("status_reason") or "").strip() or None
+    if status == "inactivo" and not status_reason:
+        flash("Indica el motivo cuando un paquete se registra como inactivo.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id))
+
+    principal = bool(request.form.get("principal"))
+    if principal:
+        ClientContract.query.filter_by(client_id=client.id, principal=True).update({"principal": False})
+
     contract = ClientContract(
         client_id=client.id,
-        product_id=product_id,
-        status=request.form.get("status", "activo"),
-        starts_on=date.fromisoformat(starts) if starts else date.today(),
-        ends_on=date.fromisoformat(ends) if ends else None,
-        agreed_price=request.form.get("agreed_price") or None,
-        principal=bool(request.form.get("principal")),
-        notes=request.form.get("notes"),
+        product_id=product.id,
+        status=status,
+        starts_on=starts_on,
+        ends_on=ends_on,
+        agreed_price=agreed_price,
+        principal=principal,
+        notes=(request.form.get("notes") or "").strip() or None,
     )
     db.session.add(contract)
-    audit("asignar_paquete", "Client", client.id, after={"product_id": product_id, "status": contract.status})
-    db.session.commit()
-    flash("Paquete/servicio asignado.", "success")
-    return redirect(url_for("clients.detail", client_id=client.id))
+    db.session.flush()
 
+    detail = ClientContractDetail(
+        contract_id=contract.id,
+        modality_snapshot=(request.form.get("modality_snapshot") or product.modality or "").strip() or None,
+        maintenance_snapshot=(request.form.get("maintenance_snapshot") or product.maintenance or "").strip() or None,
+        benefits_snapshot=(request.form.get("benefits_snapshot") or product.components or "").strip() or None,
+        courtesies_snapshot=(request.form.get("courtesies_snapshot") or "").strip() or None,
+        status_reason=status_reason,
+    )
+    db.session.add(detail)
+
+    if ends_on:
+        db.session.add(
+            Renewal(
+                client_id=client.id,
+                contract=contract,
+                renewal_type=product.name,
+                due_date=ends_on,
+                status="pendiente",
+            )
+        )
+
+    audit(
+        "asignar_paquete",
+        "Client",
+        client.id,
+        after={"product_id": product.id, "contract_id": contract.id, "status": contract.status},
+    )
+    db.session.commit()
+    flash("Paquete/servicio agregado al historial del cliente.", "success")
+    return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+
+
+@bp.route("/<int:client_id>/contracts/<int:contract_id>/update", methods=["POST"])
+@login_required
+def update_contract(client_id, contract_id):
+    client = db.get_or_404(Client, client_id)
+    contract = db.get_or_404(ClientContract, contract_id)
+    if contract.client_id != client.id:
+        return redirect(url_for("clients.detail", client_id=client.id))
+
+    status = request.form.get("status", contract.status)
+    if status not in CONTRACT_STATUSES:
+        flash("Estado de paquete no válido.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+
+    starts_on = _date_or_none(request.form.get("starts_on")) or contract.starts_on
+    ends_on = _date_or_none(request.form.get("ends_on"))
+    if ends_on and ends_on < starts_on:
+        flash("La fecha de vencimiento no puede ser anterior a la activación.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+
+    agreed_price = _decimal_or_none(request.form.get("agreed_price"))
+    if agreed_price is not None and agreed_price < 0:
+        flash("El precio acordado no puede ser negativo.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+
+    detail = contract.v2_detail or ClientContractDetail(contract_id=contract.id)
+    if not contract.v2_detail:
+        db.session.add(detail)
+
+    status_reason = (request.form.get("status_reason") or "").strip() or None
+    if status == "inactivo" and not status_reason:
+        flash("Indica el motivo de inactivación del paquete.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+
+    before = {"status": contract.status, "starts_on": str(contract.starts_on), "ends_on": str(contract.ends_on)}
+    contract.status = status
+    contract.starts_on = starts_on
+    contract.ends_on = ends_on
+    if agreed_price is not None:
+        contract.agreed_price = agreed_price
+    contract.notes = (request.form.get("notes") or "").strip() or None
+
+    principal = bool(request.form.get("principal"))
+    if principal:
+        ClientContract.query.filter(
+            ClientContract.client_id == client.id,
+            ClientContract.id != contract.id,
+            ClientContract.principal.is_(True),
+        ).update({"principal": False}, synchronize_session=False)
+    contract.principal = principal
+
+    detail.modality_snapshot = (request.form.get("modality_snapshot") or "").strip() or contract.product.modality
+    detail.maintenance_snapshot = (request.form.get("maintenance_snapshot") or "").strip() or contract.product.maintenance
+    detail.benefits_snapshot = (request.form.get("benefits_snapshot") or "").strip() or None
+    detail.courtesies_snapshot = (request.form.get("courtesies_snapshot") or "").strip() or None
+    detail.status_reason = status_reason
+
+    renewal = Renewal.query.filter_by(contract_id=contract.id).first()
+    if ends_on:
+        if not renewal:
+            renewal = Renewal(
+                client_id=client.id,
+                contract=contract,
+                renewal_type=contract.product.name,
+                due_date=ends_on,
+                status="pendiente",
+            )
+            db.session.add(renewal)
+        else:
+            renewal.due_date = ends_on
+            renewal.renewal_type = contract.product.name
+            if renewal.status == "cancelado" and status == "activo":
+                renewal.status = "pendiente"
+    elif renewal and status in {"inactivo", "caducado"}:
+        renewal.status = "cancelado"
+
+    audit(
+        "actualizar_paquete_cliente",
+        "ClientContract",
+        contract.id,
+        before=before,
+        after={"status": contract.status, "starts_on": str(contract.starts_on), "ends_on": str(contract.ends_on)},
+    )
+    db.session.commit()
+    flash("Paquete actualizado.", "success")
+    return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
 
 @bp.route("/<int:client_id>/comment", methods=["POST"])
 @login_required
@@ -663,6 +882,105 @@ def export_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=clientes.csv"},
     )
+
+
+@bp.route("/<int:client_id>/operational-profile", methods=["POST"])
+@login_required
+def update_operational_profile(client_id):
+    client = db.get_or_404(Client, client_id)
+    profile = ClientOperationalProfile.query.filter_by(client_id=client.id).first()
+    if not profile:
+        profile = ClientOperationalProfile(client_id=client.id)
+        db.session.add(profile)
+
+    profile.attention_days = (request.form.get("attention_days") or "").strip() or None
+    profile.business_hours = (request.form.get("business_hours") or "").strip() or None
+    profile.experience_text = (request.form.get("experience_text") or "").strip() or None
+    profile.coverage_text = (request.form.get("coverage_text") or "").strip() or None
+    profile.payment_methods = (request.form.get("payment_methods") or "").strip() or None
+    profile.estimate_policy = (request.form.get("estimate_policy") or "").strip() or None
+    profile.languages = (request.form.get("languages") or "").strip() or None
+    profile.operational_email = (request.form.get("operational_email") or "").strip().lower() or None
+    profile.corporate_email = (request.form.get("corporate_email") or "").strip().lower() or None
+    profile.services_to_promote = (request.form.get("services_to_promote") or "").strip() or None
+    profile.logo_status = (request.form.get("logo_status") or "").strip() or None
+    profile.brand_colors = (request.form.get("brand_colors") or "").strip() or None
+    profile.domain_activated_on = _date_or_none(request.form.get("domain_activated_on"))
+    profile.domain_renews_on = _date_or_none(request.form.get("domain_renews_on"))
+    profile.hosting_activated_on = _date_or_none(request.form.get("hosting_activated_on"))
+    profile.hosting_renews_on = _date_or_none(request.form.get("hosting_renews_on"))
+    profile.domain_notes = (request.form.get("domain_notes") or "").strip() or None
+    profile.operational_notes = (request.form.get("operational_notes") or "").strip() or None
+
+    audit("actualizar_perfil_operativo", "Client", client.id)
+    db.session.commit()
+    flash("Perfil operativo actualizado.", "success")
+    return redirect(url_for("clients.detail", client_id=client.id, _anchor="datos"))
+
+
+@bp.route("/<int:client_id>/platforms", methods=["POST"])
+@login_required
+def save_platform(client_id):
+    client = db.get_or_404(Client, client_id)
+    platform_id = request.form.get("platform_id", type=int)
+
+    if platform_id:
+        row = db.get_or_404(ClientPlatform, platform_id)
+        if row.client_id != client.id:
+            flash("La plataforma no pertenece a este cliente.", "danger")
+            return redirect(url_for("clients.detail", client_id=client.id, _anchor="plataformas"))
+        if row.platform_key.startswith("otro_"):
+            label = (request.form.get("custom_label") or row.label).strip()[:120] or row.label
+        else:
+            label = PLATFORM_DEFINITIONS.get(row.platform_key, row.label)
+    else:
+        platform_key = (request.form.get("platform_key") or "").strip()
+        custom_label = (request.form.get("custom_label") or "").strip()
+
+        if platform_key == "otro":
+            if not custom_label:
+                flash("Escribe el nombre de la plataforma adicional.", "danger")
+                return redirect(url_for("clients.detail", client_id=client.id, _anchor="plataformas"))
+            platform_key = f"otro_{_normalize_key(custom_label)[:45]}"
+            label = custom_label[:120]
+        elif platform_key in PLATFORM_DEFINITIONS:
+            label = PLATFORM_DEFINITIONS[platform_key]
+        else:
+            flash("Plataforma no válida.", "danger")
+            return redirect(url_for("clients.detail", client_id=client.id, _anchor="plataformas"))
+
+        row = ClientPlatform.query.filter_by(client_id=client.id, platform_key=platform_key).first()
+        if not row:
+            row = ClientPlatform(client_id=client.id, platform_key=platform_key, label=label)
+            db.session.add(row)
+
+    status = request.form.get("status", "activo")
+    if status not in PLATFORM_STATUSES:
+        status = "activo"
+
+    row.label = label
+    row.url = _clean_url(request.form.get("url"))
+    row.status = status
+    row.notes = (request.form.get("notes") or "").strip() or None
+
+    audit("guardar_plataforma_cliente", "Client", client.id, after={"platform": row.label, "status": row.status})
+    db.session.commit()
+    flash("Plataforma guardada.", "success")
+    return redirect(url_for("clients.detail", client_id=client.id, _anchor="plataformas"))
+
+@bp.route("/<int:client_id>/platforms/<int:platform_id>/delete", methods=["POST"])
+@login_required
+def delete_platform(client_id, platform_id):
+    client = db.get_or_404(Client, client_id)
+    row = db.get_or_404(ClientPlatform, platform_id)
+    if row.client_id != client.id:
+        flash("La plataforma no pertenece a este cliente.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id, _anchor="plataformas"))
+    audit("eliminar_plataforma_cliente", "Client", client.id, before={"platform": row.label})
+    db.session.delete(row)
+    db.session.commit()
+    flash("Plataforma eliminada.", "success")
+    return redirect(url_for("clients.detail", client_id=client.id, _anchor="plataformas"))
 
 
 @bp.route("/import", methods=["GET", "POST"])

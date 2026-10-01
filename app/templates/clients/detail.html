@@ -1,155 +1,364 @@
 {% extends "app_base.html" %}
 {% block app_content %}
 {% set can_financial = current_user.has_permission('sales.view') or current_user.has_permission('finance.view') %}
+{% set can_edit = current_user.has_permission('clients.edit') %}
+{% set can_assign = current_user.has_permission('clients.assign') %}
+{% set active_contracts = client.contracts|selectattr('status','equalto','activo')|list %}
+{% set modality_labels = {'dueno':'Dueño','inquilino':'Inquilino'} %}
+{% set maintenance_labels = {'incluido':'Incluido','no_incluido':'No incluido','no_aplica':'No aplica'} %}
+
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Ficha operativa</span>
+    <span class="eyebrow">Clientes V2 · Ficha operativa</span>
     <h1>{{ client.business_name }}</h1>
-    <p>{{ client.contact_name }} · {{ client.phone or '' }} · {{ client.email or '' }}</p>
+    <p>
+      {{ client.code or 'Sin código' }} · {{ client.contact_name }}
+      {% if client.phone %} · {{ client.phone }}{% endif %}
+      {% if client.email %} · {{ client.email }}{% endif %}
+    </p>
   </div>
-  {% if current_user.has_permission('clients.edit') %}
-  <a class="btn btn-light border" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar ficha</a>
-  {% endif %}
+  <div class="d-flex flex-wrap gap-2">
+    {% if can_edit %}<a class="btn btn-light border" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar datos base</a>{% endif %}
+    {% if current_user.has_permission('sales.create') %}<a class="btn btn-brand" href="{{ url_for('sales.new_sale') }}">Nueva compra</a>{% endif %}
+  </div>
 </div>
 
 <div class="metric-grid mb-4">
   {% if can_financial %}
-  <div class="metric-card"><span>Total comprado</span><strong>{{ client.sales|sum(attribute='total')|money }}</strong><small>Histórico</small></div>
-  <div class="metric-card"><span>Total pagado</span><strong>{{ client.payments|selectattr('status','equalto','confirmado')|sum(attribute='amount')|money }}</strong><small>Confirmado</small></div>
+  <div class="metric-card"><span>Total contratado</span><strong>{{ client.sales|sum(attribute='total')|money }}</strong><small>Histórico de ventas</small></div>
+  <div class="metric-card"><span>Total cobrado</span><strong>{{ client.payments|selectattr('status','equalto','confirmado')|sum(attribute='amount')|money }}</strong><small>Pagos confirmados</small></div>
+  <div class="metric-card"><span>Saldo pendiente</span><strong>{{ client.outstanding_balance|money }}</strong><small>{{ client.receivables|selectattr('status','equalto','vencido')|list|length }} cuenta(s) vencida(s)</small></div>
   {% endif %}
-  <div class="metric-card"><span>Servicios activos</span><strong>{{ client.contracts|selectattr('status','equalto','activo')|list|length }}</strong><small>Contratos</small></div>
-  {% if current_user.has_permission('support.view') %}
-  <div class="metric-card"><span>Tickets abiertos</span><strong>{{ client.tickets|rejectattr('status','in',['resuelto','cerrado'])|list|length }}</strong><small>Soporte</small></div>
-  {% endif %}
+  <div class="metric-card"><span>Servicios activos</span><strong>{{ active_contracts|length }}</strong><small>Estado general: {{ client.client_status|label }}</small></div>
+  {% if current_user.has_permission('tasks.view') %}<div class="metric-card"><span>Tareas abiertas</span><strong>{{ open_tasks|length }}</strong><small>Pendientes visibles</small></div>{% endif %}
+  {% if current_user.has_permission('support.view') %}<div class="metric-card"><span>Tickets abiertos</span><strong>{{ open_tickets|length }}</strong><small>Soporte y solicitudes</small></div>{% endif %}
 </div>
 
-<div class="row g-4">
-  <div class="col-xl-8">
-    <section class="panel-card mb-4">
-      <div class="panel-header"><div><h2>Datos y servicios</h2><p>Información central del negocio.</p></div></div>
-      <div class="row">
-        <div class="col-md-6">
-          <p><strong>Estado:</strong> {{ client.client_status|label }}</p>
-          <p><strong>Dirección:</strong> {{ client.address or '—' }}</p>
-          <p><strong>Website:</strong> {{ client.website or '—' }}</p>
+<section class="panel-card mb-4 p-0 overflow-hidden">
+  <div class="px-3 pt-3">
+    <ul class="nav nav-tabs flex-nowrap overflow-auto" id="clientTabs" role="tablist">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#resumen" type="button">Resumen</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#datos" type="button">Datos</button></li>
+      {% if can_financial %}<li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#compras" type="button">Compras</button></li>{% endif %}
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#servicios" type="button">Servicios</button></li>
+      {% if can_financial %}<li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pagos" type="button">Pagos</button></li>{% endif %}
+      {% if current_user.has_permission('projects.view') or current_user.has_permission('tasks.view') or current_user.has_permission('support.view') %}<li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#operaciones" type="button">Operaciones</button></li>{% endif %}
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#plataformas" type="button">Plataformas</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#equipo" type="button">Equipo</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#archivos" type="button">Archivos</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#historial" type="button">Historial</button></li>
+    </ul>
+  </div>
+
+  <div class="tab-content p-3 p-lg-4">
+    <div class="tab-pane fade show active" id="resumen">
+      <div class="row g-4">
+        <div class="col-xl-7">
+          <section class="border rounded-4 p-3 h-100">
+            <div class="panel-header mb-3"><div><h2>Resumen ejecutivo</h2><p>Información esencial para atender al cliente sin abrir otros módulos.</p></div></div>
+            <div class="row g-3">
+              <div class="col-md-6"><small class="text-secondary">Contacto principal</small><div class="fw-semibold">{{ client.contact_name }}</div><div>{{ client.phone or '—' }}</div><div>{{ client.email or '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Responsable comercial</small><div class="fw-semibold">{{ client.owner.user.name if client.owner else 'Sin asignar' }}</div><div>{{ client.owner.advisor_project.name if client.owner and client.owner.advisor_project else 'Sin proyecto comercial' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Ubicación</small><div>{{ client.city or '—' }}{% if client.state %}, {{ client.state }}{% endif %}{% if client.country %}, {{ client.country }}{% endif %}</div><div>{{ client.timezone or 'Zona horaria sin definir' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Plan / paquete activo</small><div>{% for c in active_contracts %}<span class="badge-soft success me-1 mb-1">{{ c.product.name }}</span>{% else %}<span class="text-secondary">Sin paquete activo</span>{% endfor %}</div></div>
+            </div>
+            <hr>
+            <div class="row g-3">
+              <div class="col-md-4"><small class="text-secondary">Atención</small><div>{{ operational_profile.attention_days if operational_profile and operational_profile.attention_days else '—' }}</div></div>
+              <div class="col-md-4"><small class="text-secondary">Horario</small><div>{{ operational_profile.business_hours if operational_profile and operational_profile.business_hours else '—' }}</div></div>
+              <div class="col-md-4"><small class="text-secondary">Cobertura</small><div>{{ operational_profile.coverage_text if operational_profile and operational_profile.coverage_text else '—' }}</div></div>
+            </div>
+          </section>
         </div>
-        <div class="col-md-6">
-          <p><strong>Industria:</strong> {{ client.industry or '—' }}</p>
-          <p><strong>Fuente:</strong> {{ client.source or '—' }}</p>
-          <p><strong>Responsable:</strong> {{ client.owner.user.name if client.owner else '—' }}</p>
-          <p><strong>Proyecto del asesor:</strong> {{ client.owner.advisor_project.name if client.owner and client.owner.advisor_project else 'Sin asignar' }}</p>
+        <div class="col-xl-5">
+          <section class="border rounded-4 p-3 mb-3">
+            <h2 class="h5">Próximos vencimientos</h2>
+            {% for r in upcoming_renewals %}
+              <div class="d-flex justify-content-between gap-3 border-bottom py-2"><div><strong>{{ r.renewal_type }}</strong><small class="d-block text-secondary">{{ r.status|label }}</small></div><span>{{ r.due_date }}</span></div>
+            {% else %}<p class="text-secondary mb-0">Sin renovaciones pendientes.</p>{% endfor %}
+          </section>
+          <section class="border rounded-4 p-3">
+            <h2 class="h5">Acciones rápidas</h2>
+            <div class="d-grid gap-2">
+              {% if current_user.has_permission('sales.create') %}<a class="btn btn-light border" href="{{ url_for('sales.new_sale') }}">Registrar compra</a>{% endif %}
+              {% if current_user.has_permission('tasks.edit') %}<a class="btn btn-light border" href="{{ url_for('operations.new_task') }}">Crear tarea</a>{% endif %}
+              {% if current_user.has_permission('support.edit') %}<a class="btn btn-light border" href="{{ url_for('support.index') }}">Abrir ticket</a>{% endif %}
+              {% if current_user.has_permission('printing.edit') %}<a class="btn btn-light border" href="{{ url_for('printing.new_order') }}">Orden de imprenta</a>{% endif %}
+            </div>
+          </section>
         </div>
       </div>
-      <p><strong>Servicios que ofrece:</strong><br>{{ client.services_offered or '—' }}</p>
-    </section>
+    </div>
 
-    <section class="panel-card mb-4">
-      <div class="panel-header"><div><h2>Servicios / paquetes contratados</h2><p>Cada contratación mantiene estado y vigencia independiente.</p></div></div>
+    <div class="tab-pane fade" id="datos">
+      <div class="row g-4">
+        <div class="col-xl-5">
+          <section class="border rounded-4 p-3 h-100">
+            <div class="panel-header"><div><h2>Datos del negocio</h2><p>Información general ya existente en la ficha.</p></div></div>
+            <p><strong>Estado:</strong> {{ client.client_status|label }}</p>
+            <p><strong>Industria:</strong> {{ client.industry or '—' }}</p>
+            <p><strong>Dirección:</strong> {{ client.address or '—' }}</p>
+            <p><strong>Ciudad / Estado:</strong> {{ client.city or '—' }}{% if client.state %} / {{ client.state }}{% endif %}</p>
+            <p><strong>Website:</strong> {% if client.website %}<a href="{{ client.website }}" target="_blank" rel="noopener">{{ client.website }}</a>{% else %}—{% endif %}</p>
+            <p><strong>Fuente:</strong> {{ client.source or '—' }}</p>
+            <p><strong>Servicios que ofrece:</strong><br>{{ client.services_offered or '—' }}</p>
+            {% if can_edit %}<a class="btn btn-light border" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar datos base</a>{% endif %}
+          </section>
+        </div>
+        <div class="col-xl-7">
+          <section class="border rounded-4 p-3">
+            <div class="panel-header"><div><h2>Perfil operativo</h2><p>Datos que antes se llevaban en la ficha operativa del Excel.</p></div></div>
+            {% if can_edit %}
+            <form method="post" action="{{ url_for('clients.update_operational_profile', client_id=client.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="row g-3">
+                <div class="col-md-6"><label class="form-label">Días de atención</label><input name="attention_days" class="form-control" value="{{ operational_profile.attention_days if operational_profile else '' }}" placeholder="Ej. Lunes a sábado"></div>
+                <div class="col-md-6"><label class="form-label">Horarios</label><input name="business_hours" class="form-control" value="{{ operational_profile.business_hours if operational_profile else '' }}" placeholder="Ej. 8:00 a. m. - 5:00 p. m."></div>
+                <div class="col-md-6"><label class="form-label">Tiempo de experiencia</label><input name="experience_text" class="form-control" value="{{ operational_profile.experience_text if operational_profile else '' }}" placeholder="Ej. 10 años"></div>
+                <div class="col-md-6"><label class="form-label">Cobertura / millaje</label><input name="coverage_text" class="form-control" value="{{ operational_profile.coverage_text if operational_profile else '' }}" placeholder="Ej. 50 millas"></div>
+                <div class="col-md-6"><label class="form-label">Correo operativo</label><input type="email" name="operational_email" class="form-control" value="{{ operational_profile.operational_email if operational_profile else '' }}"></div>
+                <div class="col-md-6"><label class="form-label">Correo corporativo</label><input type="email" name="corporate_email" class="form-control" value="{{ operational_profile.corporate_email if operational_profile else '' }}"></div>
+                <div class="col-md-6"><label class="form-label">Métodos de pago aceptados</label><textarea name="payment_methods" class="form-control" rows="3">{{ operational_profile.payment_methods if operational_profile else '' }}</textarea></div>
+                <div class="col-md-6"><label class="form-label">Política de estimados</label><textarea name="estimate_policy" class="form-control" rows="3" placeholder="Ej. Estimados gratis / diagnóstico gratis, estimado con costo">{{ operational_profile.estimate_policy if operational_profile else '' }}</textarea></div>
+                <div class="col-md-6"><label class="form-label">Idiomas de atención</label><input name="languages" class="form-control" value="{{ operational_profile.languages if operational_profile else '' }}" placeholder="Ej. Español e inglés"></div>
+                <div class="col-12"><label class="form-label">Servicios a promocionar</label><textarea name="services_to_promote" class="form-control" rows="5">{{ operational_profile.services_to_promote if operational_profile else '' }}</textarea></div>
+                <div class="col-md-6"><label class="form-label">Estado / instrucciones del logotipo</label><textarea name="logo_status" class="form-control" rows="3">{{ operational_profile.logo_status if operational_profile else '' }}</textarea></div>
+                <div class="col-md-6"><label class="form-label">Colores de marca</label><input name="brand_colors" class="form-control" value="{{ operational_profile.brand_colors if operational_profile else '' }}"></div>
+              </div>
+              <h3 class="h6 mt-4">Dominio y hosting</h3>
+              <div class="row g-3">
+                <div class="col-md-3"><label class="form-label">Dominio activado</label><input type="date" name="domain_activated_on" class="form-control" value="{{ operational_profile.domain_activated_on.isoformat() if operational_profile and operational_profile.domain_activated_on else '' }}"></div>
+                <div class="col-md-3"><label class="form-label">Renovación dominio</label><input type="date" name="domain_renews_on" class="form-control" value="{{ operational_profile.domain_renews_on.isoformat() if operational_profile and operational_profile.domain_renews_on else '' }}"></div>
+                <div class="col-md-3"><label class="form-label">Hosting activado</label><input type="date" name="hosting_activated_on" class="form-control" value="{{ operational_profile.hosting_activated_on.isoformat() if operational_profile and operational_profile.hosting_activated_on else '' }}"></div>
+                <div class="col-md-3"><label class="form-label">Renovación hosting</label><input type="date" name="hosting_renews_on" class="form-control" value="{{ operational_profile.hosting_renews_on.isoformat() if operational_profile and operational_profile.hosting_renews_on else '' }}"></div>
+                <div class="col-12"><label class="form-label">Notas de dominio / hosting</label><textarea name="domain_notes" class="form-control" rows="2">{{ operational_profile.domain_notes if operational_profile else '' }}</textarea></div>
+                <div class="col-12"><label class="form-label">Notas operativas internas</label><textarea name="operational_notes" class="form-control" rows="3">{{ operational_profile.operational_notes if operational_profile else '' }}</textarea></div>
+              </div>
+              <button class="btn btn-brand mt-3">Guardar perfil operativo</button>
+            </form>
+            {% else %}
+            <div class="row g-3">
+              <div class="col-md-6"><strong>Días:</strong> {{ operational_profile.attention_days if operational_profile and operational_profile.attention_days else '—' }}</div>
+              <div class="col-md-6"><strong>Horario:</strong> {{ operational_profile.business_hours if operational_profile and operational_profile.business_hours else '—' }}</div>
+              <div class="col-md-6"><strong>Experiencia:</strong> {{ operational_profile.experience_text if operational_profile and operational_profile.experience_text else '—' }}</div>
+              <div class="col-md-6"><strong>Cobertura:</strong> {{ operational_profile.coverage_text if operational_profile and operational_profile.coverage_text else '—' }}</div>
+              <div class="col-md-6"><strong>Correo operativo:</strong> {{ operational_profile.operational_email if operational_profile and operational_profile.operational_email else '—' }}</div>
+              <div class="col-md-6"><strong>Correo corporativo:</strong> {{ operational_profile.corporate_email if operational_profile and operational_profile.corporate_email else '—' }}</div>
+              <div class="col-12"><strong>Métodos de pago:</strong><br>{{ operational_profile.payment_methods if operational_profile and operational_profile.payment_methods else '—' }}</div>
+              <div class="col-md-6"><strong>Estimados:</strong> {{ operational_profile.estimate_policy if operational_profile and operational_profile.estimate_policy else '—' }}</div>
+              <div class="col-md-6"><strong>Idiomas:</strong> {{ operational_profile.languages if operational_profile and operational_profile.languages else '—' }}</div>
+              <div class="col-12"><strong>Servicios a promocionar:</strong><br>{{ operational_profile.services_to_promote if operational_profile and operational_profile.services_to_promote else '—' }}</div>
+            </div>
+            {% endif %}
+          </section>
+        </div>
+      </div>
+    </div>
+
+    {% if can_financial %}
+    <div class="tab-pane fade" id="compras">
+      <div class="panel-header"><div><h2>Compras / ventas históricas</h2><p>Cada nueva inversión permanece dentro de la misma ficha del cliente.</p></div>{% if current_user.has_permission('sales.create') %}<a class="btn btn-brand btn-sm" href="{{ url_for('sales.new_sale') }}">Nueva venta</a>{% endif %}</div>
       <div class="table-responsive">
         <table class="table modern-table">
-          <thead><tr><th>Servicio</th><th>Modalidad</th><th>Estado</th><th>Inicio</th><th>Vence</th>{% if can_financial %}<th>Precio</th>{% endif %}</tr></thead>
+          <thead><tr><th>Venta</th><th>Fecha</th><th>Productos / servicios</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Asesor</th><th></th></tr></thead>
           <tbody>
-          {% for c in client.contracts %}
-            <tr>
-              <td>{{ c.product.name }}</td><td>{{ c.product.modality|label if c.product.modality else '—' }}</td>
-              <td><span class="badge-soft {{ 'success' if c.status=='activo' else 'warning' if c.status=='caducado' else 'muted' }}">{{ c.status|label }}</span></td>
-              <td>{{ c.starts_on }}</td><td>{{ c.ends_on or '—' }}</td>{% if can_financial %}<td>{{ c.agreed_price|money }}</td>{% endif %}
-            </tr>
-          {% else %}<tr><td colspan="{{ 6 if can_financial else 5 }}">Sin servicios.</td></tr>{% endfor %}
+          {% for s in client.sales|sort(attribute='sale_date', reverse=true) %}
+          <tr>
+            <td><strong>{{ s.sale_no }}</strong><small class="d-block text-secondary">{{ s.status|label }}</small></td>
+            <td>{{ s.sale_date }}</td>
+            <td>{% for i in s.items %}<div>{{ i.description }}{% if i.quantity and i.quantity != 1 %} × {{ i.quantity }}{% endif %}</div>{% else %}—{% endfor %}</td>
+            <td>{{ s.currency }} {{ s.total|money }}</td><td>{{ s.amount_paid|money }}</td><td>{{ s.balance|money }}</td>
+            <td>{{ s.advisor.user.name if s.advisor else '—' }}</td>
+            <td><a class="btn btn-sm btn-light border" href="{{ url_for('sales.detail', sale_id=s.id) }}">Ver venta</a></td>
+          </tr>
+          {% else %}<tr><td colspan="8" class="text-center py-4">No hay compras registradas.</td></tr>{% endfor %}
           </tbody>
         </table>
       </div>
-      {% if current_user.has_permission('clients.edit') %}
-      <button class="btn btn-brand btn-sm" data-bs-toggle="collapse" data-bs-target="#contractForm">Asignar servicio</button>
-      <div class="collapse mt-3" id="contractForm">
+    </div>
+    {% endif %}
+
+    <div class="tab-pane fade" id="servicios">
+      <div class="panel-header"><div><h2>Planes y servicios</h2><p>Historial independiente por paquete, modalidad, vigencia, beneficios y cortesías.</p></div></div>
+      <div class="row g-3">
+        {% for c in client.contracts|sort(attribute='starts_on', reverse=true) %}
+        <div class="col-12">
+          <section class="border rounded-4 p-3">
+            <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start">
+              <div>
+                <div class="d-flex flex-wrap align-items-center gap-2"><h3 class="h5 mb-0">{{ c.product.name }}</h3>{% if c.principal %}<span class="badge-soft info">Principal</span>{% endif %}<span class="badge-soft {{ 'success' if c.status=='activo' else 'warning' if c.status=='caducado' else 'muted' }}">{{ c.status|label }}</span></div>
+                <small class="text-secondary">Activación {{ c.starts_on }} · Vencimiento {{ c.ends_on or 'Sin fecha' }}</small>
+              </div>
+              {% if can_financial %}<strong>{{ c.agreed_price|money }}</strong>{% endif %}
+            </div>
+            <div class="row g-3 mt-1">
+              <div class="col-md-3"><small class="text-secondary">Modalidad</small><div>{% set modality = c.v2_detail.modality_snapshot if c.v2_detail and c.v2_detail.modality_snapshot else c.product.modality %}{{ modality_labels.get(modality, modality|label) if modality else '—' }}</div></div>
+              <div class="col-md-3"><small class="text-secondary">Mantenimiento</small><div>{% set maintenance = c.v2_detail.maintenance_snapshot if c.v2_detail and c.v2_detail.maintenance_snapshot else c.product.maintenance %}{{ maintenance_labels.get(maintenance, maintenance|label) if maintenance else '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Motivo de estado</small><div>{{ c.v2_detail.status_reason if c.v2_detail and c.v2_detail.status_reason else '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Beneficios contratados</small><div class="small" style="white-space:pre-line">{{ c.v2_detail.benefits_snapshot if c.v2_detail and c.v2_detail.benefits_snapshot else (c.product.components or '—') }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Cortesías</small><div class="small" style="white-space:pre-line">{{ c.v2_detail.courtesies_snapshot if c.v2_detail and c.v2_detail.courtesies_snapshot else '—' }}</div></div>
+            </div>
+            {% if can_edit %}
+            <button class="btn btn-sm btn-light border mt-3" data-bs-toggle="collapse" data-bs-target="#contractEdit{{ c.id }}">Editar período</button>
+            <div class="collapse mt-3" id="contractEdit{{ c.id }}">
+              <form method="post" action="{{ url_for('clients.update_contract', client_id=client.id, contract_id=c.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row g-2">
+                  <div class="col-md-2"><label class="form-label">Estado</label><select name="status" class="form-select"><option value="activo" {% if c.status=='activo' %}selected{% endif %}>Activo</option><option value="inactivo" {% if c.status=='inactivo' %}selected{% endif %}>Inactivo</option><option value="caducado" {% if c.status=='caducado' %}selected{% endif %}>Caducado</option></select></div>
+                  <div class="col-md-2"><label class="form-label">Activación</label><input type="date" name="starts_on" class="form-control" value="{{ c.starts_on.isoformat() if c.starts_on else '' }}"></div>
+                  <div class="col-md-2"><label class="form-label">Vencimiento</label><input type="date" name="ends_on" class="form-control" value="{{ c.ends_on.isoformat() if c.ends_on else '' }}"></div>
+                  <div class="col-md-2"><label class="form-label">Precio</label><input type="number" step="0.01" min="0" name="agreed_price" class="form-control" value="{{ c.agreed_price or '' }}"></div>
+                  <div class="col-md-2"><label class="form-label">Modalidad</label><input name="modality_snapshot" class="form-control" value="{{ c.v2_detail.modality_snapshot if c.v2_detail else (c.product.modality or '') }}"></div>
+                  <div class="col-md-2"><label class="form-label">Mantenimiento</label><input name="maintenance_snapshot" class="form-control" value="{{ c.v2_detail.maintenance_snapshot if c.v2_detail else (c.product.maintenance or '') }}"></div>
+                  <div class="col-md-6"><label class="form-label">Beneficios</label><textarea name="benefits_snapshot" class="form-control" rows="5">{{ c.v2_detail.benefits_snapshot if c.v2_detail else (c.product.components or '') }}</textarea></div>
+                  <div class="col-md-6"><label class="form-label">Cortesías</label><textarea name="courtesies_snapshot" class="form-control" rows="5">{{ c.v2_detail.courtesies_snapshot if c.v2_detail else '' }}</textarea></div>
+                  <div class="col-md-6"><label class="form-label">Motivo de inactivación / estado</label><input name="status_reason" class="form-control" value="{{ c.v2_detail.status_reason if c.v2_detail else '' }}"></div>
+                  <div class="col-md-6"><label class="form-label">Notas</label><input name="notes" class="form-control" value="{{ c.notes or '' }}"></div>
+                  <div class="col-12"><label class="form-check"><input class="form-check-input" type="checkbox" name="principal" {% if c.principal %}checked{% endif %}> Marcar como paquete principal</label></div>
+                </div>
+                <button class="btn btn-dark mt-2">Guardar cambios</button>
+              </form>
+            </div>
+            {% endif %}
+          </section>
+        </div>
+        {% else %}<div class="col-12"><p class="text-secondary">Todavía no hay paquetes o servicios registrados.</p></div>{% endfor %}
+      </div>
+
+      {% if can_edit %}
+      <section class="border rounded-4 p-3 mt-4">
+        <h3 class="h5">Agregar nuevo período / servicio</h3>
+        <p class="text-secondary small">Úsalo para renovaciones, migraciones de plan o servicios adicionales. No reemplaza el historial anterior.</p>
         <form method="post" action="{{ url_for('clients.add_contract', client_id=client.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="row g-2">
-            <div class="col-md-4"><select name="product_id" class="form-select">{% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
-            <div class="col-md-2"><select name="status" class="form-select"><option value="activo">Activo</option><option value="inactivo">Inactivo</option><option value="caducado">Caducado</option></select></div>
-            <div class="col-md-2"><input name="starts_on" type="date" class="form-control"></div>
-            <div class="col-md-2"><input name="ends_on" type="date" class="form-control"></div>
-            <div class="col-md-2"><input name="agreed_price" type="number" step="0.01" class="form-control" placeholder="Precio"></div>
+            <div class="col-md-4"><label class="form-label">Producto / paquete</label><select name="product_id" class="form-select" required><option value="">Seleccionar</option>{% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
+            <div class="col-md-2"><label class="form-label">Estado</label><select name="status" class="form-select"><option value="activo">Activo</option><option value="inactivo">Inactivo</option><option value="caducado">Caducado</option></select></div>
+            <div class="col-md-2"><label class="form-label">Activación</label><input name="starts_on" type="date" class="form-control"></div>
+            <div class="col-md-2"><label class="form-label">Vencimiento</label><input name="ends_on" type="date" class="form-control"></div>
+            <div class="col-md-2"><label class="form-label">Precio acordado</label><input name="agreed_price" type="number" min="0" step="0.01" class="form-control"></div>
+            <div class="col-md-3"><label class="form-label">Modalidad</label><input name="modality_snapshot" class="form-control" placeholder="Inquilino / Dueño"></div>
+            <div class="col-md-3"><label class="form-label">Mantenimiento</label><input name="maintenance_snapshot" class="form-control" placeholder="Incluido / No incluido"></div>
+            <div class="col-md-6"><label class="form-label">Motivo de estado</label><input name="status_reason" class="form-control" placeholder="Obligatorio si está inactivo"></div>
+            <div class="col-md-6"><label class="form-label">Beneficios</label><textarea name="benefits_snapshot" class="form-control" rows="4"></textarea></div>
+            <div class="col-md-6"><label class="form-label">Cortesías</label><textarea name="courtesies_snapshot" class="form-control" rows="4"></textarea></div>
+            <div class="col-12"><label class="form-label">Notas</label><textarea name="notes" class="form-control" rows="2"></textarea></div>
+            <div class="col-12"><label class="form-check"><input class="form-check-input" type="checkbox" name="principal"> Marcar como paquete principal</label></div>
           </div>
-          <button class="btn btn-dark mt-2">Guardar</button>
+          <button class="btn btn-brand mt-3">Agregar al historial</button>
         </form>
-      </div>
+      </section>
       {% endif %}
-    </section>
+    </div>
 
-    <section class="panel-card mb-4">
-      <div class="panel-header">
-        <div><h2>Historial de comentarios</h2><p>Registro interno por proceso, con autor, departamento, fecha y hora.</p></div>
-      </div>
-      {% if current_user.has_permission('clients.edit') %}
-      <form method="post" action="{{ url_for('clients.add_comment', client_id=client.id) }}" class="mb-4">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="row g-2">
-          <div class="col-md-4">
-            <label class="form-label">Proceso</label>
-            <select name="process_type" class="form-select" required>
-              <option>Seguimiento / CRM</option><option>Cotización / Venta</option><option>Pago / Finanzas</option><option>Onboarding</option><option>Diseño</option><option>Desarrollo web</option><option>Google Business</option><option>Redes sociales</option><option>SEO</option><option>Imprenta</option><option>Soporte</option><option>Renovación</option><option>Otro</option>
-            </select>
-          </div>
-          <div class="col-md-8"><label class="form-label">Detalle del proceso</label><input name="process_detail" class="form-control" placeholder="Ej.: Cliente aprobó diseño, se solicitó información, pago confirmado..."></div>
-          <div class="col-12"><label class="form-label">Comentario</label><textarea name="body" class="form-control" rows="3" required placeholder="Escribe el comentario que debe quedar en el historial del cliente"></textarea></div>
+    {% if can_financial %}
+    <div class="tab-pane fade" id="pagos">
+      <div class="row g-4">
+        <div class="col-xl-7">
+          <div class="panel-header"><div><h2>Historial de pagos</h2><p>Pagos registrados desde Ventas.</p></div></div>
+          <div class="table-responsive"><table class="table modern-table"><thead><tr><th>Fecha</th><th>Venta</th><th>Monto</th><th>Método</th><th>Referencia</th><th>Estado</th></tr></thead><tbody>
+          {% for p in client.payments|sort(attribute='effective_date', reverse=true) %}<tr><td>{{ p.effective_date }}</td><td>{{ p.sale.sale_no if p.sale else '—' }}</td><td>{{ p.currency }} {{ p.amount|money }}</td><td>{{ p.method|label }}</td><td>{{ p.reference or '—' }}</td><td>{{ p.status|label }}</td></tr>{% else %}<tr><td colspan="6">Sin pagos registrados.</td></tr>{% endfor %}
+          </tbody></table></div>
         </div>
-        <button class="btn btn-brand mt-2">Agregar comentario</button>
-      </form>
-      {% endif %}
-
-      <div class="timeline">
-        {% for comment in comments %}
-        <div class="timeline-item">
-          <div class="d-flex flex-wrap justify-content-between gap-2"><strong>{{ comment.user.name }}</strong><small class="text-secondary">{{ comment.created_at.strftime('%d/%m/%Y %H:%M') }}</small></div>
-          <div class="mt-1"><span class="badge-soft info">{{ comment.process_type }}</span>{% if comment.department_snapshot %}<span class="badge-soft muted">{{ comment.department_snapshot }}</span>{% endif %}{% if comment.advisor_project_snapshot %}<span class="badge-soft">{{ comment.advisor_project_snapshot }}</span>{% endif %}</div>
-          {% if comment.process_detail %}<small class="d-block text-secondary mt-2">{{ comment.process_detail }}</small>{% endif %}
-          <p class="mb-0 mt-2">{{ comment.body }}</p>
+        <div class="col-xl-5">
+          <div class="panel-header"><div><h2>Cuentas por cobrar</h2><p>Saldo, vencimiento y promesa de pago.</p></div></div>
+          {% for r in client.receivables %}<div class="border rounded-3 p-3 mb-2 {% if r.status=='vencido' %}overdue{% endif %}"><div class="d-flex justify-content-between"><strong>{{ r.sale.sale_no }}</strong><span class="badge-soft">{{ r.status|label }}</span></div><div class="small mt-2">Total: {{ r.total_amount|money }} · Pagado: {{ r.paid_amount|money }}</div><div class="small">Saldo: {{ (r.total_amount-r.paid_amount)|money }} · Vence: {{ r.due_date or '—' }}</div>{% if r.promise_date %}<div class="small">Promesa: {{ r.promise_date }}</div>{% endif %}</div>{% else %}<p class="text-secondary">Sin cuentas por cobrar.</p>{% endfor %}
         </div>
-        {% else %}<p class="text-secondary">Todavía no hay comentarios internos para este cliente.</p>{% endfor %}
       </div>
-    </section>
+    </div>
+    {% endif %}
 
-    <section class="panel-card">
-      <h2 class="h5">Línea de tiempo general</h2>
-      <div class="timeline">
-        {% for dt,kind,title,body in timeline %}<div class="timeline-item"><strong>{{ kind }} — {{ title }}</strong><small class="d-block text-secondary">{{ dt.strftime('%d/%m/%Y %H:%M') if dt else '' }}</small><p>{{ body or '' }}</p></div>{% else %}<p>Sin eventos.</p>{% endfor %}
+    {% if current_user.has_permission('projects.view') or current_user.has_permission('tasks.view') or current_user.has_permission('support.view') %}
+    <div class="tab-pane fade" id="operaciones">
+      <div class="row g-4">
+        {% if current_user.has_permission('projects.view') %}<div class="col-xl-6"><h2 class="h5">Proyectos</h2>{% for p in visible_projects %}<div class="border rounded-3 p-3 mb-2"><div class="d-flex justify-content-between gap-2"><a href="{{ url_for('operations.project_detail', project_id=p.id) }}"><strong>{{ p.name }}</strong></a><span class="badge-soft">{{ p.status|label }}</span></div><small class="text-secondary">{{ p.progress }}% · Entrega {{ p.due_on or '—' }}</small></div>{% else %}<p class="text-secondary">Sin proyectos.</p>{% endfor %}</div>{% endif %}
+        {% if current_user.has_permission('tasks.view') %}<div class="col-xl-6"><h2 class="h5">Tareas abiertas</h2>{% for t in open_tasks %}<div class="border rounded-3 p-3 mb-2"><div class="d-flex justify-content-between gap-2"><a href="{{ url_for('operations.task_detail', task_id=t.id) }}"><strong>{{ t.title }}</strong></a><span class="badge-soft">{{ t.priority|label }}</span></div><small class="text-secondary">{{ t.status|label }} · {{ t.assignee.user.name if t.assignee else 'Sin asignar' }} · {{ t.due_at.strftime('%d/%m/%Y %H:%M') if t.due_at else 'Sin fecha' }}</small></div>{% else %}<p class="text-secondary">Sin tareas abiertas visibles.</p>{% endfor %}</div>{% endif %}
+        {% if current_user.has_permission('support.view') %}<div class="col-12"><h2 class="h5">Tickets abiertos</h2><div class="table-responsive"><table class="table modern-table"><thead><tr><th>Ticket</th><th>Asunto</th><th>Prioridad</th><th>Estado</th><th></th></tr></thead><tbody>{% for t in open_tickets %}<tr><td>{{ t.ticket_no }}</td><td>{{ t.subject }}</td><td>{{ t.priority|label }}</td><td>{{ t.status|label }}</td><td><a href="{{ url_for('support.detail', ticket_id=t.id) }}">Abrir</a></td></tr>{% else %}<tr><td colspan="5">Sin tickets abiertos.</td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
       </div>
-    </section>
+    </div>
+    {% endif %}
+
+    <div class="tab-pane fade" id="plataformas">
+      <div class="row g-4">
+        <div class="col-xl-5">
+          <section class="border rounded-4 p-3">
+            <h2 class="h5">Enlaces principales</h2>
+            <div class="mb-3"><small class="text-secondary">Website</small><div>{% if client.website %}<a href="{{ client.website }}" target="_blank" rel="noopener">{{ client.website }}</a>{% else %}—{% endif %}</div></div>
+            <div class="mb-3"><small class="text-secondary">Facebook</small><div>{% if client.facebook %}<a href="{{ client.facebook }}" target="_blank" rel="noopener">{{ client.facebook }}</a>{% else %}—{% endif %}</div></div>
+            <div class="mb-0"><small class="text-secondary">Instagram</small><div>{% if client.instagram %}<a href="{{ client.instagram }}" target="_blank" rel="noopener">{{ client.instagram }}</a>{% else %}—{% endif %}</div></div>
+            {% if can_edit %}<a class="btn btn-sm btn-light border mt-3" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar enlaces principales</a>{% endif %}
+          </section>
+        </div>
+        <div class="col-xl-7">
+          <section class="border rounded-4 p-3">
+            <div class="panel-header"><div><h2>Plataformas adicionales</h2><p>Google, YouTube, TikTok, directorios y otras plataformas del cliente.</p></div></div>
+            {% for row in platforms %}
+            <form method="post" action="{{ url_for('clients.save_platform', client_id=client.id) }}" class="border rounded-3 p-3 mb-2">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="platform_id" value="{{ row.id }}">
+              <div class="row g-2 align-items-end">
+                <div class="col-md-3"><label class="form-label">Plataforma</label>{% if can_edit and row.platform_key.startswith('otro_') %}<input name="custom_label" class="form-control" value="{{ row.label }}">{% else %}<div class="fw-semibold pb-2">{{ row.label }}</div>{% endif %}</div>
+                <div class="col-md-5"><label class="form-label">URL</label>{% if can_edit %}<input name="url" class="form-control" value="{{ row.url or '' }}">{% else %}<div class="pb-2">{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">Abrir enlace</a>{% else %}—{% endif %}</div>{% endif %}</div>
+                <div class="col-md-2"><label class="form-label">Estado</label>{% if can_edit %}<select name="status" class="form-select">{% for value in ['activo','pendiente','inactivo','no_aplica'] %}<option value="{{ value }}" {% if row.status==value %}selected{% endif %}>{{ value|label }}</option>{% endfor %}</select>{% else %}<div class="pb-2">{{ row.status|label }}</div>{% endif %}</div>
+                {% if can_edit %}<div class="col-md-2"><button class="btn btn-dark w-100">Guardar</button></div>{% endif %}
+                <div class="col-12"><label class="form-label">Notas</label>{% if can_edit %}<input name="notes" class="form-control" value="{{ row.notes or '' }}">{% else %}<div>{{ row.notes or '—' }}</div>{% endif %}</div>
+              </div>
+            </form>
+            {% if can_edit %}<form method="post" action="{{ url_for('clients.delete_platform', client_id=client.id, platform_id=row.id) }}" class="mb-3" onsubmit="return confirm('¿Eliminar esta plataforma de la ficha?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-link text-danger p-0">Eliminar plataforma</button></form>{% endif %}
+            {% else %}<p class="text-secondary">Todavía no hay plataformas adicionales registradas.</p>{% endfor %}
+
+            {% if can_edit %}
+            <hr><h3 class="h6">Agregar plataforma</h3>
+            <form method="post" action="{{ url_for('clients.save_platform', client_id=client.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="row g-2">
+                <div class="col-md-4"><select name="platform_key" class="form-select" required><option value="">Seleccionar plataforma</option>{% for key,label in platform_definitions.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}<option value="otro">Otra plataforma</option></select></div>
+                <div class="col-md-4"><input name="custom_label" class="form-control" placeholder="Nombre si seleccionas Otra"></div>
+                <div class="col-md-4"><input name="url" class="form-control" placeholder="https://..."></div>
+                <div class="col-md-3"><select name="status" class="form-select"><option value="activo">Activo</option><option value="pendiente">Pendiente</option><option value="inactivo">Inactivo</option><option value="no_aplica">No aplica</option></select></div>
+                <div class="col-md-7"><input name="notes" class="form-control" placeholder="Notas opcionales"></div>
+                <div class="col-md-2"><button class="btn btn-brand w-100">Agregar</button></div>
+              </div>
+            </form>
+            {% endif %}
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="equipo">
+      <div class="row g-4">
+        <div class="col-xl-7"><h2 class="h5">Equipo asignado</h2>{% for a in client.collaborator_assignments %}<div class="border rounded-3 p-3 mb-2"><div class="d-flex justify-content-between gap-2"><div><strong>{{ a.collaborator.user.name }}</strong><small class="d-block text-secondary">{{ a.role_in_client or a.collaborator.job_title }}</small></div>{% if can_assign %}<form method="post" action="{{ url_for('clients.remove_assignment', client_id=client.id, assignment_id=a.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger">Quitar</button></form>{% endif %}</div></div>{% else %}<p class="text-secondary">Sin colaboradores asignados.</p>{% endfor %}</div>
+        {% if can_assign %}<div class="col-xl-5"><section class="border rounded-4 p-3"><h2 class="h5">Asignar colaborador</h2><form method="post" action="{{ url_for('clients.assign_collaborator', client_id=client.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="collaborator_id" class="form-select mb-2" required><option value="">Seleccionar</option>{% for c in collaborators %}<option value="{{ c.id }}">{{ c.user.name }} — {{ c.job_title }}{% if c.advisor_project %} · {{ c.advisor_project.name }}{% endif %}</option>{% endfor %}</select><input name="role_in_client" class="form-control mb-2" placeholder="Rol: Diseño, SEO, Website, Soporte..."><label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="primary"> Principal</label><button class="btn btn-dark w-100">Asignar</button></form></section></div>{% endif %}
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="archivos">
+      <div class="panel-header"><div><h2>Archivos del cliente</h2><p>Documentos, logos, materiales, comprobantes y contratos asociados a la ficha.</p></div></div>
+      <div class="row g-2">
+        {% for a in attachments %}<div class="col-md-6 col-xl-4"><div class="border rounded-3 p-3 h-100"><a href="{{ url_for('static', filename=a.file_path) }}" target="_blank"><strong>{{ a.file_name }}</strong></a><small class="d-block text-secondary mt-1">{{ a.created_at.strftime('%d/%m/%Y %H:%M') }}</small></div></div>{% else %}<div class="col-12"><p class="text-secondary">Sin archivos.</p></div>{% endfor %}
+      </div>
+      {% if can_edit %}<form method="post" enctype="multipart/form-data" action="{{ url_for('clients.upload_attachment', client_id=client.id) }}" class="row g-2 mt-3"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="col-md-9"><input name="file" type="file" class="form-control" required></div><div class="col-md-3"><button class="btn btn-light border w-100">Adjuntar archivo</button></div></form>{% endif %}
+    </div>
+
+    <div class="tab-pane fade" id="historial">
+      <div class="row g-4">
+        <div class="col-xl-6">
+          <h2 class="h5">Comentarios internos</h2>
+          {% if can_edit %}<form method="post" action="{{ url_for('clients.add_comment', client_id=client.id) }}" class="mb-4"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="row g-2"><div class="col-md-5"><select name="process_type" class="form-select" required><option>Seguimiento / CRM</option><option>Cotización / Venta</option><option>Pago / Finanzas</option><option>Onboarding</option><option>Diseño</option><option>Desarrollo web</option><option>Google Business</option><option>Redes sociales</option><option>SEO</option><option>Imprenta</option><option>Soporte</option><option>Renovación</option><option>Otro</option></select></div><div class="col-md-7"><input name="process_detail" class="form-control" placeholder="Detalle del proceso"></div><div class="col-12"><textarea name="body" class="form-control" rows="3" required placeholder="Comentario interno"></textarea></div></div><button class="btn btn-brand mt-2">Agregar comentario</button></form>{% endif %}
+          <div class="timeline">{% for comment in comments %}<div class="timeline-item"><div class="d-flex justify-content-between gap-2"><strong>{{ comment.user.name }}</strong><small class="text-secondary">{{ comment.created_at.strftime('%d/%m/%Y %H:%M') }}</small></div><div class="mt-1"><span class="badge-soft info">{{ comment.process_type }}</span>{% if comment.department_snapshot %}<span class="badge-soft muted">{{ comment.department_snapshot }}</span>{% endif %}</div>{% if comment.process_detail %}<small class="d-block text-secondary mt-2">{{ comment.process_detail }}</small>{% endif %}<p class="mb-0 mt-2">{{ comment.body }}</p></div>{% else %}<p class="text-secondary">Sin comentarios internos.</p>{% endfor %}</div>
+        </div>
+        <div class="col-xl-6"><h2 class="h5">Línea de tiempo</h2><div class="timeline">{% for dt,kind,title,body in timeline %}<div class="timeline-item"><strong>{{ kind }} — {{ title }}</strong><small class="d-block text-secondary">{{ dt.strftime('%d/%m/%Y %H:%M') if dt else '' }}</small><p>{{ body or '' }}</p></div>{% else %}<p class="text-secondary">Sin eventos.</p>{% endfor %}</div></div>
+      </div>
+    </div>
   </div>
+</section>
 
-  <div class="col-xl-4">
-    <section class="panel-card mb-4">
-      <h2 class="h5">Colaboradores asignados</h2>
-      {% for a in client.collaborator_assignments %}
-      <div class="border-bottom py-2"><strong>{{ a.collaborator.user.name }}</strong><small class="d-block text-secondary">{{ a.role_in_client or a.collaborator.job_title }}</small>{% if current_user.has_permission('clients.assign') %}<form method="post" action="{{ url_for('clients.remove_assignment', client_id=client.id, assignment_id=a.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-link text-danger p-0">Quitar</button></form>{% endif %}</div>
-      {% else %}<p class="text-secondary">Sin asignaciones.</p>{% endfor %}
-      {% if current_user.has_permission('clients.assign') %}
-      <form method="post" action="{{ url_for('clients.assign_collaborator', client_id=client.id) }}" class="mt-3">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <select name="collaborator_id" class="form-select mb-2">{% for c in collaborators %}<option value="{{ c.id }}">{{ c.user.name }} — {{ c.job_title }}{% if c.advisor_project %} · {{ c.advisor_project.name }}{% endif %}</option>{% endfor %}</select>
-        <input name="role_in_client" class="form-control mb-2" placeholder="Rol: Diseño, SEO, soporte...">
-        <label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="primary"> Principal</label>
-        <button class="btn btn-dark w-100">Asignar</button>
-      </form>
-      {% endif %}
-    </section>
-
-    <section class="panel-card mb-4">
-      <h2 class="h5">Archivos del cliente</h2>
-      {% for a in attachments %}<div class="border-bottom py-2"><a href="{{ url_for('static', filename=a.file_path) }}" target="_blank">{{ a.file_name }}</a><small class="d-block text-secondary">{{ a.created_at.strftime('%d/%m/%Y %H:%M') }}</small></div>{% else %}<p class="text-secondary">Sin archivos.</p>{% endfor %}
-      {% if current_user.has_permission('clients.edit') %}<form method="post" enctype="multipart/form-data" action="{{ url_for('clients.upload_attachment', client_id=client.id) }}" class="mt-3"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="file" type="file" class="form-control mb-2" required><button class="btn btn-light border w-100">Adjuntar archivo</button></form>{% endif %}
-    </section>
-
-    <section class="panel-card">
-      <h2 class="h5">Acciones rápidas</h2>
-      <div class="d-grid gap-2">
-        {% if current_user.has_permission('sales.create') %}<a class="btn btn-light border" href="{{ url_for('sales.new_sale') }}">Nueva compra</a>{% endif %}
-        {% if current_user.has_permission('tasks.edit') %}<a class="btn btn-light border" href="{{ url_for('operations.new_task') }}">Crear tarea</a>{% endif %}
-        {% if current_user.has_permission('support.edit') %}<a class="btn btn-light border" href="{{ url_for('support.index') }}">Abrir ticket</a>{% endif %}
-        {% if current_user.has_permission('printing.edit') %}<a class="btn btn-light border" href="{{ url_for('printing.new_order') }}">Orden de imprenta</a>{% endif %}
-      </div>
-    </section>
-  </div>
-</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const hash = window.location.hash;
+  if (!hash) return;
+  const trigger = document.querySelector(`[data-bs-target="${hash}"]`);
+  if (trigger && window.bootstrap) bootstrap.Tab.getOrCreateInstance(trigger).show();
+});
+</script>
 {% endblock %}
