@@ -79,14 +79,38 @@ def _decimal_or_none(value):
         return None
 
 
+def _visible_client_query(query=None):
+    if query is None:
+        query = Client.query
+    role = current_user.role.name if current_user.role else ""
+    collaborator = current_user.collaborator
+
+    if role == "advisor" and collaborator:
+        return query.filter(Client.owner_id == collaborator.id)
+
+    if role == "supervisor" and collaborator:
+        allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
+        return query.filter(Client.owner_id.in_(allowed_ids))
+
+    return query
+
+
 def _active_collaborators():
-    return (
+    query = (
         Collaborator.query
         .join(User, Collaborator.user_id == User.id)
         .filter(Collaborator.status == "activo")
-        .order_by(User.name)
-        .all()
     )
+    role = current_user.role.name if current_user.role else ""
+    collaborator = current_user.collaborator
+
+    if role == "advisor" and collaborator:
+        query = query.filter(Collaborator.id == collaborator.id)
+    elif role == "supervisor" and collaborator:
+        allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
+        query = query.filter(Collaborator.id.in_(allowed_ids))
+
+    return query.order_by(User.name).all()
 
 
 def _owner_aliases(collaborators):
@@ -150,7 +174,13 @@ def _apply_client_form(client):
                 value = (value or "").strip().lower()
             setattr(client, field, value.strip() if isinstance(value, str) else value)
 
-    client.owner_id = request.form.get("owner_id", type=int) or None
+    # Cambiar el responsable comercial es una acción separada de editar la ficha.
+    # Solo quien tenga crm.transfer puede escoger otro responsable.
+    if current_user.has_permission("crm.transfer"):
+        client.owner_id = request.form.get("owner_id", type=int) or None
+    elif current_user.collaborator and not client.owner_id:
+        client.owner_id = current_user.collaborator.id
+
     client.client_status = request.form.get("client_status", client.client_status or "activo")
     if client.client_status not in CLIENT_STATUSES:
         client.client_status = "activo"
@@ -183,7 +213,7 @@ def _client_has_history(client_id):
 @bp.route("/")
 @login_required
 def index():
-    q = Client.query.filter(Client.record_type == "cliente")
+    q = _visible_client_query(Client.query).filter(Client.record_type == "cliente")
     search = request.args.get("q", "").strip()
     status = request.args.get("status", "").strip()
     advisor_project_id = request.args.get("advisor_project_id", type=int)
@@ -210,7 +240,9 @@ def index():
 
     clients = q.order_by(Client.updated_at.desc()).all()
     advisor_projects = AdvisorProject.query.filter_by(active=True).order_by(AdvisorProject.name).all()
-    pending_followups = Client.query.filter_by(record_type="seguimiento").count()
+    pending_followups = 0
+    if current_user.has_permission("crm.view"):
+        pending_followups = _visible_client_query(Client.query).filter_by(record_type="seguimiento").count()
 
     return render_template(
         "clients/index.html",
@@ -244,6 +276,12 @@ def new_client():
 
         duplicate = _find_duplicate(business_name, phone, email)
         if duplicate:
+            role = current_user.role.name if current_user.role else ""
+            allowed_owner_ids = {c.id for c in _active_collaborators()}
+            if role in {"advisor", "supervisor"} and duplicate.owner_id not in allowed_owner_ids:
+                flash("Ya existe un registro parecido fuera de tu cartera. No se realizaron cambios.", "warning")
+                return redirect(url_for("clients.index"))
+
             if duplicate.record_type == "seguimiento":
                 before = {
                     "record_type": duplicate.record_type,
@@ -264,7 +302,7 @@ def new_client():
                 flash("El registro ya existía como seguimiento y fue convertido en cliente.", "success")
                 return redirect(url_for("clients.detail", client_id=duplicate.id))
 
-            flash(f"Ya existe un cliente parecido: {duplicate.business_name}.", "warning")
+            flash("Ya existe un cliente parecido en tu cartera.", "warning")
             return redirect(url_for("clients.detail", client_id=duplicate.id))
 
         client = Client(
@@ -290,16 +328,23 @@ def new_client():
 @login_required
 def detail(client_id):
     client = db.get_or_404(Client, client_id)
-    collaborators = Collaborator.query.filter_by(status="activo").order_by(Collaborator.job_title).all()
-    products = ProductService.query.filter_by(active=True).order_by(ProductService.name).all()
+    collaborators = []
+    if current_user.has_permission("clients.assign"):
+        collaborators = Collaborator.query.filter_by(status="activo").order_by(Collaborator.job_title).all()
+    products = []
+    if current_user.has_permission("clients.edit"):
+        products = ProductService.query.filter_by(active=True).order_by(ProductService.name).all()
     timeline = []
 
     for interaction in client.interactions:
         timeline.append((interaction.occurred_at or interaction.created_at, "Interacción", interaction.subject or interaction.interaction_type, interaction.notes))
-    for payment in client.payments:
-        timeline.append((payment.created_at, "Pago", f"Pago {payment.amount}", payment.reference or payment.method))
-    for sale in client.sales:
-        timeline.append((sale.created_at, "Venta", sale.sale_no, f"Total {sale.total}"))
+
+    can_financial = current_user.has_permission("sales.view") or current_user.has_permission("finance.view")
+    if can_financial:
+        for payment in client.payments:
+            timeline.append((payment.created_at, "Pago", f"Pago {payment.amount}", payment.reference or payment.method))
+        for sale in client.sales:
+            timeline.append((sale.created_at, "Venta", sale.sale_no, f"Total {sale.total}"))
 
     comments = ClientComment.query.filter_by(client_id=client.id).order_by(ClientComment.created_at.desc()).all()
     for comment in comments:
@@ -550,7 +595,12 @@ def add_comment(client_id):
 @bp.route("/export.csv")
 @login_required
 def export_csv():
-    clients = Client.query.filter_by(record_type="cliente").order_by(Client.id).all()
+    clients = (
+        _visible_client_query(Client.query)
+        .filter_by(record_type="cliente")
+        .order_by(Client.id)
+        .all()
+    )
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow([
@@ -658,6 +708,8 @@ def import_csv():
 
             advisor_name = _pick(row, "advisor", "asesor", "responsable", "owner")
             owner_id = owner_aliases.get(_normalize_text(advisor_name)) if advisor_name else None
+            if not current_user.has_permission("crm.transfer") and current_user.collaborator:
+                owner_id = current_user.collaborator.id
 
             values = {
                 "business_name": business,
@@ -690,6 +742,11 @@ def import_csv():
 
             duplicate = _find_duplicate(business, phone, email)
             if duplicate:
+                role = current_user.role.name if current_user.role else ""
+                allowed_owner_ids = {c.id for c in _active_collaborators()}
+                if role in {"advisor", "supervisor"} and duplicate.owner_id not in allowed_owner_ids:
+                    rejected.append((line_number, "El registro ya existe fuera de tu cartera y no puede modificarse desde esta importación"))
+                    continue
                 before = {"record_type": duplicate.record_type, "business_name": duplicate.business_name}
                 for field, value in values.items():
                     if value not in (None, ""):

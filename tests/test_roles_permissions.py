@@ -207,6 +207,8 @@ def test_advisor_cannot_open_another_advisors_crm_or_sale(client, app):
     _login(client, "advisor")
     assert client.get(f"/crm/{own_client_id}", follow_redirects=False).status_code == 200
     assert client.get(f"/crm/{other_client_id}", follow_redirects=False).status_code == 403
+    assert client.get(f"/clients/{own_client_id}", follow_redirects=False).status_code == 200
+    assert client.get(f"/clients/{other_client_id}", follow_redirects=False).status_code == 403
     assert client.get(f"/sales/{own_sale_id}", follow_redirects=False).status_code == 200
     assert client.get(f"/sales/{other_sale_id}", follow_redirects=False).status_code == 403
 
@@ -214,3 +216,41 @@ def test_advisor_cannot_open_another_advisors_crm_or_sale(client, app):
 def test_advisor_cannot_use_unscoped_global_task_kanban(client):
     _login(client, "advisor")
     assert client.get("/operations/tasks/kanban", follow_redirects=False).status_code == 403
+
+
+def test_advisor_client_list_is_scoped_to_own_portfolio(client, app):
+    with app.app_context():
+        advisor = User.query.filter_by(email="advisor@test.local").one().collaborator
+        other_user = User(name="Asesor externo", email="scope-other@test.local", role=Role.query.filter_by(name="advisor").one(), active=True)
+        other_user.set_password("Test123!")
+        db.session.add(other_user)
+        db.session.flush()
+        other_advisor = Collaborator(user_id=other_user.id, code="SCOPE-OTHER", job_title="Asesor", status="activo")
+        db.session.add(other_advisor)
+        db.session.flush()
+
+        db.session.add(Client(code="CLI-SCOPE-OWN", business_name="Negocio Visible", contact_name="Contacto", owner_id=advisor.id, record_type="cliente"))
+        db.session.add(Client(code="CLI-SCOPE-OTHER", business_name="Negocio Oculto", contact_name="Contacto", owner_id=other_advisor.id, record_type="cliente"))
+        db.session.commit()
+
+    _login(client, "advisor")
+    response = client.get("/clients/")
+    assert response.status_code == 200
+    assert b"Negocio Visible" in response.data
+    assert b"Negocio Oculto" not in response.data
+
+
+def test_production_client_page_does_not_offer_write_controls(client, app):
+    with app.app_context():
+        row = Client(code="CLI-PROD-VIEW", business_name="Cliente Produccion", contact_name="Contacto", record_type="cliente")
+        db.session.add(row)
+        db.session.commit()
+        client_id = row.id
+
+    _login(client, "production")
+    response = client.get(f"/clients/{client_id}")
+    assert response.status_code == 200
+    assert b"Editar ficha" not in response.data
+    assert b"Asignar servicio" not in response.data
+    assert b"Adjuntar archivo" not in response.data
+    assert b"Total pagado" not in response.data

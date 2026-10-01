@@ -3,7 +3,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import func, or_
 
 from app.extensions import db
-from app.models import Client, Payment, Task, Project, Notification, Quote, Sale, SupportTicket
+from app.models import Client, Collaborator, Payment, Task, Project, Notification, Quote, Sale, SupportTicket
 from app.services import refresh_overdue_receivables, refresh_expired_contracts, ensure_renewal_notifications
 
 bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
@@ -26,7 +26,15 @@ def _client_scope(query):
 def _task_scope(query):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
-    if role not in {"superadmin", "admin", "manager", "supervisor"} and collaborator:
+
+    if role == "supervisor" and collaborator:
+        allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
+        return query.filter(
+            (Task.assignee_id.in_(allowed_ids))
+            | Task.collaborators.any(Collaborator.id.in_(allowed_ids))
+        )
+
+    if role not in {"superadmin", "admin", "manager"} and collaborator:
         return query.filter(
             (Task.assignee_id == collaborator.id)
             | Task.collaborators.any(id=collaborator.id)
@@ -37,6 +45,14 @@ def _task_scope(query):
 def _project_scope(query):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
+
+    if role == "advisor" and collaborator:
+        return query.filter(Project.client.has(owner_id=collaborator.id))
+
+    if role == "supervisor" and collaborator:
+        allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
+        return query.filter(Project.client.has(Client.owner_id.in_(allowed_ids)))
+
     if role == "production" and collaborator:
         return query.filter(
             (Project.coordinator_id == collaborator.id)
@@ -167,14 +183,33 @@ def search():
 
         if current_user.has_permission("sales.view"):
             sale_query = Sale.query.filter(Sale.sale_no.ilike(like))
-            if current_user.role and current_user.role.name == "advisor" and current_user.collaborator:
-                sale_query = sale_query.filter(Sale.advisor_id == current_user.collaborator.id)
+            role = current_user.role.name if current_user.role else ""
+            collaborator = current_user.collaborator
+            if role == "advisor" and collaborator:
+                sale_query = sale_query.filter(
+                    (Sale.advisor_id == collaborator.id)
+                    | Sale.client.has(owner_id=collaborator.id)
+                )
+            elif role == "supervisor" and collaborator:
+                allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
+                sale_query = sale_query.filter(
+                    (Sale.advisor_id.in_(allowed_ids))
+                    | Sale.client.has(Client.owner_id.in_(allowed_ids))
+                )
             sales = sale_query.limit(10).all()
 
         if current_user.has_permission("support.view"):
-            tickets = SupportTicket.query.filter(
+            ticket_query = SupportTicket.query.filter(
                 or_(SupportTicket.ticket_no.ilike(like), SupportTicket.subject.ilike(like))
-            ).limit(10).all()
+            )
+            role = current_user.role.name if current_user.role else ""
+            collaborator = current_user.collaborator
+            if role == "advisor" and collaborator:
+                ticket_query = ticket_query.filter(SupportTicket.client.has(owner_id=collaborator.id))
+            elif role == "supervisor" and collaborator:
+                allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
+                ticket_query = ticket_query.filter(SupportTicket.client.has(Client.owner_id.in_(allowed_ids)))
+            tickets = ticket_query.limit(10).all()
 
     return render_template(
         "dashboard/search.html",

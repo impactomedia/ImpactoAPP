@@ -58,15 +58,20 @@
       </div>
       <div class="col-md-4">
         <label class="form-label">Asesor / responsable</label>
-        {% set selected_owner = client.owner_id if client else request.form.get('owner_id') %}
-        <select name="owner_id" class="form-select">
-          <option value="">Sin asignar</option>
-          {% for c in collaborators %}
-            <option value="{{ c.id }}" {% if selected_owner|string == c.id|string %}selected{% endif %}>
-              {{ c.user.name }}{% if c.advisor_project %} · {{ c.advisor_project.name }}{% endif %}
-            </option>
-          {% endfor %}
-        </select>
+        {% if current_user.has_permission('crm.transfer') %}
+          {% set selected_owner = client.owner_id if client else request.form.get('owner_id') %}
+          <select name="owner_id" class="form-select">
+            <option value="">Sin asignar</option>
+            {% for c in collaborators %}
+              <option value="{{ c.id }}" {% if selected_owner|string == c.id|string %}selected{% endif %}>
+                {{ c.user.name }}{% if c.advisor_project %} · {{ c.advisor_project.name }}{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        {% else %}
+          <input class="form-control" value="{{ client.owner.user.name if client and client.owner else current_user.name }}" disabled>
+          <small class="text-secondary">El responsable comercial solo puede cambiarlo un usuario autorizado para transferir cartera.</small>
+        {% endif %}
       </div>
     </div>
   </section>

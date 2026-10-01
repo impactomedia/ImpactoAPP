@@ -165,8 +165,10 @@ def _required_permission(endpoint, method):
 
 
 def _commercial_client_allowed(client):
+    """Limita cartera comercial para asesores y supervisores."""
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
+
     if not collaborator:
         return role not in {"advisor", "supervisor"}
 
@@ -180,6 +182,22 @@ def _commercial_client_allowed(client):
     return True
 
 
+def _sale_allowed(sale):
+    role = current_user.role.name if current_user.role else ""
+    collaborator = current_user.collaborator
+
+    if role not in {"advisor", "supervisor"}:
+        return True
+    if not collaborator:
+        return False
+
+    if role == "advisor":
+        return sale.advisor_id == collaborator.id or _commercial_client_allowed(sale.client)
+
+    allowed_ids = {collaborator.id, *(c.id for c in collaborator.subordinates)}
+    return sale.advisor_id in allowed_ids or _commercial_client_allowed(sale.client)
+
+
 def _enforce_record_scope(endpoint):
     """Evita saltarse filtros de propiedad escribiendo IDs directamente en la URL."""
     if not current_user.is_authenticated:
@@ -189,6 +207,7 @@ def _enforce_record_scope(endpoint):
     collaborator = current_user.collaborator
     args = request.view_args or {}
 
+    # CRM: asesor = su cartera; supervisor = su equipo.
     if request.blueprint == "crm":
         from app.models import Client, Quote
 
@@ -202,7 +221,16 @@ def _enforce_record_scope(endpoint):
         if client is not None and not _commercial_client_allowed(client):
             abort(403)
 
-    if request.blueprint == "sales" and role == "advisor" and collaborator:
+    # Clientes: las rutas por ID respetan la misma cartera comercial.
+    if request.blueprint == "clients" and "client_id" in args:
+        from app.models import Client
+
+        client = Client.query.get(args["client_id"])
+        if client is not None and not _commercial_client_allowed(client):
+            abort(403)
+
+    # Ventas: asesor y supervisor solo acceden a su cartera/equipo.
+    if request.blueprint == "sales" and role in {"advisor", "supervisor"}:
         from app.models import Payment, Quote, Renewal, Sale
 
         sale = None
@@ -213,16 +241,17 @@ def _enforce_record_scope(endpoint):
             sale = payment.sale if payment else None
         elif "quote_id" in args:
             quote = Quote.query.get(args["quote_id"])
-            if quote and not (quote.advisor_id == collaborator.id or quote.client.owner_id == collaborator.id):
+            if quote and not _commercial_client_allowed(quote.client):
                 abort(403)
         elif "renewal_id" in args:
             renewal = Renewal.query.get(args["renewal_id"])
-            if renewal and renewal.client.owner_id != collaborator.id:
+            if renewal and not _commercial_client_allowed(renewal.client):
                 abort(403)
 
-        if sale is not None and sale.advisor_id != collaborator.id and sale.client.owner_id != collaborator.id:
+        if sale is not None and not _sale_allowed(sale):
             abort(403)
 
+    # Operaciones: tareas personales para perfiles no privilegiados y proyectos asignados a Producción.
     if request.blueprint == "operations" and collaborator:
         from app.models import Project, Task
 
@@ -240,6 +269,39 @@ def _enforce_record_scope(endpoint):
             project = Project.query.get(args["project_id"])
             if project and project.coordinator_id != collaborator.id and collaborator not in project.members:
                 abort(403)
+
+        if "project_id" in args and role == "advisor":
+            project = Project.query.get(args["project_id"])
+            if project and not _commercial_client_allowed(project.client):
+                abort(403)
+
+    # Imprenta: asesor/supervisor solo acceden a órdenes de su cartera/equipo.
+    if request.blueprint == "printing" and role in {"advisor", "supervisor"}:
+        from app.models import DesignVersion, PrintIncident, PrintItem, PrintOrder, Shipment
+
+        order = None
+        if "order_id" in args:
+            order = PrintOrder.query.get(args["order_id"])
+        elif "item_id" in args:
+            item = PrintItem.query.get(args["item_id"])
+            order = item.order if item else None
+        elif "shipment_id" in args:
+            shipment = Shipment.query.get(args["shipment_id"])
+            order = shipment.order if shipment else None
+        elif "incident_id" in args:
+            incident = PrintIncident.query.get(args["incident_id"])
+            order = incident.order if incident else None
+
+        if order is not None and not _commercial_client_allowed(order.client):
+            abort(403)
+
+    # Soporte: asesor/supervisor solo acceden a tickets de su cartera/equipo.
+    if request.blueprint == "support" and role in {"advisor", "supervisor"} and "ticket_id" in args:
+        from app.models import SupportTicket
+
+        ticket = SupportTicket.query.get(args["ticket_id"])
+        if ticket is not None and not _commercial_client_allowed(ticket.client):
+            abort(403)
 
 
 def init_access_control(app):

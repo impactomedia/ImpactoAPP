@@ -14,17 +14,37 @@ TICKET_TYPES = {"soporte", "website", "redes", "pago", "acceso", "diseño", "imp
 TICKET_STATUSES = {"nuevo", "asignado", "en_proceso", "esperando_cliente", "resuelto", "cerrado"}
 
 
+def _client_scope(query):
+    role = current_user.role.name if current_user.role else ""
+    collaborator = current_user.collaborator
+
+    if role == "advisor" and collaborator:
+        return query.filter(Client.owner_id == collaborator.id)
+
+    if role == "supervisor" and collaborator:
+        allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
+        return query.filter(Client.owner_id.in_(allowed_ids))
+
+    return query
+
+
 @bp.route("/", methods=["GET", "POST"])
 @login_required
 def index():
-    clients = Client.query.filter_by(record_type="cliente").order_by(Client.business_name).all()
+    clients = (
+        _client_scope(Client.query)
+        .filter_by(record_type="cliente")
+        .order_by(Client.business_name)
+        .all()
+    )
+    visible_client_ids = {client.id for client in clients}
     collaborators = Collaborator.query.filter_by(status="activo").all()
 
     if request.method == "POST":
         client_id = request.form.get("client_id", type=int)
         client = db.session.get(Client, client_id) if client_id else None
-        if not client or client.record_type != "cliente":
-            flash("Selecciona un cliente válido.", "danger")
+        if not client or client.record_type != "cliente" or client.id not in visible_client_ids:
+            flash("Selecciona un cliente válido dentro de tu cartera autorizada.", "danger")
             return redirect(url_for("support.index"))
 
         priority = request.form.get("priority", "normal")
@@ -59,7 +79,15 @@ def index():
         flash("Ticket creado.", "success")
         return redirect(url_for("support.detail", ticket_id=ticket.id))
 
-    tickets = SupportTicket.query.order_by(SupportTicket.created_at.desc()).all()
+    ticket_query = SupportTicket.query
+    role = current_user.role.name if current_user.role else ""
+    collaborator = current_user.collaborator
+    if role == "advisor" and collaborator:
+        ticket_query = ticket_query.filter(SupportTicket.client.has(owner_id=collaborator.id))
+    elif role == "supervisor" and collaborator:
+        allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
+        ticket_query = ticket_query.filter(SupportTicket.client.has(Client.owner_id.in_(allowed_ids)))
+    tickets = ticket_query.order_by(SupportTicket.created_at.desc()).all()
     return render_template(
         "support/index.html",
         tickets=tickets,

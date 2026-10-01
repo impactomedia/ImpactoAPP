@@ -8,15 +8,17 @@
     <p>Ficha operativa, servicios, pagos, responsables y proyecto comercial.</p>
   </div>
   <div class="d-flex flex-wrap gap-2">
-    <a class="btn btn-light border" href="{{ url_for('clients.import_csv') }}">Importar CSV</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('clients.export_csv') }}">Exportar</a>
     {% if current_user.has_permission('clients.create') %}
+      <a class="btn btn-light border" href="{{ url_for('clients.import_csv') }}">Importar CSV</a>
       <a class="btn btn-brand" href="{{ url_for('clients.new_client') }}">Nuevo cliente</a>
+    {% endif %}
+    {% if current_user.has_permission('clients.export') %}
+      <a class="btn btn-outline-secondary" href="{{ url_for('clients.export_csv') }}">Exportar</a>
     {% endif %}
   </div>
 </div>
 
-{% if pending_followups %}
+{% if pending_followups and current_user.has_permission('crm.view') %}
 <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2">
   <div>
     <strong>{{ pending_followups }} registro(s) siguen clasificados como seguimiento.</strong>
@@ -61,7 +63,7 @@
           <th>Asesor</th>
           <th>Proyecto</th>
           <th>Servicios</th>
-          <th>Saldo</th>
+          {% if current_user.has_permission('sales.view') or current_user.has_permission('finance.view') %}<th>Saldo</th>{% endif %}
           <th style="min-width:230px">Acciones</th>
         </tr>
       </thead>
@@ -84,7 +86,7 @@
           <td>{{ c.owner.user.name if c.owner else '—' }}</td>
           <td>{{ c.owner.advisor_project.name if c.owner and c.owner.advisor_project else '—' }}</td>
           <td>{{ c.contracts|length }}</td>
-          <td>{{ c.outstanding_balance|money }}</td>
+          {% if current_user.has_permission('sales.view') or current_user.has_permission('finance.view') %}<td>{{ c.outstanding_balance|money }}</td>{% endif %}
           <td>
             <div class="d-flex flex-wrap gap-1">
               <a class="btn btn-sm btn-light border" href="{{ url_for('clients.detail', client_id=c.id) }}">Ficha</a>
