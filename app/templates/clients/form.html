@@ -1,0 +1,136 @@
+{% extends "app_base.html" %}
+{% block app_content %}
+{% set is_edit = mode == 'edit' and client %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Clientes</span>
+    <h1>{{ 'Editar cliente' if is_edit else 'Nuevo cliente' }}</h1>
+    <p>{{ client.business_name if is_edit else 'Registra un cliente directamente en la cartera activa.' }}</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('clients.detail', client_id=client.id) if is_edit else url_for('clients.index') }}">Cancelar</a>
+</div>
+
+<form method="post" class="pb-4">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <section class="panel-card form-card mb-4">
+    <div class="panel-header"><div><h2>Información principal</h2><p>Datos básicos para identificar y contactar al cliente.</p></div></div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Nombre del negocio *</label>
+        <input name="business_name" class="form-control" required value="{{ client.business_name if client else request.form.get('business_name','') }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Nombre del contacto *</label>
+        <input name="contact_name" class="form-control" required value="{{ client.contact_name if client else request.form.get('contact_name','') }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Teléfono principal</label>
+        <input name="phone" class="form-control" value="{{ client.phone if client else request.form.get('phone','') }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Teléfono(s) secundario(s)</label>
+        <input name="other_phones" class="form-control" value="{{ client.other_phones if client else request.form.get('other_phones','') }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Correo</label>
+        <input name="email" type="email" class="form-control" value="{{ client.email if client else request.form.get('email','') }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Canal preferido</label>
+        {% set preferred = client.preferred_channel if client else request.form.get('preferred_channel','') %}
+        <select name="preferred_channel" class="form-select">
+          <option value="">Seleccionar</option>
+          {% for option in ['WhatsApp','Llamada','Email','SMS','Facebook','Instagram','Otro'] %}
+            <option value="{{ option }}" {% if preferred == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Estado del cliente</label>
+        {% set client_status = client.client_status if client else request.form.get('client_status','activo') %}
+        <select name="client_status" class="form-select">
+          <option value="activo" {% if client_status=='activo' %}selected{% endif %}>Activo</option>
+          <option value="inactivo" {% if client_status=='inactivo' %}selected{% endif %}>Inactivo</option>
+          <option value="caducado" {% if client_status=='caducado' %}selected{% endif %}>Caducado</option>
+          <option value="archivado" {% if client_status=='archivado' %}selected{% endif %}>Archivado</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Asesor / responsable</label>
+        {% set selected_owner = client.owner_id if client else request.form.get('owner_id') %}
+        <select name="owner_id" class="form-select">
+          <option value="">Sin asignar</option>
+          {% for c in collaborators %}
+            <option value="{{ c.id }}" {% if selected_owner|string == c.id|string %}selected{% endif %}>
+              {{ c.user.name }}{% if c.advisor_project %} · {{ c.advisor_project.name }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel-card form-card mb-4">
+    <div class="panel-header"><div><h2>Información comercial</h2><p>Industria, servicios, procedencia e interés comercial.</p></div></div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Industria / rubro</label>
+        <input name="industry" class="form-control" value="{{ client.industry if client else request.form.get('industry','') }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Fuente</label>
+        <input name="source" class="form-control" placeholder="Facebook, referido, llamada, Google..." value="{{ client.source if client else request.form.get('source','') }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Prioridad</label>
+        {% set priority = client.priority if client else request.form.get('priority','media') %}
+        <select name="priority" class="form-select">
+          <option value="baja" {% if priority=='baja' %}selected{% endif %}>Baja</option>
+          <option value="media" {% if priority=='media' %}selected{% endif %}>Media</option>
+          <option value="alta" {% if priority=='alta' %}selected{% endif %}>Alta</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Interés principal</label>
+        <input name="main_interest" class="form-control" value="{{ client.main_interest if client else request.form.get('main_interest','') }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Presupuesto estimado</label>
+        <input name="estimated_budget" type="number" step="0.01" min="0" class="form-control" value="{{ client.estimated_budget if client and client.estimated_budget is not none else request.form.get('estimated_budget','') }}">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Servicios que ofrece el cliente</label>
+        <textarea name="services_offered" class="form-control" rows="4">{{ client.services_offered if client else request.form.get('services_offered','') }}</textarea>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel-card form-card mb-4">
+    <div class="panel-header"><div><h2>Presencia digital</h2><p>Website y redes principales.</p></div></div>
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label">Website</label><input name="website" class="form-control" value="{{ client.website if client else request.form.get('website','') }}"></div>
+      <div class="col-md-6"><label class="form-label">Facebook</label><input name="facebook" class="form-control" value="{{ client.facebook if client else request.form.get('facebook','') }}"></div>
+      <div class="col-md-6"><label class="form-label">Instagram</label><input name="instagram" class="form-control" value="{{ client.instagram if client else request.form.get('instagram','') }}"></div>
+      <div class="col-md-6"><label class="form-label">Otras redes / enlaces</label><input name="other_social" class="form-control" value="{{ client.other_social if client else request.form.get('other_social','') }}"></div>
+    </div>
+  </section>
+
+  <section class="panel-card form-card mb-4">
+    <div class="panel-header"><div><h2>Ubicación</h2><p>Dirección y zona de operación.</p></div></div>
+    <div class="row g-3">
+      <div class="col-12"><label class="form-label">Dirección</label><input name="address" class="form-control" value="{{ client.address if client else request.form.get('address','') }}"></div>
+      <div class="col-md-3"><label class="form-label">Ciudad</label><input name="city" class="form-control" value="{{ client.city if client else request.form.get('city','') }}"></div>
+      <div class="col-md-3"><label class="form-label">Estado / Provincia</label><input name="state" class="form-control" value="{{ client.state if client else request.form.get('state','') }}"></div>
+      <div class="col-md-3"><label class="form-label">País</label><input name="country" class="form-control" value="{{ client.country if client else request.form.get('country','') }}"></div>
+      <div class="col-md-3"><label class="form-label">Zona horaria</label><input name="timezone" class="form-control" value="{{ client.timezone if client else request.form.get('timezone','') }}"></div>
+      <div class="col-12"><label class="form-label">Notas</label><textarea name="notes" class="form-control" rows="4">{{ client.notes if client else request.form.get('notes','') }}</textarea></div>
+    </div>
+  </section>
+
+  <div class="d-flex justify-content-end gap-2">
+    <a class="btn btn-light border" href="{{ url_for('clients.detail', client_id=client.id) if is_edit else url_for('clients.index') }}">Cancelar</a>
+    <button class="btn btn-brand">{{ 'Guardar cambios' if is_edit else 'Crear cliente' }}</button>
+  </div>
+</form>
+{% endblock %}

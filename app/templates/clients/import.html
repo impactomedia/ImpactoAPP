@@ -1,1 +1,51 @@
-{% extends "app_base.html" %}{% block app_content %}<div class="page-heading"><div><span class="eyebrow">Clientes</span><h1>Importación CSV</h1><p>Columnas sugeridas: business_name, contact_name, phone, email, record_type, pipeline_stage, client_status, source.</p></div></div><section class="panel-card"><form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="file" type="file" accept=".csv" class="form-control mb-3" required><button class="btn btn-brand">Importar</button></form>{% if rejected is not none %}<hr><h2 class="h5">Filas rechazadas</h2><ul>{% for row,reason in rejected %}<li>Fila {{ row }}: {{ reason }}</li>{% else %}<li>Ninguna.</li>{% endfor %}</ul>{% endif %}</section>{% endblock %}
+{% extends "app_base.html" %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Clientes</span>
+    <h1>Importación CSV</h1>
+    <p>Los registros importados desde esta pantalla se guardarán como clientes, no como seguimientos.</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('clients.index') }}">Volver a clientes</a>
+</div>
+
+<section class="panel-card mb-4">
+  <div class="alert alert-info">
+    <strong>Puedes volver a subir el CSV que ya importaste.</strong><br>
+    Si el sistema encuentra el mismo negocio, teléfono o correo, actualizará el registro existente y lo convertirá a cliente en lugar de duplicarlo.
+  </div>
+
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="form-label">Archivo CSV</label>
+    <input name="file" type="file" accept=".csv,text/csv" class="form-control mb-3" required>
+    <button class="btn btn-brand">Importar clientes</button>
+  </form>
+</section>
+
+<section class="panel-card mb-4">
+  <h2 class="h5">Columnas reconocidas</h2>
+  <p class="text-secondary mb-2">No todas son obligatorias. El único dato imprescindible es el nombre del negocio.</p>
+  <code class="d-block text-wrap">business_name, contact_name, phone, other_phones, email, advisor, preferred_channel, industry, services_offered, website, facebook, instagram, other_social, address, city, state, country, timezone, source, priority, main_interest, estimated_budget, client_status, notes</code>
+  <small class="d-block mt-3 text-secondary">También reconoce encabezados comunes en español como empresa, compañía, contacto, teléfono, correo, asesor, industria, servicios, dirección, ciudad, estado, país, fuente y prioridad.</small>
+</section>
+
+{% if rejected is not none %}
+<section class="panel-card">
+  <div class="row g-3 mb-3">
+    <div class="col-md-4"><div class="metric-card"><span>Nuevos</span><strong>{{ created or 0 }}</strong><small>Clientes creados</small></div></div>
+    <div class="col-md-4"><div class="metric-card"><span>Actualizados</span><strong>{{ updated or 0 }}</strong><small>Incluye seguimientos convertidos</small></div></div>
+    <div class="col-md-4"><div class="metric-card"><span>Rechazados</span><strong>{{ rejected|length }}</strong><small>Filas con problemas</small></div></div>
+  </div>
+
+  <h2 class="h5">Filas rechazadas</h2>
+  <ul class="mb-0">
+    {% for row, reason in rejected %}
+      <li>Fila {{ row }}: {{ reason }}</li>
+    {% else %}
+      <li>Ninguna.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}
