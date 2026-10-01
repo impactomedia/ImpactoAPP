@@ -6,40 +6,98 @@
       <div class="brand-symbol">IM</div>
       <div><strong>Impacto</strong><span>Manager</span></div>
     </div>
+
     <nav class="sidebar-nav">
       <a class="nav-item {% if request.blueprint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard.index') }}"><i class="bi bi-grid"></i> Inicio</a>
+
+      {% if current_user.has_permission('crm.view') or current_user.has_permission('clients.view') or current_user.has_permission('sales.view') %}
       <div class="nav-section">Comercial</div>
-      <a class="nav-item {% if request.blueprint == 'crm' %}active{% endif %}" href="{{ url_for('crm.prospects') }}"><i class="bi bi-funnel"></i> CRM / Prospectos</a>
-      <a class="nav-item" href="{{ url_for('crm.pipeline') }}"><i class="bi bi-kanban"></i> Pipeline</a>
+      {% endif %}
+
+      {% if current_user.has_permission('crm.view') %}
+      <a class="nav-item {% if request.blueprint == 'crm' and request.endpoint != 'crm.pipeline' %}active{% endif %}" href="{{ url_for('crm.prospects') }}"><i class="bi bi-funnel"></i> CRM / Prospectos</a>
+      <a class="nav-item {% if request.endpoint == 'crm.pipeline' %}active{% endif %}" href="{{ url_for('crm.pipeline') }}"><i class="bi bi-kanban"></i> Pipeline</a>
+      {% endif %}
+
+      {% if current_user.has_permission('clients.view') %}
       <a class="nav-item {% if request.blueprint == 'clients' %}active{% endif %}" href="{{ url_for('clients.index') }}"><i class="bi bi-buildings"></i> Clientes</a>
-      <a class="nav-item {% if request.blueprint == 'sales' %}active{% endif %}" href="{{ url_for('sales.index') }}"><i class="bi bi-receipt"></i> Ventas y pagos</a>
-      <a class="nav-item" href="{{ url_for('sales.renewals') }}"><i class="bi bi-arrow-repeat"></i> Renovaciones</a>
+      {% endif %}
+
+      {% if current_user.has_permission('sales.view') %}
+      <a class="nav-item {% if request.blueprint == 'sales' and request.endpoint != 'sales.renewals' %}active{% endif %}" href="{{ url_for('sales.index') }}"><i class="bi bi-receipt"></i> Ventas y pagos</a>
+      <a class="nav-item {% if request.endpoint == 'sales.renewals' %}active{% endif %}" href="{{ url_for('sales.renewals') }}"><i class="bi bi-arrow-repeat"></i> Renovaciones</a>
+      {% endif %}
+
+      {% if current_user.has_permission('projects.view') or current_user.has_permission('tasks.view') or current_user.has_permission('printing.view') or current_user.has_permission('support.view') %}
       <div class="nav-section">Operación</div>
-      <a class="nav-item {% if request.blueprint == 'operations' %}active{% endif %}" href="{{ url_for('operations.projects') }}"><i class="bi bi-kanban-fill"></i> Proyectos</a>
-      <a class="nav-item" href="{{ url_for('operations.tasks') }}"><i class="bi bi-check2-square"></i> Tareas</a>
+      {% endif %}
+
+      {% if current_user.has_permission('projects.view') %}
+      <a class="nav-item {% if request.endpoint in ['operations.projects','operations.project_detail','operations.new_project'] %}active{% endif %}" href="{{ url_for('operations.projects') }}"><i class="bi bi-kanban-fill"></i> Proyectos</a>
+      {% endif %}
+
+      {% if current_user.has_permission('tasks.view') %}
+      <a class="nav-item {% if request.endpoint in ['operations.tasks','operations.task_detail','operations.new_task','operations.task_kanban'] %}active{% endif %}" href="{{ url_for('operations.tasks') }}"><i class="bi bi-check2-square"></i> Tareas</a>
+      {% endif %}
+
+      {% if current_user.has_permission('printing.view') %}
       <a class="nav-item {% if request.blueprint == 'printing' %}active{% endif %}" href="{{ url_for('printing.index') }}"><i class="bi bi-printer"></i> Imprenta</a>
+      {% endif %}
+
+      {% if current_user.has_permission('support.view') %}
       <a class="nav-item {% if request.blueprint == 'support' %}active{% endif %}" href="{{ url_for('support.index') }}"><i class="bi bi-headset"></i> Soporte</a>
+      {% endif %}
+
       <div class="nav-section">Administración</div>
+
+      {% if current_user.has_permission('finance.view') %}
+      <a class="nav-item {% if request.blueprint == 'finance' %}active{% endif %}" href="{{ url_for('finance.dashboard') }}"><i class="bi bi-wallet2"></i> Finanzas</a>
+      <a class="nav-item {% if request.endpoint == 'finance.incomes' %}active{% endif %}" href="{{ url_for('finance.incomes') }}"><i class="bi bi-cash-coin"></i> Ingresos</a>
+      {% endif %}
+
+      {% if current_user.has_permission('hr.view') %}
+      <a class="nav-item {% if request.blueprint == 'hr' and request.endpoint != 'hr.my_day' %}active{% endif %}" href="{{ url_for('hr.dashboard') }}"><i class="bi bi-people"></i> Recursos Humanos</a>
+      {% endif %}
+
+      {% if current_user.collaborator %}
+      <a class="nav-item {% if request.endpoint == 'hr.my_day' %}active{% endif %}" href="{{ url_for('hr.my_day') }}"><i class="bi bi-clock"></i> Mi jornada</a>
+      {% endif %}
+
+      {% if current_user.has_permission('reports.view') %}
+      <a class="nav-item {% if request.blueprint == 'reports' %}active{% endif %}" href="{{ url_for('reports.index') }}"><i class="bi bi-bar-chart"></i> Reportes</a>
+      {% endif %}
+
       {% set role_name = current_user.role.name if current_user.role else '' %}
-      {% if current_user.is_superadmin or role_name in ['admin','manager','finance'] %}<a class="nav-item {% if request.blueprint == 'finance' %}active{% endif %}" href="{{ url_for('finance.dashboard') }}"><i class="bi bi-wallet2"></i> Finanzas</a><a class="nav-item" href="{{ url_for('finance.incomes') }}"><i class="bi bi-cash-coin"></i> Ingresos</a>{% endif %}
-      {% if current_user.is_superadmin or role_name in ['admin','manager','hr','supervisor'] %}<a class="nav-item {% if request.blueprint == 'hr' %}active{% endif %}" href="{{ url_for('hr.dashboard') }}"><i class="bi bi-people"></i> Recursos Humanos</a>{% else %}<a class="nav-item" href="{{ url_for('hr.my_day') }}"><i class="bi bi-clock"></i> Mi jornada</a>{% endif %}
-      {% if current_user.is_superadmin or role_name in ['admin','manager','finance','hr','supervisor','audit'] %}<a class="nav-item {% if request.blueprint == 'reports' %}active{% endif %}" href="{{ url_for('reports.index') }}"><i class="bi bi-bar-chart"></i> Reportes</a>{% endif %}
-      {% if current_user.is_superadmin or (current_user.role and current_user.role.name in ['admin','manager']) %}
-      <a class="nav-item {% if request.blueprint == 'settings' %}active{% endif %}" href="{{ url_for('settings.index') }}"><i class="bi bi-gear"></i> Configuración</a>
+      {% if current_user.has_permission('settings.view') and (current_user.is_superadmin or role_name in ['admin','manager']) %}
+      <a class="nav-item {% if request.blueprint == 'settings' and request.endpoint != 'settings.audit_log' %}active{% endif %}" href="{{ url_for('settings.index') }}"><i class="bi bi-gear"></i> Configuración</a>
+      {% endif %}
+
+      {% if current_user.has_permission('audit.view') %}
+      <a class="nav-item {% if request.endpoint == 'settings.audit_log' %}active{% endif %}" href="{{ url_for('settings.audit_log') }}"><i class="bi bi-shield-check"></i> Auditoría</a>
       {% endif %}
     </nav>
-    <div class="sidebar-footer"><small>Sesión activa</small><strong>{{ current_user.name }}</strong></div>
+
+    <div class="sidebar-footer">
+      <small>Sesión activa</small>
+      <strong>{{ current_user.name }}</strong>
+      <small>{{ current_user.role.label if current_user.role else 'Sin rol' }}</small>
+    </div>
   </aside>
+
   <main class="main-area">
     <header class="topbar">
       <button class="btn d-lg-none" id="sidebarToggle"><i class="bi bi-list"></i></button>
       <form class="global-search d-none d-md-flex" action="{{ url_for('dashboard.search') }}" method="get">
-        <i class="bi bi-search"></i><input class="border-0 bg-transparent" name="q" placeholder="Buscar cliente, venta, cotización o ticket..." style="min-width:320px;outline:none">
+        <i class="bi bi-search"></i>
+        <input class="border-0 bg-transparent" name="q" placeholder="Buscar información disponible..." style="min-width:320px;outline:none">
       </form>
       <div class="top-actions ms-auto">
         <a class="btn btn-light border position-relative" href="{{ url_for('dashboard.index') }}#notifications"><i class="bi bi-bell"></i>{% if unread_notifications %}<span class="notif-badge">{{ unread_notifications }}</span>{% endif %}</a>
         <a class="btn btn-light border" href="{{ url_for('auth.profile') }}"><i class="bi bi-person-circle"></i></a>
-        <form method="post" action="{{ url_for('auth.logout') }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-light border"><i class="bi bi-box-arrow-right"></i></button></form>
+        <form method="post" action="{{ url_for('auth.logout') }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-light border" title="Cerrar sesión"><i class="bi bi-box-arrow-right"></i></button>
+        </form>
       </div>
     </header>
     <div class="page-content">{% block app_content %}{% endblock %}</div>

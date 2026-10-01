@@ -5,12 +5,109 @@ import secrets
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
-from werkzeug.utils import secure_filename
-from flask import current_app, request, url_for
+
+from flask import current_app, has_request_context, request
 from flask_login import current_user
+from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.models import AuditLog, Notification
+
+
+HUMAN_LABELS = {
+    # Módulos
+    "crm": "CRM",
+    "clients": "Clientes",
+    "sales": "Ventas",
+    "finance": "Finanzas",
+    "operations": "Operaciones",
+    "printing": "Imprenta",
+    "hr": "Recursos Humanos",
+    "support": "Soporte",
+    "reports": "Reportes",
+    "settings": "Configuración",
+
+    # Canales / métodos
+    "whatsapp": "WhatsApp",
+    "email": "Correo electrónico",
+    "reunion": "Reunión",
+    "transferencia": "Transferencia",
+    "efectivo": "Efectivo",
+    "tarjeta": "Tarjeta",
+    "zelle": "Zelle",
+    "wise": "Wise",
+    "ach": "ACH",
+    "usd": "USD",
+    "nio": "NIO",
+
+    # Estados frecuentes
+    "nuevo": "Nuevo",
+    "intento_contacto": "Intento de contacto",
+    "contactado": "Contactado",
+    "calificado": "Calificado",
+    "interesado": "Interesado",
+    "seguimiento": "Seguimiento",
+    "cotizacion_enviada": "Cotización enviada",
+    "negociacion": "Negociación",
+    "pendiente_pago": "Pendiente de pago",
+    "venta_cerrada": "Venta cerrada",
+    "perdido": "Perdido",
+    "pendiente_onboarding": "Pendiente de onboarding",
+    "recopilando_informacion": "Recopilando información",
+    "listo_iniciar": "Listo para iniciar",
+    "en_produccion": "En producción",
+    "esperando_cliente": "Esperando al cliente",
+    "revision_interna": "Revisión interna",
+    "aprobacion_cliente": "Aprobación del cliente",
+    "correcciones": "Correcciones",
+    "entregado": "Entregado",
+    "mantenimiento": "Mantenimiento",
+    "completado": "Completado",
+    "cancelado": "Cancelado",
+    "pendiente": "Pendiente",
+    "en_proceso": "En proceso",
+    "bloqueada": "Bloqueada",
+    "en_revision": "En revisión",
+    "completada": "Completada",
+    "cancelada": "Cancelada",
+    "diseno": "Diseño",
+    "aprobado_envio": "Aprobado para envío",
+    "en_transito": "En tránsito",
+    "recibido": "Recibido",
+    "incidencia": "Incidencia",
+    "atrasado": "Atrasado",
+    "asignado": "Asignado",
+    "resuelto": "Resuelto",
+    "cerrado": "Cerrado",
+    "activo": "Activo",
+    "inactivo": "Inactivo",
+    "caducado": "Caducado",
+    "archivado": "Archivado",
+    "confirmado": "Confirmado",
+    "reversado": "Reversado",
+    "estimada": "Estimada",
+    "generada": "Generada",
+    "aprobada": "Aprobada",
+    "pagada": "Pagada",
+    "anulada": "Anulada",
+    "contactado": "Contactado",
+    "renovado": "Renovado",
+    "no_renueva": "No renueva",
+    "vacaciones": "Vacaciones",
+    "permiso": "Permiso",
+    "ausencia": "Ausencia",
+    "entrada": "Entrada",
+    "break_inicio": "Inicio de pausa",
+    "break_fin": "Fin de pausa",
+    "almuerzo_inicio": "Inicio de almuerzo",
+    "almuerzo_fin": "Fin de almuerzo",
+    "salida": "Salida",
+    "baja": "Baja",
+    "media": "Media",
+    "normal": "Normal",
+    "alta": "Alta",
+    "urgente": "Urgente",
+}
 
 
 def money(value):
@@ -20,11 +117,27 @@ def money(value):
         return "0.00"
 
 
+def human_label(value):
+    if value is None or value == "":
+        return "—"
+    raw = str(value).strip()
+    key = raw.lower()
+    if key in HUMAN_LABELS:
+        return HUMAN_LABELS[key]
+    text = raw.replace("_", " ").strip()
+    return text[:1].upper() + text[1:] if text else "—"
+
+
 def audit(action, entity, entity_id=None, before=None, after=None, reason=None):
     try:
         user_id = current_user.id if current_user.is_authenticated else None
     except Exception:
         user_id = None
+
+    ip_address = None
+    if has_request_context():
+        ip_address = request.headers.get("X-Forwarded-For", request.remote_addr)
+
     log = AuditLog(
         user_id=user_id,
         action=action,
@@ -33,7 +146,7 @@ def audit(action, entity, entity_id=None, before=None, after=None, reason=None):
         before_json=json.dumps(before, default=str, ensure_ascii=False) if before is not None else None,
         after_json=json.dumps(after, default=str, ensure_ascii=False) if after is not None else None,
         reason=reason,
-        ip_address=request.headers.get("X-Forwarded-For", request.remote_addr) if request else None,
+        ip_address=ip_address,
     )
     db.session.add(log)
 
@@ -68,7 +181,7 @@ def send_email(to_email, subject, body):
     msg["Subject"] = subject
     msg.set_content(body)
     port = current_app.config.get("SMTP_PORT", 587)
-    with smtplib.SMTP(host, port) as server:
+    with smtplib.SMTP(host, port, timeout=20) as server:
         if current_app.config.get("SMTP_USE_TLS"):
             server.starttls()
         user = current_app.config.get("SMTP_USER")

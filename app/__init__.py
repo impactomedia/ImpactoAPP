@@ -1,10 +1,12 @@
 from pathlib import Path
-from flask import Flask, redirect, url_for
+
+from flask import Flask, redirect, render_template, url_for
 from flask_login import current_user
 
 from config import Config
+from app.access_control import init_access_control
 from app.extensions import db, migrate, login_manager, csrf
-from app.helpers import money
+from app.helpers import human_label, money
 
 
 def create_app(config_object=Config):
@@ -40,19 +42,49 @@ def create_app(config_object=Config):
     from app.blueprints.settings import bp as settings_bp
     from app.blueprints.reports import bp as reports_bp
 
-    for blueprint in [auth_bp, dashboard_bp, crm_bp, clients_bp, sales_bp, operations_bp, printing_bp, finance_bp, hr_bp, support_bp, settings_bp, reports_bp]:
+    for blueprint in [
+        auth_bp,
+        dashboard_bp,
+        crm_bp,
+        clients_bp,
+        sales_bp,
+        operations_bp,
+        printing_bp,
+        finance_bp,
+        hr_bp,
+        support_bp,
+        settings_bp,
+        reports_bp,
+    ]:
         app.register_blueprint(blueprint)
+
+    init_access_control(app)
 
     @app.template_filter("money")
     def money_filter(value):
         return money(value)
+
+    @app.template_filter("label")
+    def label_filter(value):
+        return human_label(value)
 
     @app.context_processor
     def inject_globals():
         unread = 0
         if current_user.is_authenticated:
             unread = sum(1 for n in current_user.notifications if not n.read)
-        return {"company_name": app.config.get("COMPANY_NAME"), "unread_notifications": unread}
+        return {
+            "company_name": app.config.get("COMPANY_NAME"),
+            "unread_notifications": unread,
+        }
+
+    @app.errorhandler(403)
+    def forbidden(_error):
+        return render_template("errors/403.html"), 403
+
+    @app.errorhandler(404)
+    def not_found(_error):
+        return render_template("errors/404.html"), 404
 
     @app.route("/")
     def index():
