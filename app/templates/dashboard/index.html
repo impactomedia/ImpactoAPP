@@ -7,11 +7,17 @@
     <h1>Resumen de operación</h1>
     <p>Información disponible según tu rol y permisos.</p>
   </div>
+  {% if current_user.has_permission('clients.view') %}
+  <div>
+    <a class="btn btn-brand" href="{{ url_for('clients_v3.mine') }}">Mis clientes</a>
+  </div>
+  {% endif %}
 </div>
 
 {% if total_clients is not none or followups is not none or active_projects is not none or pending_tasks is not none %}
 <div class="metric-grid mb-4">
   {% if total_clients is not none %}<div class="metric-card"><span>Clientes</span><strong>{{ total_clients }}</strong><small>Convertidos</small></div>{% endif %}
+  {% if my_clients_count is not none %}<div class="metric-card"><span>Mis clientes</span><strong>{{ my_clients_count }}</strong><small>Cartera/equipo asignado</small></div>{% endif %}
   {% if followups is not none %}<div class="metric-card"><span>Seguimientos</span><strong>{{ followups }}</strong><small>En CRM</small></div>{% endif %}
   {% if active_projects is not none %}<div class="metric-card"><span>Proyectos activos</span><strong>{{ active_projects }}</strong><small>En ejecución</small></div>{% endif %}
   {% if pending_tasks is not none %}<div class="metric-card"><span>Tareas pendientes</span><strong>{{ pending_tasks }}</strong><small>Por completar</small></div>{% endif %}
@@ -24,7 +30,9 @@
     <section class="panel-card">
       <div class="panel-header">
         <div><h2>Registros recientes</h2><p>Últimos registros a los que tienes acceso.</p></div>
-        {% if current_user.has_permission('clients.view') %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.index') }}">Ver clientes</a>{% endif %}
+        <div class="d-flex gap-2">
+          {% if current_user.has_permission('clients.view') %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients_v3.mine') }}">Mis clientes</a><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.index') }}">Ver todos</a>{% endif %}
+        </div>
       </div>
       <div class="table-responsive">
         <table class="table modern-table">

@@ -161,3 +161,42 @@ class ClientDocumentMeta(db.Model, TimestampMixin):
             cascade="all, delete-orphan",
         ),
     )
+
+
+class ClientTeamAssignment(db.Model, TimestampMixin):
+    """Historial de responsables operativos por cliente, servicio y proyecto."""
+
+    __tablename__ = "client_team_assignments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
+    collaborator_id = db.Column(db.Integer, db.ForeignKey("collaborators.id"), nullable=False, index=True)
+    contract_id = db.Column(db.Integer, db.ForeignKey("client_contracts.id"), index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), index=True)
+
+    role_in_client = db.Column(db.String(120), nullable=False)
+    service_label = db.Column(db.String(180))
+    starts_on = db.Column(db.Date, nullable=False)
+    ends_on = db.Column(db.Date)
+    status = db.Column(db.String(30), nullable=False, default="activa", index=True)
+    primary = db.Column(db.Boolean, default=False, nullable=False)
+    notes = db.Column(db.Text)
+
+    assigned_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    ended_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    end_reason = db.Column(db.String(255))
+    legacy_assignment_id = db.Column(db.Integer, index=True)
+
+    client = db.relationship(
+        "Client",
+        backref=db.backref(
+            "team_assignments_v3",
+            cascade="all, delete-orphan",
+            order_by="ClientTeamAssignment.starts_on.desc()",
+        ),
+    )
+    collaborator = db.relationship("Collaborator", foreign_keys=[collaborator_id], backref="client_team_assignments_v3")
+    contract = db.relationship("ClientContract", backref="team_assignments_v3")
+    project = db.relationship("Project", backref="team_assignments_v3")
+    assigned_by = db.relationship("User", foreign_keys=[assigned_by_id])
+    ended_by = db.relationship("User", foreign_keys=[ended_by_id])

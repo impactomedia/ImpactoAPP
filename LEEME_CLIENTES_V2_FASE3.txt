@@ -1,0 +1,22 @@
+IMPACTO APP — CLIENTES V2 FASE 3 · v1.6.0
+
+INSTALACIÓN
+
+1. En Railway > Settings > Deploy > Pre-Deploy Command colocar temporalmente:
+
+   python -m scripts.upgrade_clients_v2_phase3
+
+2. Copiar todos los archivos de este paquete sobre la raíz de ImpactoAPP.
+3. Reemplazar los archivos existentes.
+4. Subir a GitHub / main.
+5. Ejecutar Deploy Latest Commit en Railway si no inicia automáticamente.
+6. El Pre-Deploy debe mostrar algo similar a:
+
+   Clientes V2 Fase 3 listo: tabla de equipo verificada y X asignación(es) histórica(s) migrada(s).
+
+7. Revisar GitHub Actions.
+8. Cuando el deployment y las pruebas estén correctos, quitar el Pre-Deploy Command.
+
+NO modificar Start Command.
+NO requiere borrar datos.
+NO se almacenan contraseñas de clientes.

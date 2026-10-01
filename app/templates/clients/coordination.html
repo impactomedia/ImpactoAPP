@@ -1,0 +1,187 @@
+{% extends "app_base.html" %}
+{% block title %}Coordinación · {{ client.business_name }} | Impacto Manager{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Clientes V2 · Centro de coordinación</span>
+    <h1>{{ client.business_name }}</h1>
+    <p>{{ client.code or 'Sin código' }} · {{ client.contact_name }} · Responsable comercial: {{ client.owner.user.name if client.owner and client.owner.user else 'Sin asignar' }}</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-light border" href="{{ url_for('clients_v3.mine') }}">Mis clientes</a>
+    {% if can_open_full_detail %}<a class="btn btn-brand" href="{{ url_for('clients.detail', client_id=client.id) }}">Ficha completa</a>{% endif %}
+  </div>
+</div>
+
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Equipo activo</span><strong>{{ active_assignments|length }}</strong><small>Asignaciones vigentes</small></div>
+  <div class="metric-card"><span>Alertas</span><strong>{{ alerts|length }}</strong><small>Próximos 60 días + vencidos</small></div>
+  <div class="metric-card"><span>Servicios activos</span><strong>{{ client.contracts|selectattr('status','equalto','activo')|list|length }}</strong><small>Planes y servicios vigentes</small></div>
+  <div class="metric-card"><span>Eventos</span><strong>{{ timeline|length }}</strong><small>Línea de tiempo consolidada</small></div>
+</div>
+
+<section class="panel-card mb-4 p-0 overflow-hidden">
+  <div class="px-3 pt-3">
+    <ul class="nav nav-tabs flex-nowrap overflow-auto" role="tablist">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#equipo" type="button">Equipo</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#alertas" type="button">Alertas y renovaciones</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#timeline" type="button">Línea de tiempo</button></li>
+    </ul>
+  </div>
+
+  <div class="tab-content p-3 p-lg-4">
+    <div class="tab-pane fade show active" id="equipo">
+      <div class="row g-4">
+        <div class="col-xl-8">
+          <div class="panel-header"><div><h2>Equipo operativo activo</h2><p>Cada asignación conserva rol, servicio, proyecto y fechas de responsabilidad.</p></div></div>
+          <div class="table-responsive">
+            <table class="table modern-table align-middle">
+              <thead><tr><th>Colaborador</th><th>Rol</th><th>Servicio</th><th>Proyecto</th><th>Inicio</th><th></th></tr></thead>
+              <tbody>
+              {% for a in active_assignments %}
+                <tr>
+                  <td><strong>{{ a.collaborator.user.name if a.collaborator and a.collaborator.user else '—' }}</strong><small class="d-block text-secondary">{{ a.collaborator.job_title if a.collaborator else '' }}</small>{% if a.primary %}<span class="badge-soft success">Principal</span>{% endif %}</td>
+                  <td>{{ a.role_in_client }}</td>
+                  <td>{{ a.service_label or (a.contract.product.name if a.contract and a.contract.product else 'General') }}</td>
+                  <td>{{ a.project.name if a.project else '—' }}</td>
+                  <td>{{ a.starts_on }}</td>
+                  <td>
+                    {% if can_assign %}
+                    <div class="d-flex flex-wrap gap-1">
+                      <form method="post" action="{{ url_for('clients_v3.team_assignment_action', client_id=client.id, assignment_id=a.id, action='suspend') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-sm btn-outline-warning">Suspender</button>
+                      </form>
+                      <button class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#end-{{ a.id }}">Finalizar</button>
+                    </div>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% if can_assign %}
+                <tr class="collapse" id="end-{{ a.id }}">
+                  <td colspan="6">
+                    <form method="post" action="{{ url_for('clients_v3.team_assignment_action', client_id=client.id, assignment_id=a.id, action='end') }}" class="row g-2">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <div class="col-md-3"><input type="date" name="ends_on" class="form-control"></div>
+                      <div class="col-md-7"><input name="end_reason" class="form-control" placeholder="Motivo de finalización"></div>
+                      <div class="col-md-2"><button class="btn btn-danger w-100">Finalizar</button></div>
+                    </form>
+                  </td>
+                </tr>
+                {% endif %}
+              {% else %}<tr><td colspan="6" class="text-secondary text-center py-4">Sin equipo operativo activo.</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="h6 mt-4">Historial de asignaciones</h3>
+          <div class="table-responsive">
+            <table class="table modern-table align-middle">
+              <thead><tr><th>Colaborador</th><th>Función</th><th>Período</th><th>Estado</th><th>Motivo</th><th></th></tr></thead>
+              <tbody>
+              {% for a in assignment_history %}
+                <tr>
+                  <td>{{ a.collaborator.user.name if a.collaborator and a.collaborator.user else '—' }}</td>
+                  <td>{{ a.role_in_client }}{% if a.service_label %}<small class="d-block text-secondary">{{ a.service_label }}</small>{% endif %}</td>
+                  <td>{{ a.starts_on }} → {{ a.ends_on or '—' }}</td>
+                  <td><span class="badge-soft {{ 'warning' if a.status=='suspendida' else 'muted' }}">{{ a.status|label }}</span></td>
+                  <td>{{ a.end_reason or '—' }}</td>
+                  <td>
+                    {% if can_assign and a.status=='suspendida' %}
+                    <form method="post" action="{{ url_for('clients_v3.team_assignment_action', client_id=client.id, assignment_id=a.id, action='resume') }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <button class="btn btn-sm btn-outline-success">Reactivar</button>
+                    </form>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% else %}<tr><td colspan="6" class="text-secondary">Sin historial anterior.</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {% if can_assign %}
+        <div class="col-xl-4">
+          <section class="border rounded-4 p-3">
+            <h2 class="h5">Nueva asignación</h2>
+            <p class="text-secondary small">Asigna al colaborador a un servicio o proyecto específico y conserva el historial.</p>
+            <form method="post" action="{{ url_for('clients_v3.add_team_assignment', client_id=client.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <label class="form-label">Colaborador</label>
+              <select name="collaborator_id" class="form-select mb-2" required><option value="">Seleccionar</option>{% for c in collaborators %}<option value="{{ c.id }}">{{ c.user.name }} — {{ c.job_title }}</option>{% endfor %}</select>
+              <label class="form-label">Rol en el cliente</label>
+              <input name="role_in_client" class="form-control mb-2" required placeholder="Ej. Diseño, Website, SEO, Community Manager">
+              <label class="form-label">Servicio / descripción</label>
+              <input name="service_label" class="form-control mb-2" placeholder="Ej. Website, Google Business Profile">
+              <label class="form-label">Plan / contrato relacionado</label>
+              <select name="contract_id" class="form-select mb-2"><option value="">Sin contrato específico</option>{% for c in contracts %}<option value="{{ c.id }}">{{ c.product.name if c.product else 'Servicio' }} · {{ c.status|label }}</option>{% endfor %}</select>
+              <label class="form-label">Proyecto relacionado</label>
+              <select name="project_id" class="form-select mb-2"><option value="">Sin proyecto específico</option>{% for p in projects %}<option value="{{ p.id }}">{{ p.name }} · {{ p.status|label }}</option>{% endfor %}</select>
+              <label class="form-label">Fecha de inicio</label>
+              <input type="date" name="starts_on" class="form-control mb-2">
+              <label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="primary"> Responsable principal de esta atención</label>
+              <label class="form-label">Notas</label>
+              <textarea name="notes" class="form-control mb-3" rows="3"></textarea>
+              <button class="btn btn-brand w-100">Asignar colaborador</button>
+            </form>
+          </section>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="alertas">
+      <div class="row g-4">
+        <div class="col-xl-7">
+          <div class="panel-header"><div><h2>Alertas del cliente</h2><p>Renovaciones, vencimientos, promesas, tareas y tickets según tus permisos.</p></div></div>
+          {% for a in alerts %}
+          <div class="border rounded-3 p-3 mb-2 {% if a.severity=='danger' %}overdue{% endif %}">
+            <div class="d-flex flex-wrap justify-content-between gap-2">
+              <div><span class="badge-soft {{ a.severity }}">{{ a.kind }}</span> <strong>{{ a.title }}</strong></div>
+              <div class="text-end"><strong>{{ a.due_date }}</strong><small class="d-block text-secondary">{{ a.timing }}</small></div>
+            </div>
+            {% if a.detail %}<small class="d-block text-secondary mt-2">{{ a.detail|label if a.kind in ['Servicio','Renovación','Tarea','Ticket'] else a.detail }}</small>{% endif %}
+          </div>
+          {% else %}<div class="alert alert-success">No hay alertas pendientes dentro del horizonte de 60 días.</div>{% endfor %}
+        </div>
+        <div class="col-xl-5">
+          <section class="border rounded-4 p-3 mb-3">
+            <h2 class="h5">Renovaciones registradas</h2>
+            {% for r in client.renewals|sort(attribute='due_date') %}<div class="d-flex justify-content-between border-bottom py-2"><div><strong>{{ r.renewal_type }}</strong><small class="d-block text-secondary">{{ r.status|label }}</small></div><span>{{ r.due_date }}</span></div>{% else %}<p class="text-secondary mb-0">Sin renovaciones registradas.</p>{% endfor %}
+          </section>
+          <section class="border rounded-4 p-3">
+            <h2 class="h5">Dominio y hosting</h2>
+            {% if client.operational_profile %}
+              <p><strong>Dominio:</strong> {{ client.operational_profile.domain_renews_on or 'Sin fecha' }}</p>
+              <p><strong>Hosting:</strong> {{ client.operational_profile.hosting_renews_on or 'Sin fecha' }}</p>
+              <p class="text-secondary mb-0">{{ client.operational_profile.domain_notes or 'Sin notas adicionales.' }}</p>
+            {% else %}<p class="text-secondary mb-0">Sin perfil operativo.</p>{% endif %}
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="timeline">
+      <div class="panel-header"><div><h2>Línea de tiempo unificada</h2><p>Interacciones, servicios, equipo, proyectos, tareas, tickets, archivos, renovaciones y eventos financieros autorizados.</p></div></div>
+      <div class="timeline">
+        {% for e in timeline %}
+        <div class="timeline-item">
+          <div class="d-flex justify-content-between gap-2"><strong>{{ e.kind }} — {{ e.title }}</strong><small class="text-secondary">{{ e.when.strftime('%d/%m/%Y %H:%M') }}</small></div>
+          {% if e.body %}<p class="mb-0 mt-2">{{ e.body }}</p>{% endif %}
+        </div>
+        {% else %}<p class="text-secondary">Todavía no hay eventos para mostrar.</p>{% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const hash = window.location.hash;
+  if (!hash) return;
+  const trigger = document.querySelector(`[data-bs-target="${hash}"]`);
+  if (trigger && window.bootstrap) bootstrap.Tab.getOrCreateInstance(trigger).show();
+});
+</script>
+{% endblock %}

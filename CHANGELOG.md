@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.0 — Clientes V2 · Fase 3
+
+- Nuevo Centro de coordinación por cliente con equipo operativo, alertas/renovaciones y línea de tiempo unificada.
+- Nueva sección “Mis clientes” según cartera comercial y asignaciones operativas activas.
+- Historial de equipo por cliente/servicio/proyecto con fecha de inicio, suspensión, reactivación, finalización y motivo.
+- Las asignaciones anteriores de `ClientCollaborator` se migran a historial V3 y permanecen sincronizadas para conservar compatibilidad con la pestaña Equipo existente.
+- Supervisores solo pueden asignar colaboradores dentro de su propio equipo; asesores no reciben permisos nuevos para modificar equipo.
+- Producción ve en “Mis clientes” únicamente clientes donde tenga asignación operativa activa.
+- Alertas consolidadas para renovaciones, vencimientos de servicios, dominio, hosting, cuotas/promesas de pago, tareas y tickets, respetando permisos.
+- Recordatorios de renovación se extienden al equipo operativo activo sin exponer información financiera.
+- Línea de tiempo unificada reúne interacciones, comentarios, servicios, equipo, cambios de responsable, proyectos, tareas, tickets, archivos y renovaciones; ventas/pagos/cobranza solo aparecen para perfiles con permiso financiero/comercial.
+- Dashboard actualizado con acceso rápido y contador de “Mis clientes”.
+- Script idempotente `python -m scripts.upgrade_clients_v2_phase3`.
+- Nueva batería `tests/test_clients_v2_phase3.py`.
+
 ## 1.5.0 — Clientes V2 · Fase 2
 
 - Nuevo plan de cuotas por venta dentro de la ficha del cliente, con monto, vencimiento, saldo aplicado y estado automático.

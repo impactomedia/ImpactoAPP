@@ -1,0 +1,44 @@
+{% extends "app_base.html" %}
+{% block title %}Mis clientes | Impacto Manager{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Clientes V2 · Fase 3</span>
+    <h1>Mis clientes</h1>
+    <p>Clientes vinculados a tu cartera comercial o a tu equipo operativo activo.</p>
+  </div>
+  <div class="d-flex gap-2"><a class="btn btn-light border" href="{{ url_for('clients.index') }}">Todos los clientes</a></div>
+</div>
+
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Clientes visibles</span><strong>{{ clients|length }}</strong><small>Según tu rol y asignaciones</small></div>
+  <div class="metric-card"><span>Con alertas</span><strong>{{ alert_count_map.values()|select('gt', 0)|list|length }}</strong><small>Renovaciones, tareas o vencimientos</small></div>
+</div>
+
+<section class="panel-card">
+  <div class="panel-header"><div><h2>Cartera y equipo asignado</h2><p>Acceso rápido a la ficha y al centro de coordinación.</p></div></div>
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Cliente</th><th>Responsable comercial</th><th>Mi función / equipo</th><th>Servicios activos</th><th>Alertas</th><th></th></tr></thead>
+      <tbody>
+      {% for c in clients %}
+        <tr>
+          <td><strong>{{ c.business_name }}</strong><small class="d-block text-secondary">{{ c.code or 'Sin código' }} · {{ c.contact_name }}</small></td>
+          <td>{{ c.owner.user.name if c.owner and c.owner.user else 'Sin asignar' }}</td>
+          <td>
+            {% for a in assignment_map.get(c.id, []) %}
+              <span class="badge-soft info me-1 mb-1">{{ a.role_in_client }}{% if a.service_label %} · {{ a.service_label }}{% endif %}</span>
+            {% else %}
+              {% if c.owner and current_user.collaborator and c.owner.id == current_user.collaborator.id %}<span class="badge-soft success">Responsable comercial</span>{% else %}<span class="text-secondary">Supervisión / acceso administrativo</span>{% endif %}
+            {% endfor %}
+          </td>
+          <td>{{ c.contracts|selectattr('status','equalto','activo')|list|length }}</td>
+          <td>{% if alert_count_map.get(c.id, 0) %}<span class="badge-soft warning">{{ alert_count_map.get(c.id) }} pendiente(s)</span>{% else %}<span class="badge-soft success">Sin alertas</span>{% endif %}</td>
+          <td><div class="d-flex flex-wrap gap-1">{% if c.id in full_detail_ids %}<a class="btn btn-sm btn-light border" href="{{ url_for('clients.detail', client_id=c.id) }}">Ficha</a>{% endif %}<a class="btn btn-sm btn-brand" href="{{ url_for('clients_v3.coordination', client_id=c.id) }}">Coordinar</a></div></td>
+        </tr>
+      {% else %}<tr><td colspan="6" class="text-center text-secondary py-5">No tienes clientes asignados actualmente.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

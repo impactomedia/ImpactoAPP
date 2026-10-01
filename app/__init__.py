@@ -38,6 +38,7 @@ def create_app(config_object=Config):
     from app.blueprints.dashboard import bp as dashboard_bp
     from app.blueprints.crm import bp as crm_bp
     from app.blueprints.clients import bp as clients_bp
+    from app.blueprints.clients_v3 import bp as clients_v3_bp
     from app.blueprints.sales import bp as sales_bp
     from app.blueprints.operations import bp as operations_bp
     from app.blueprints.printing import bp as printing_bp
@@ -52,6 +53,7 @@ def create_app(config_object=Config):
         dashboard_bp,
         crm_bp,
         clients_bp,
+        clients_v3_bp,
         sales_bp,
         operations_bp,
         printing_bp,
@@ -67,9 +69,6 @@ def create_app(config_object=Config):
 
     @app.before_request
     def protect_uploaded_static_files():
-        # Los archivos de cliente se sirven únicamente mediante una ruta autorizada
-        # que valida acceso a la ficha. El resto de uploads heredados conserva su
-        # comportamiento actual para no romper comprobantes/diseños existentes.
         if request.endpoint == "static" and request.path.startswith("/static/uploads/client_"):
             abort(404)
         if (
@@ -82,8 +81,6 @@ def create_app(config_object=Config):
 
     @app.before_request
     def restrict_kanban_to_coordination_roles():
-        # El tablero Kanban es una vista de coordinación. Asesores, Producción,
-        # RR. HH. y Finanzas trabajan desde sus listas de tareas ya filtradas.
         if request.endpoint == "operations.task_kanban" and current_user.is_authenticated:
             role_name = current_user.role.name if current_user.role else ""
             if role_name not in {"superadmin", "admin", "manager", "supervisor"}:
