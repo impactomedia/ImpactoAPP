@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.2 — Cierre de auditoría automatizada
+
+- Las páginas 403 y 404 ya funcionan correctamente también para visitantes sin sesión iniciada.
+- Los archivos protegidos bajo `/static/uploads/` pueden devolver 404 sin provocar errores de plantilla.
+- El Kanban queda restringido a Superadministrador, Administración, Gerencia y Supervisor/Coordinación.
+- Asesores, Producción, RR. HH. y Finanzas continúan trabajando con las listas de tareas filtradas según su alcance.
+- Ajuste realizado a partir de la ejecución real de GitHub Actions: 41 pruebas ya pasaban antes de este cierre.
+
+## 1.3.1 — Corrección de CI
+
+- GitHub Actions ejecuta las pruebas con `python -m pytest -q`.
+- Se define `PYTHONPATH=.` para que el paquete `app` se importe correctamente.
+
 ## 1.3.0 — Auditoría integral y endurecimiento final
 
 - Seguridad de autenticación: redirecciones internas seguras, invalidación de tokens de recuperación y contraseña actual obligatoria para cambios desde el perfil.

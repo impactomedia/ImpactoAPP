@@ -1,9 +1,15 @@
-{% extends "app_base.html" %}
-{% block app_content %}
-<section class="panel-card text-center py-5">
-  <div class="display-5 mb-3"><i class="bi bi-shield-lock"></i></div>
-  <h1 class="h3">Acceso restringido</h1>
-  <p class="text-secondary">Tu usuario no tiene permiso para realizar esta acción o abrir este módulo.</p>
-  <a class="btn btn-brand" href="{{ url_for('dashboard.index') }}">Volver al inicio</a>
-</section>
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-5">
+  <section class="panel-card text-center py-5 mx-auto" style="max-width:720px">
+    <div class="display-5 mb-3"><i class="bi bi-shield-lock"></i></div>
+    <h1 class="h3">Acceso restringido</h1>
+    <p class="text-secondary">Tu usuario no tiene permiso para realizar esta acción o abrir este módulo.</p>
+    {% if current_user.is_authenticated %}
+      <a class="btn btn-brand" href="{{ url_for('dashboard.index') }}">Volver al inicio</a>
+    {% else %}
+      <a class="btn btn-brand" href="{{ url_for('auth.login') }}">Iniciar sesión</a>
+    {% endif %}
+  </section>
+</div>
 {% endblock %}

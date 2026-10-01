@@ -77,6 +77,16 @@ def create_app(config_object=Config):
             abort(404)
         return None
 
+    @app.before_request
+    def restrict_kanban_to_coordination_roles():
+        # El tablero Kanban es una vista de coordinación. Asesores, Producción,
+        # RR. HH. y Finanzas trabajan desde sus listas de tareas ya filtradas.
+        if request.endpoint == "operations.task_kanban" and current_user.is_authenticated:
+            role_name = current_user.role.name if current_user.role else ""
+            if role_name not in {"superadmin", "admin", "manager", "supervisor"}:
+                abort(403)
+        return None
+
     @app.after_request
     def add_security_headers(response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
