@@ -1,9 +1,10 @@
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import or_
+from werkzeug.exceptions import HTTPException
 
 from app.extensions import db
 from app.helpers import audit, next_code
@@ -17,12 +18,20 @@ from app.models import (
     ProductService,
     Quote,
     Renewal,
+    Role,
     Sale,
     SaleItem,
+    User,
 )
+from app.client_v2_models import ClientInstallment
 from app.services import D, add_payment, create_sale_from_quote, generate_operational_work, recalc_sale
 
 bp = Blueprint("sales", __name__, url_prefix="/sales")
+
+COMMERCIAL_ROLE_NAMES = {"superadmin", "admin", "manager", "supervisor", "advisor"}
+PAYMENT_METHODS = {"transferencia", "efectivo", "Zelle", "ACH", "Wise", "tarjeta", "otro"}
+CURRENCIES = {"USD", "NIO"}
+MONEY = Decimal("0.01")
 
 
 def _role_name():
@@ -84,14 +93,27 @@ def _visible_renewals_query():
 
 
 def _allowed_advisors():
-    query = Collaborator.query.filter_by(status="activo")
+    """Solo colaboradores comerciales activos aparecen como asesores de venta."""
+    query = (
+        Collaborator.query
+        .join(User, Collaborator.user_id == User.id)
+        .join(Role, User.role_id == Role.id)
+        .filter(
+            Collaborator.status == "activo",
+            User.active.is_(True),
+            Role.active.is_(True),
+            Role.name.in_(COMMERCIAL_ROLE_NAMES),
+        )
+    )
+
     role = _role_name()
     collaborator = current_user.collaborator
     if role == "advisor" and collaborator:
         query = query.filter(Collaborator.id == collaborator.id)
     elif role == "supervisor" and collaborator:
         query = query.filter(Collaborator.id.in_(_team_ids()))
-    return query.order_by(Collaborator.id).all()
+
+    return query.order_by(User.name).all()
 
 
 def _parse_date(value):
@@ -101,6 +123,147 @@ def _parse_date(value):
         return date.fromisoformat(value)
     except (TypeError, ValueError):
         return None
+
+
+def _parse_money(value, label, *, allow_zero=True):
+    raw = str(value or "0").strip()
+    try:
+        amount = Decimal(raw).quantize(MONEY, rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError):
+        raise ValueError(f"{label} no es válido.")
+    if amount < 0 or (not allow_zero and amount <= 0):
+        raise ValueError(
+            f"{label} debe ser {'mayor que cero' if not allow_zero else 'cero o mayor'}."
+        )
+    return amount
+
+
+def _sale_form_context():
+    clients = _visible_clients_query().order_by(Client.business_name).all()
+    products = ProductService.query.filter_by(active=True).order_by(ProductService.name).all()
+    advisors = _allowed_advisors()
+    return {
+        "clients": clients,
+        "products": products,
+        "advisors": advisors,
+        "today": date.today(),
+    }
+
+
+def _render_sale_form():
+    return render_template("sales/form.html", **_sale_form_context())
+
+
+def _payment_plan_from_request(remaining_balance, sale_date):
+    """Valida y devuelve las cuotas del saldo posterior al pago inicial."""
+    remaining_balance = D(remaining_balance).quantize(MONEY)
+    if remaining_balance <= 0:
+        return []
+
+    mode = (request.form.get("payment_plan_mode") or "single").strip().lower()
+    if mode not in {"single", "custom"}:
+        mode = "single"
+
+    if mode == "single":
+        raw_due = (request.form.get("due_date") or "").strip()
+        due_date = _parse_date(raw_due)
+        if not due_date:
+            raise ValueError("Indica la fecha de vencimiento del saldo.")
+        if due_date < sale_date:
+            raise ValueError("El vencimiento del saldo no puede ser anterior a la fecha de venta.")
+        return [
+            {
+                "amount": remaining_balance,
+                "due_date": due_date,
+                "notes": "Saldo único",
+            }
+        ]
+
+    amounts = request.form.getlist("installment_amount[]")
+    dates = request.form.getlist("installment_due_date[]")
+    notes = request.form.getlist("installment_notes[]")
+    count = max(len(amounts), len(dates), len(notes))
+    rows = []
+
+    for index in range(count):
+        raw_amount = (amounts[index] if index < len(amounts) else "").strip()
+        raw_date = (dates[index] if index < len(dates) else "").strip()
+        note = (notes[index] if index < len(notes) else "").strip()
+
+        if not raw_amount and not raw_date and not note:
+            continue
+        if not raw_amount or not raw_date:
+            raise ValueError("Cada cuota debe tener monto y fecha de vencimiento.")
+
+        amount = _parse_money(raw_amount, f"Monto de cuota #{len(rows) + 1}", allow_zero=False)
+        due_date = _parse_date(raw_date)
+        if not due_date:
+            raise ValueError(f"La fecha de la cuota #{len(rows) + 1} no es válida.")
+        if due_date < sale_date:
+            raise ValueError(
+                f"La fecha de la cuota #{len(rows) + 1} no puede ser anterior a la venta."
+            )
+
+        rows.append(
+            {
+                "amount": amount,
+                "due_date": due_date,
+                "notes": note or None,
+            }
+        )
+
+    if not rows:
+        raise ValueError("Agrega al menos una cuota para el saldo pendiente.")
+
+    scheduled = sum((D(row["amount"]) for row in rows), Decimal("0")).quantize(MONEY)
+    if scheduled != remaining_balance:
+        raise ValueError(
+            "La suma de las cuotas debe ser igual al saldo pendiente "
+            f"({remaining_balance:,.2f}). Actualmente suma {scheduled:,.2f}."
+        )
+
+    return sorted(rows, key=lambda row: row["due_date"])
+
+
+def _create_installments(sale, rows, baseline_paid):
+    if not rows:
+        return []
+
+    created = []
+    baseline = D(baseline_paid).quantize(MONEY)
+    for sequence, source in enumerate(rows, start=1):
+        row = ClientInstallment(
+            client_id=sale.client_id,
+            sale_id=sale.id,
+            sequence=sequence,
+            amount=D(source["amount"]).quantize(MONEY),
+            paid_amount=Decimal("0"),
+            base_paid_amount=baseline,
+            due_date=source["due_date"],
+            status="vencida" if source["due_date"] < date.today() else "pendiente",
+            notes=source.get("notes"),
+            created_by_id=current_user.id,
+        )
+        db.session.add(row)
+        created.append(row)
+    db.session.flush()
+    return created
+
+
+def _refresh_receivable_due_date(sale):
+    """Hace que la cuenta por cobrar muestre la próxima cuota pendiente."""
+    if not sale.receivable:
+        return
+
+    unpaid = [
+        row
+        for row in sale.installments
+        if row.status != "pagada" and D(row.amount) > D(row.paid_amount)
+    ]
+    if unpaid:
+        sale.receivable.due_date = min(row.due_date for row in unpaid if row.due_date)
+    elif D(sale.balance) <= 0:
+        sale.receivable.due_date = None
 
 
 @bp.route("/")
@@ -113,13 +276,23 @@ def index():
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
 def new_sale():
-    clients = _visible_clients_query().order_by(Client.business_name).all()
-    products = ProductService.query.filter_by(active=True).order_by(ProductService.name).all()
-    advisors = _allowed_advisors()
+    context = _sale_form_context()
+    clients = context["clients"]
+    products = context["products"]
+    advisors = context["advisors"]
+
     visible_client_ids = {client.id for client in clients}
+    active_product_ids = {product.id for product in products}
     allowed_advisor_ids = {advisor.id for advisor in advisors}
 
-    if request.method == "POST":
+    if request.method == "GET":
+        return render_template("sales/form.html", **context)
+
+    if not clients:
+        flash("No hay clientes disponibles para registrar una venta.", "danger")
+        return render_template("sales/form.html", **context)
+
+    try:
         client_id = request.form.get("client_id", type=int)
         if not client_id or client_id not in visible_client_ids:
             abort(403)
@@ -130,19 +303,26 @@ def new_sale():
 
         requested_advisor_id = request.form.get("advisor_id", type=int)
         advisor_id = requested_advisor_id or client.owner_id
+
         if role == "advisor" and collaborator:
             advisor_id = collaborator.id
-        elif role == "supervisor":
+        elif role == "supervisor" and collaborator:
             if advisor_id not in allowed_advisor_ids:
-                advisor_id = client.owner_id if client.owner_id in allowed_advisor_ids else current_user.collaborator.id
+                advisor_id = (
+                    client.owner_id
+                    if client.owner_id in allowed_advisor_ids
+                    else collaborator.id
+                )
         elif advisor_id and advisor_id not in allowed_advisor_ids:
-            flash("Selecciona un asesor activo válido.", "danger")
-            return render_template("sales/form.html", clients=clients, products=products, advisors=advisors)
+            raise ValueError("Selecciona un asesor comercial activo válido.")
 
-        sale_date = _parse_date(request.form.get("sale_date")) or date.today()
-        due_date = _parse_date(request.form.get("due_date"))
+        sale_date_raw = (request.form.get("sale_date") or "").strip()
+        sale_date = _parse_date(sale_date_raw) if sale_date_raw else date.today()
+        if sale_date_raw and not sale_date:
+            raise ValueError("La fecha de venta no es válida.")
+
         currency = request.form.get("currency", "USD")
-        if currency not in {"USD", "NIO"}:
+        if currency not in CURRENCIES:
             currency = "USD"
 
         sale = Sale(
@@ -152,7 +332,7 @@ def new_sale():
             sale_date=sale_date,
             status="confirmada",
             currency=currency,
-            notes=request.form.get("notes"),
+            notes=(request.form.get("notes") or "").strip() or None,
         )
         db.session.add(sale)
         db.session.flush()
@@ -160,25 +340,36 @@ def new_sale():
         product_ids = request.form.getlist("product_id[]")
         descriptions = request.form.getlist("description[]")
         quantities = request.form.getlist("quantity[]")
-        prices = request.form.getlist("unit_price[]")
+        list_prices = request.form.getlist("unit_price[]")
+        discounts = request.form.getlist("discount[]")
         valid_items = 0
 
         for index, description in enumerate(descriptions):
             description = (description or "").strip()
             if not description:
                 continue
-            try:
-                quantity = Decimal(quantities[index] or "1")
-                price = Decimal(prices[index] or "0")
-            except (InvalidOperation, IndexError, ValueError):
-                db.session.rollback()
-                flash("Revisa las cantidades y precios de la venta.", "danger")
-                return render_template("sales/form.html", clients=clients, products=products, advisors=advisors)
 
-            if quantity <= 0 or price < 0:
-                db.session.rollback()
-                flash("La cantidad debe ser mayor que cero y el precio no puede ser negativo.", "danger")
-                return render_template("sales/form.html", clients=clients, products=products, advisors=advisors)
+            try:
+                quantity = Decimal(
+                    quantities[index] if index < len(quantities) and quantities[index] else "1"
+                )
+                list_price = Decimal(
+                    list_prices[index] if index < len(list_prices) and list_prices[index] else "0"
+                )
+                discount = Decimal(
+                    discounts[index] if index < len(discounts) and discounts[index] else "0"
+                )
+            except (InvalidOperation, ValueError):
+                raise ValueError("Revisa las cantidades, precios y descuentos de la venta.")
+
+            if quantity <= 0:
+                raise ValueError("La cantidad debe ser mayor que cero.")
+            if list_price < 0:
+                raise ValueError("El precio no puede ser negativo.")
+            if discount < 0:
+                raise ValueError("El descuento no puede ser negativo.")
+            if discount > list_price:
+                raise ValueError("El descuento por unidad no puede superar el precio de lista.")
 
             product_id = None
             if index < len(product_ids) and product_ids[index]:
@@ -186,69 +377,128 @@ def new_sale():
                     product_id = int(product_ids[index])
                 except ValueError:
                     product_id = None
+                if product_id not in active_product_ids:
+                    raise ValueError("Uno de los productos seleccionados ya no está disponible.")
 
+            unit_price = list_price - discount
             db.session.add(
                 SaleItem(
                     sale_id=sale.id,
                     product_id=product_id,
                     description=description,
                     quantity=quantity,
-                    list_price=price,
-                    discount=0,
-                    unit_price=price,
-                    total=quantity * price,
+                    list_price=list_price,
+                    discount=discount,
+                    unit_price=unit_price,
+                    total=quantity * unit_price,
                 )
             )
             valid_items += 1
 
         if not valid_items:
-            db.session.rollback()
-            flash("Agrega al menos un ítem válido a la venta.", "danger")
-            return render_template("sales/form.html", clients=clients, products=products, advisors=advisors)
+            raise ValueError("Agrega al menos un ítem válido a la venta.")
 
         db.session.flush()
         recalc_sale(sale)
         if D(sale.total) <= 0:
-            db.session.rollback()
-            flash("El total de la venta debe ser mayor que cero.", "danger")
-            return render_template("sales/form.html", clients=clients, products=products, advisors=advisors)
+            raise ValueError("El total de la venta debe ser mayor que cero.")
+
+        initial_payment = _parse_money(
+            request.form.get("initial_payment"),
+            "El pago inicial",
+            allow_zero=True,
+        )
+        if initial_payment > D(sale.total):
+            raise ValueError("El pago inicial no puede superar el total de la venta.")
+
+        initial_date_raw = (request.form.get("initial_payment_date") or "").strip()
+        initial_payment_date = (
+            _parse_date(initial_date_raw)
+            if initial_date_raw
+            else sale_date
+        )
+        if initial_date_raw and not initial_payment_date:
+            raise ValueError("La fecha del pago inicial no es válida.")
+
+        payment_method = request.form.get("payment_method", "transferencia")
+        if payment_method not in PAYMENT_METHODS:
+            payment_method = "otro"
+
+        remaining_after_initial = (D(sale.total) - initial_payment).quantize(MONEY)
+        installment_rows = _payment_plan_from_request(
+            remaining_after_initial,
+            sale_date,
+        )
+        first_due_date = installment_rows[0]["due_date"] if installment_rows else None
 
         receivable = AccountReceivable(
             client_id=client.id,
             sale_id=sale.id,
             total_amount=sale.total,
             paid_amount=0,
-            due_date=due_date,
+            due_date=first_due_date,
             status="al_dia",
+            notes="Plan de pago generado al crear la venta.",
         )
         db.session.add(receivable)
+
         client.record_type = "cliente"
         client.pipeline_stage = "venta_cerrada"
         client.client_status = "activo"
         db.session.flush()
 
-        try:
-            initial_payment = D(request.form.get("initial_payment"))
-            if initial_payment > 0:
-                add_payment(
-                    sale,
-                    initial_payment,
-                    request.form.get("payment_method", "transferencia"),
-                    registered_by_id=current_user.id,
-                )
-            generate_operational_work(sale)
-            recalc_sale(sale)
-        except (ValueError, InvalidOperation) as exc:
-            db.session.rollback()
-            flash(str(exc), "danger")
-            return render_template("sales/form.html", clients=clients, products=products, advisors=advisors)
+        _create_installments(
+            sale,
+            installment_rows,
+            baseline_paid=initial_payment,
+        )
 
-        audit("crear_venta", "Sale", sale.id, after={"sale_no": sale.sale_no, "total": str(sale.total)})
+        if initial_payment > 0:
+            add_payment(
+                sale,
+                initial_payment,
+                payment_method,
+                effective_date=initial_payment_date,
+                reference=(request.form.get("initial_payment_reference") or "").strip() or None,
+                notes="Pago inicial registrado con la venta.",
+                registered_by_id=current_user.id,
+            )
+
+        generate_operational_work(sale)
+        recalc_sale(sale)
+        _refresh_receivable_due_date(sale)
+
+        audit(
+            "crear_venta",
+            "Sale",
+            sale.id,
+            after={
+                "sale_no": sale.sale_no,
+                "total": str(sale.total),
+                "initial_payment": str(initial_payment),
+                "installments": len(installment_rows),
+            },
+        )
         db.session.commit()
-        flash("Venta registrada y flujo operativo generado.", "success")
+        flash("Venta registrada, plan de pago creado y flujo operativo generado.", "success")
         return redirect(url_for("sales.detail", sale_id=sale.id))
 
-    return render_template("sales/form.html", clients=clients, products=products, advisors=advisors)
+    except (ValueError, InvalidOperation) as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+        return _render_sale_form()
+    except HTTPException:
+        db.session.rollback()
+        raise
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Error al crear una venta")
+        flash(
+            "No se pudo registrar la venta. No se guardaron cambios parciales. "
+            "Revisa los datos e inténtalo nuevamente.",
+            "danger",
+        )
+        return _render_sale_form()
 
 
 @bp.route("/from-quote/<int:quote_id>", methods=["POST"])
@@ -263,6 +513,7 @@ def from_quote(quote_id):
             due_date=_parse_date(request.form.get("due_date")),
             user_id=current_user.id,
         )
+        _refresh_receivable_due_date(sale)
         db.session.commit()
         flash("Cotización convertida en venta.", "success")
         return redirect(url_for("sales.detail", sale_id=sale.id))
@@ -294,13 +545,15 @@ def payment(sale_id):
             notes=request.form.get("notes"),
             registered_by_id=current_user.id,
         )
+        _refresh_receivable_due_date(sale)
         db.session.commit()
-        flash("Pago registrado. Saldo y comisión actualizados.", "success")
+        flash("Pago registrado. Saldo, cuotas y comisión actualizados.", "success")
     except (ValueError, InvalidOperation) as exc:
         db.session.rollback()
         flash(str(exc), "danger")
     except Exception:
         db.session.rollback()
+        current_app.logger.exception("Error registrando pago de venta %s", sale_id)
         flash("No se pudo registrar el pago. Revisa los datos e inténtalo nuevamente.", "danger")
     return redirect(url_for("sales.detail", sale_id=sale.id))
 
@@ -333,7 +586,12 @@ def deduction(sale_id):
         db.session.add(row)
         db.session.flush()
         recalc_sale(sale)
-        audit("registrar_deduccion", "Sale", sale.id, after={"concept": row.concept, "amount": str(row.amount)})
+        audit(
+            "registrar_deduccion",
+            "Sale",
+            sale.id,
+            after={"concept": row.concept, "amount": str(row.amount)},
+        )
         db.session.commit()
         flash("Deducción registrada y comisión recalculada.", "success")
     return redirect(url_for("sales.detail", sale_id=sale.id))
@@ -370,6 +628,7 @@ def reverse_payment(payment_id):
         income.status = "reversado"
 
     recalc_sale(sale)
+    _refresh_receivable_due_date(sale)
     audit("reversar_pago", "Payment", payment_row.id, reason=request.form.get("reason"))
     db.session.commit()
     flash("Pago e ingreso asociado reversados con trazabilidad.", "warning")

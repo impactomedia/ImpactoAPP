@@ -1,0 +1,28 @@
+IMPACTO APP — SALES V2 · v1.8.0
+
+INSTALACIÓN
+
+1. Descomprime el ZIP.
+2. Copia TODO sobre la raíz de ImpactoAPP.
+3. Reemplaza los archivos existentes.
+4. Sube a GitHub / main.
+5. Espera GitHub Actions.
+6. Si Railway no despliega automáticamente, usa Deploy Latest Commit.
+
+NO HAY MIGRACIÓN.
+NO AGREGUES PRE-DEPLOY.
+NO CAMBIES START COMMAND.
+
+DESPUÉS DEL DESPLIEGUE
+
+Prueba:
+https://app.impactomediaagency.com/sales/new
+
+Casos recomendados:
+1. Venta pagada completa.
+2. Venta con pago inicial + un vencimiento.
+3. Venta con pago inicial + varias cuotas.
+4. Producto/servicio del catálogo.
+5. Ítem personalizado.
+
+No continúes con nuevas fases hasta confirmar GitHub Actions en verde.

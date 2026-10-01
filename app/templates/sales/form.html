@@ -1,34 +1,324 @@
 {% extends "app_base.html" %}
+{% block title %}Nueva venta | Impacto Manager{% endblock %}
 {% block app_content %}
-<div class="page-heading"><div><span class="eyebrow">Ventas</span><h1>Nueva venta</h1><p>Registra una compra directa y genera el trabajo operativo.</p></div></div>
-<section class="panel-card form-card">
-  <form method="post">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="row g-3">
-      <div class="col-md-4"><label class="form-label">Cliente</label><select name="client_id" class="form-select" required>{% for c in clients %}<option value="{{ c.id }}">{{ c.business_name }}</option>{% endfor %}</select></div>
-      <div class="col-md-4"><label class="form-label">Asesor</label><select name="advisor_id" class="form-select"><option value="">Usar responsable del cliente</option>{% for c in advisors %}<option value="{{ c.id }}">{{ c.user.name }}</option>{% endfor %}</select></div>
-      <div class="col-md-2"><label class="form-label">Fecha</label><input type="date" name="sale_date" class="form-control"></div>
-      <div class="col-md-2"><label class="form-label">Moneda</label><select name="currency" class="form-select"><option value="USD">USD</option><option value="NIO">NIO</option></select></div>
-    </div>
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Ventas · Sales V2</span>
+    <h1>Nueva venta</h1>
+    <p>Registra la compra, pago inicial, plan de cuotas y genera el trabajo operativo.</p>
+  </div>
+  <div><a class="btn btn-light border" href="{{ url_for('sales.index') }}">Volver a ventas</a></div>
+</div>
 
-    <h2 class="h5 mt-4">Ítems</h2>
-    <div id="saleRows">
-      <div class="row g-2 mb-2">
-        <div class="col-md-3"><select name="product_id[]" class="form-select"><option value="">Personalizado</option>{% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
-        <div class="col-md-4"><input name="description[]" class="form-control" placeholder="Descripción" required></div>
-        <div class="col-md-2"><input name="quantity[]" type="number" step="0.01" min="0.01" value="1" class="form-control"></div>
-        <div class="col-md-3"><input name="unit_price[]" type="number" step="0.01" min="0" class="form-control" placeholder="Precio"></div>
+{% if not clients %}
+<div class="alert alert-warning">
+  <strong>No hay clientes disponibles para vender.</strong>
+  Primero debes crear o convertir un seguimiento en cliente.
+  {% if current_user.has_permission('clients.create') %}
+    <a class="alert-link" href="{{ url_for('clients.new_client') }}">Crear cliente</a>
+  {% endif %}
+</div>
+{% endif %}
+
+<section class="panel-card form-card">
+  <form method="post" id="saleForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <h2 class="h5">1. Cliente y responsable</h2>
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <label class="form-label">Cliente</label>
+        <select name="client_id" class="form-select" required {% if not clients %}disabled{% endif %}>
+          <option value="">Seleccionar cliente</option>
+          {% for c in clients %}
+            <option value="{{ c.id }}" {% if request.form.get('client_id')|int == c.id %}selected{% endif %}>
+              {{ c.business_name }}{% if c.owner and c.owner.user %} — {{ c.owner.user.name }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-lg-3">
+        <label class="form-label">Asesor</label>
+        <select name="advisor_id" class="form-select">
+          <option value="">Usar responsable del cliente</option>
+          {% for c in advisors %}
+            <option value="{{ c.id }}" {% if request.form.get('advisor_id')|int == c.id %}selected{% endif %}>
+              {{ c.user.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label">Fecha de venta</label>
+        <input type="date" name="sale_date" class="form-control" value="{{ request.form.get('sale_date') or today }}">
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label">Moneda</label>
+        <select name="currency" class="form-select">
+          <option value="USD" {% if request.form.get('currency','USD')=='USD' %}selected{% endif %}>USD</option>
+          <option value="NIO" {% if request.form.get('currency')=='NIO' %}selected{% endif %}>NIO</option>
+        </select>
       </div>
     </div>
-    <template id="saleTpl"><div class="row g-2 mb-2"><div class="col-md-3"><select name="product_id[]" class="form-select"><option value="">Personalizado</option>{% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div><div class="col-md-4"><input name="description[]" class="form-control" placeholder="Descripción" required></div><div class="col-md-2"><input name="quantity[]" type="number" step="0.01" min="0.01" value="1" class="form-control"></div><div class="col-md-3"><input name="unit_price[]" type="number" step="0.01" min="0" class="form-control" placeholder="Precio"></div></div></template>
-    <button type="button" class="btn btn-light border" data-add-row="#saleRows" data-template="#saleTpl">+ Agregar ítem</button>
 
-    <div class="row g-3 mt-3">
-      <div class="col-md-3"><label class="form-label">Pago inicial</label><input name="initial_payment" type="number" step="0.01" min="0" class="form-control" value="0"></div>
-      <div class="col-md-3"><label class="form-label">Método de pago</label><select name="payment_method" class="form-select"><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="Zelle">Zelle</option><option value="ACH">ACH</option><option value="Wise">Wise</option></select></div>
-      <div class="col-md-3"><label class="form-label">Vencimiento del saldo</label><input name="due_date" type="date" class="form-control"></div>
+    <hr class="my-4">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <h2 class="h5 mb-1">2. Productos y servicios</h2>
+        <p class="text-secondary small mb-0">El descuento se registra por unidad.</p>
+      </div>
+      <button type="button" class="btn btn-light border" id="addSaleRow">+ Agregar ítem</button>
     </div>
-    <button class="btn btn-brand mt-4">Registrar venta</button>
+
+    <div class="table-responsive mt-3">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th style="min-width:190px">Producto</th>
+            <th style="min-width:220px">Descripción</th>
+            <th style="width:110px">Cantidad</th>
+            <th style="width:140px">Precio lista</th>
+            <th style="width:130px">Descuento</th>
+            <th style="width:130px">Total</th>
+            <th style="width:60px"></th>
+          </tr>
+        </thead>
+        <tbody id="saleRows">
+          <tr class="sale-row">
+            <td>
+              <select name="product_id[]" class="form-select product-select">
+                <option value="">Personalizado</option>
+                {% for p in products %}
+                <option value="{{ p.id }}" data-name="{{ p.name }}" data-price="{{ p.base_price or '' }}">
+                  {{ p.name }}
+                </option>
+                {% endfor %}
+              </select>
+            </td>
+            <td><input name="description[]" class="form-control description-input" placeholder="Descripción" required></td>
+            <td><input name="quantity[]" type="number" step="0.01" min="0.01" value="1" class="form-control quantity-input"></td>
+            <td><input name="unit_price[]" type="number" step="0.01" min="0" class="form-control price-input" placeholder="0.00"></td>
+            <td><input name="discount[]" type="number" step="0.01" min="0" value="0" class="form-control discount-input"></td>
+            <td><strong class="line-total">0.00</strong></td>
+            <td><button type="button" class="btn btn-sm btn-outline-danger remove-sale-row" aria-label="Eliminar">×</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <template id="saleRowTemplate">
+      <tr class="sale-row">
+        <td>
+          <select name="product_id[]" class="form-select product-select">
+            <option value="">Personalizado</option>
+            {% for p in products %}
+            <option value="{{ p.id }}" data-name="{{ p.name }}" data-price="{{ p.base_price or '' }}">{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </td>
+        <td><input name="description[]" class="form-control description-input" placeholder="Descripción" required></td>
+        <td><input name="quantity[]" type="number" step="0.01" min="0.01" value="1" class="form-control quantity-input"></td>
+        <td><input name="unit_price[]" type="number" step="0.01" min="0" class="form-control price-input" placeholder="0.00"></td>
+        <td><input name="discount[]" type="number" step="0.01" min="0" value="0" class="form-control discount-input"></td>
+        <td><strong class="line-total">0.00</strong></td>
+        <td><button type="button" class="btn btn-sm btn-outline-danger remove-sale-row" aria-label="Eliminar">×</button></td>
+      </tr>
+    </template>
+
+    <div class="row g-4 mt-1">
+      <div class="col-xl-7">
+        <hr class="my-4">
+        <h2 class="h5">3. Pago inicial</h2>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Monto</label>
+            <input name="initial_payment" id="initialPayment" type="number" step="0.01" min="0" class="form-control" value="{{ request.form.get('initial_payment','0') }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Método</label>
+            <select name="payment_method" class="form-select">
+              {% for method in ['transferencia','efectivo','Zelle','ACH','Wise','tarjeta','otro'] %}
+                <option value="{{ method }}" {% if request.form.get('payment_method','transferencia')==method %}selected{% endif %}>{{ method|label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Fecha del pago</label>
+            <input name="initial_payment_date" type="date" class="form-control" value="{{ request.form.get('initial_payment_date') or today }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Referencia</label>
+            <input name="initial_payment_reference" class="form-control" value="{{ request.form.get('initial_payment_reference','') }}" placeholder="Zelle, transferencia...">
+          </div>
+        </div>
+
+        <hr class="my-4">
+        <h2 class="h5">4. Plan de pago del saldo</h2>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Modalidad</label>
+            <select name="payment_plan_mode" id="paymentPlanMode" class="form-select">
+              <option value="single" {% if request.form.get('payment_plan_mode','single')=='single' %}selected{% endif %}>Un solo vencimiento</option>
+              <option value="custom" {% if request.form.get('payment_plan_mode')=='custom' %}selected{% endif %}>Cuotas personalizadas</option>
+            </select>
+          </div>
+          <div class="col-md-4" id="singleDueWrap">
+            <label class="form-label">Vencimiento del saldo</label>
+            <input name="due_date" type="date" class="form-control" value="{{ request.form.get('due_date','') }}">
+          </div>
+        </div>
+
+        <div id="customPlan" class="mt-3 d-none">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>Cuotas</strong>
+            <button type="button" class="btn btn-sm btn-light border" id="addInstallment">+ Agregar cuota</button>
+          </div>
+          <div id="installmentRows">
+            <div class="row g-2 mb-2 installment-row">
+              <div class="col-md-3"><input name="installment_amount[]" type="number" step="0.01" min="0.01" class="form-control installment-amount" placeholder="Monto"></div>
+              <div class="col-md-3"><input name="installment_due_date[]" type="date" class="form-control"></div>
+              <div class="col-md-5"><input name="installment_notes[]" class="form-control" placeholder="Nota opcional"></div>
+              <div class="col-md-1"><button type="button" class="btn btn-outline-danger remove-installment">×</button></div>
+            </div>
+          </div>
+          <template id="installmentTemplate">
+            <div class="row g-2 mb-2 installment-row">
+              <div class="col-md-3"><input name="installment_amount[]" type="number" step="0.01" min="0.01" class="form-control installment-amount" placeholder="Monto"></div>
+              <div class="col-md-3"><input name="installment_due_date[]" type="date" class="form-control"></div>
+              <div class="col-md-5"><input name="installment_notes[]" class="form-control" placeholder="Nota opcional"></div>
+              <div class="col-md-1"><button type="button" class="btn btn-outline-danger remove-installment">×</button></div>
+            </div>
+          </template>
+          <small class="text-secondary">La suma de las cuotas debe coincidir exactamente con el saldo después del pago inicial.</small>
+        </div>
+
+        <hr class="my-4">
+        <h2 class="h5">5. Notas</h2>
+        <textarea name="notes" class="form-control" rows="4" placeholder="Condiciones especiales, acuerdos, observaciones...">{{ request.form.get('notes','') }}</textarea>
+      </div>
+
+      <div class="col-xl-5">
+        <div class="border rounded-4 p-4 position-sticky" style="top:1rem">
+          <span class="eyebrow">Resumen de venta</span>
+          <div class="d-flex justify-content-between mt-3"><span>Subtotal lista</span><strong id="summaryList">0.00</strong></div>
+          <div class="d-flex justify-content-between mt-2"><span>Descuentos</span><strong id="summaryDiscount">0.00</strong></div>
+          <div class="d-flex justify-content-between mt-2 fs-5"><span>Total</span><strong id="summaryTotal">0.00</strong></div>
+          <hr>
+          <div class="d-flex justify-content-between"><span>Pago inicial</span><strong id="summaryInitial">0.00</strong></div>
+          <div class="d-flex justify-content-between mt-2"><span>Saldo</span><strong id="summaryBalance">0.00</strong></div>
+          <div class="d-flex justify-content-between mt-2"><span>Cuotas programadas</span><strong id="summaryInstallments">0.00</strong></div>
+          <button class="btn btn-brand w-100 mt-4" {% if not clients %}disabled{% endif %}>Registrar venta</button>
+          <small class="d-block text-secondary mt-2">Al confirmar se generarán la cuenta por cobrar, servicios/proyectos y tareas correspondientes.</small>
+        </div>
+      </div>
+    </div>
   </form>
 </section>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const rows = document.getElementById('saleRows');
+  const template = document.getElementById('saleRowTemplate');
+  const addRow = document.getElementById('addSaleRow');
+  const mode = document.getElementById('paymentPlanMode');
+  const singleWrap = document.getElementById('singleDueWrap');
+  const customPlan = document.getElementById('customPlan');
+  const installmentRows = document.getElementById('installmentRows');
+  const installmentTemplate = document.getElementById('installmentTemplate');
+  const addInstallment = document.getElementById('addInstallment');
+  const initialPayment = document.getElementById('initialPayment');
+
+  function number(el) {
+    const value = parseFloat(el?.value || '0');
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function refreshSummary() {
+    let list = 0, discountTotal = 0, total = 0;
+    rows.querySelectorAll('.sale-row').forEach(row => {
+      const qty = number(row.querySelector('.quantity-input'));
+      const price = number(row.querySelector('.price-input'));
+      const discount = number(row.querySelector('.discount-input'));
+      const finalUnit = Math.max(0, price - discount);
+      const line = qty * finalUnit;
+      list += qty * price;
+      discountTotal += qty * Math.min(price, Math.max(0, discount));
+      total += line;
+      row.querySelector('.line-total').textContent = line.toFixed(2);
+    });
+
+    const initial = Math.max(0, number(initialPayment));
+    const balance = Math.max(0, total - initial);
+    let scheduled = 0;
+    installmentRows.querySelectorAll('.installment-amount').forEach(el => scheduled += number(el));
+
+    document.getElementById('summaryList').textContent = list.toFixed(2);
+    document.getElementById('summaryDiscount').textContent = discountTotal.toFixed(2);
+    document.getElementById('summaryTotal').textContent = total.toFixed(2);
+    document.getElementById('summaryInitial').textContent = initial.toFixed(2);
+    document.getElementById('summaryBalance').textContent = balance.toFixed(2);
+    document.getElementById('summaryInstallments').textContent =
+      mode.value === 'custom' ? scheduled.toFixed(2) : balance.toFixed(2);
+  }
+
+  function bindSaleRow(row) {
+    row.querySelectorAll('input').forEach(el => el.addEventListener('input', refreshSummary));
+    const select = row.querySelector('.product-select');
+    select.addEventListener('change', () => {
+      const option = select.options[select.selectedIndex];
+      const description = row.querySelector('.description-input');
+      const price = row.querySelector('.price-input');
+      if (option.value) {
+        if (!description.value.trim()) description.value = option.dataset.name || option.textContent.trim();
+        if (!price.value && option.dataset.price) price.value = option.dataset.price;
+      }
+      refreshSummary();
+    });
+    row.querySelector('.remove-sale-row').addEventListener('click', () => {
+      if (rows.querySelectorAll('.sale-row').length > 1) row.remove();
+      refreshSummary();
+    });
+  }
+
+  function bindInstallment(row) {
+    row.querySelectorAll('input').forEach(el => el.addEventListener('input', refreshSummary));
+    row.querySelector('.remove-installment').addEventListener('click', () => {
+      if (installmentRows.querySelectorAll('.installment-row').length > 1) row.remove();
+      refreshSummary();
+    });
+  }
+
+  function togglePlan() {
+    const custom = mode.value === 'custom';
+    customPlan.classList.toggle('d-none', !custom);
+    singleWrap.classList.toggle('d-none', custom);
+    refreshSummary();
+  }
+
+  rows.querySelectorAll('.sale-row').forEach(bindSaleRow);
+  installmentRows.querySelectorAll('.installment-row').forEach(bindInstallment);
+
+  addRow.addEventListener('click', () => {
+    const fragment = template.content.cloneNode(true);
+    const row = fragment.querySelector('.sale-row');
+    bindSaleRow(row);
+    rows.appendChild(fragment);
+    refreshSummary();
+  });
+
+  addInstallment.addEventListener('click', () => {
+    const fragment = installmentTemplate.content.cloneNode(true);
+    const row = fragment.querySelector('.installment-row');
+    bindInstallment(row);
+    installmentRows.appendChild(fragment);
+    refreshSummary();
+  });
+
+  mode.addEventListener('change', togglePlan);
+  initialPayment.addEventListener('input', refreshSummary);
+  togglePlan();
+  refreshSummary();
+});
+</script>
 {% endblock %}

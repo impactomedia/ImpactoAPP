@@ -1,30 +1,35 @@
-# Impacto APP 1.7.1 — Hotfix Fase 4
+# Impacto APP 1.8.0 — Sales V2
 
-## Problema detectado
-GitHub Actions de la v1.7.0 ejecutó 70 pruebas:
-- 69 pasaron.
-- 1 falló.
+## Qué se corrige
+La pantalla Nueva venta existía, pero no cubría completamente el flujo definido para Impacto APP.
 
-La única falla fue que la prueba esperaba la plataforma `google_business`, pero el parser no reconocía la etiqueta "Google Business Profile / Maps" porque `google` no estaba incluido en `_PLATFORM_LABELS`.
+## Nuevo flujo
+Cliente
+→ asesor
+→ productos/servicios
+→ descuentos
+→ total
+→ pago inicial
+→ saldo
+→ vencimiento único o cuotas personalizadas
+→ cuenta por cobrar
+→ generación de contrato/proyecto/tareas/imprenta según producto
 
-## Corrección
-Se agregó:
-
-`"google_business": ("google business", "google", "maps")`
-
-al mapa de plataformas.
+## Validaciones
+- Cliente debe estar dentro del alcance del usuario.
+- Asesor debe ser comercial y estar activo.
+- Producto debe estar activo.
+- Cantidad > 0.
+- Precio >= 0.
+- Descuento >= 0 y no puede superar precio lista.
+- Pago inicial no puede superar total.
+- Si queda saldo con vencimiento único, la fecha es obligatoria.
+- Si se usan cuotas, su suma debe coincidir exactamente con el saldo.
+- Ninguna cuota puede vencer antes de la fecha de venta.
 
 ## Base de datos
-No hay cambios de esquema.
-No hay nueva migración.
+No hay nuevas tablas.
+No hay migración.
 
 ## Railway
-No necesitas agregar un nuevo Pre-Deploy para la v1.7.1.
-
-Si todavía tienes configurado el Pre-Deploy de Fase 4:
-`python -m scripts.upgrade_clients_v2_phase4`
-
-puede ejecutarse nuevamente porque es idempotente; después de confirmar que v1.7.1 está en verde, elimínalo.
-
-## Importante
-No uses todavía el importador real hasta que GitHub Actions de v1.7.1 termine en SUCCESS.
+No agregues ningún Pre-Deploy Command para esta versión.

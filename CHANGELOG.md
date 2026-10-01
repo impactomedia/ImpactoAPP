@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.8.0 — Sales V2 · Cierre de Nueva Venta
+
+- Se completa el flujo de `/sales/new` para crear una venta con cliente, asesor, productos/servicios, descuentos, pago inicial y plan de pago.
+- El selector de asesores muestra únicamente colaboradores comerciales activos con usuario activo.
+- Los `product_id` recibidos se validan contra el catálogo activo para impedir productos deshabilitados o IDs manipulados.
+- Nuevo descuento por unidad en cada ítem; se conservan precio de lista, descuento, precio final y total.
+- El formulario ahora captura notas de venta, fecha/referencia del pago inicial y método de pago ampliado.
+- Nuevo plan de pago con dos modalidades: vencimiento único o cuotas personalizadas.
+- Las cuotas personalizadas deben sumar exactamente el saldo posterior al pago inicial.
+- Las cuotas se crean en `ClientInstallment` con la línea base del pago inicial para evitar doble aplicación.
+- La cuenta por cobrar toma como vencimiento la próxima cuota pendiente.
+- El detalle de venta muestra plan de pagos, descuentos, notas, pagos y reversa controlada.
+- `/sales/new` presenta un mensaje útil cuando no existen clientes disponibles en lugar de dejar un formulario inutilizable.
+- Errores inesperados al crear una venta revierten la transacción completa y se registran en logs.
+- No hay cambios de esquema ni migración de base de datos.
+- Nueva batería `tests/test_sales_v2.py`.
+
 ## 1.7.1 — Corrección Clientes V2 · Fase 4
 
 - Corregido el reconocimiento de `Google Business Profile / Maps` dentro del parser del Excel operativo.
