@@ -1,40 +1,47 @@
-# Impacto APP 1.6.0 — Clientes V2 Fase 3
+# Impacto APP 1.7.0 — Clientes V2 Fase 4
 
-## Qué incorpora
+## Objetivo
+Sustituir la carga manual de la hoja operativa por una importación controlada, segura y auditable.
 
-### 1. Mis clientes
-Cada colaborador puede abrir una vista de clientes relevantes para su trabajo:
-- Asesor: cartera propia + asignaciones operativas activas.
-- Supervisor: clientes de su equipo + asignaciones activas del equipo.
-- Producción: clientes con asignación operativa activa.
-- Administración / Gerencia / Superadmin: vista global.
+## Flujo
+1. Administración/Gerencia carga el `.xlsx`.
+2. El sistema procesa únicamente `CLIENTES`.
+3. `TAREAS` queda excluida para la fase de entregables.
+4. `CONTRASEÑAS` nunca se procesa.
+5. Las filas `CLAVE` y `CONTRASEÑA DEL CORREO` se eliminan antes de guardar la vista previa.
+6. Se genera un lote saneado.
+7. El usuario revisa coincidencias, asesor, plan y advertencias.
+8. Solo después de confirmar se modifica la base de datos.
 
-### 2. Equipo operativo histórico
-Nueva tabla `client_team_assignments` con colaborador, rol, servicio/plan, proyecto, fechas, estado, responsable principal, quién asignó/finalizó, motivo y notas.
+## Qué importa
+- Datos base del cliente.
+- Teléfonos, correo, dirección y website.
+- Facebook e Instagram.
+- Perfil operativo de Clientes V2.
+- Google Business/Maps y plataformas adicionales.
+- Responsable comercial cuando puede identificarse.
+- Contratos únicamente cuando el mapeo y las fechas son confiables.
 
-La estructura anterior `client_collaborators` continúa existiendo y se sincroniza como resumen de compatibilidad.
+## Qué NO importa automáticamente
+- Contraseñas.
+- Hoja CONTRASEÑAS.
+- Hoja TAREAS.
+- Ventas.
+- Pagos.
+- Descuentos.
+- Créditos entre planes.
+- Inversiones secundarias.
 
-### 3. Centro de coordinación
-Ruta: `/clients/<id>/coordination`
+La información financiera histórica sí queda saneada dentro del lote para revisión posterior.
 
-Incluye equipo activo/histórico, alertas, renovaciones, dominio/hosting y línea de tiempo unificada.
-
-### 4. Alertas y recordatorios
-Se consolidan renovaciones, vencimientos de servicios, dominio/hosting, cuotas/promesas para usuarios autorizados, tareas y tickets.
-
-### 5. Seguridad
-- Supervisores no pueden asignar colaboradores fuera de su equipo.
-- Producción no obtiene acceso financiero por estar asignado al cliente.
-- Ventas, pagos y cobranza solo aparecen en la línea de tiempo para perfiles autorizados.
+## Protección contra duplicados
+La conciliación compara correo, teléfono, nombre normalizado y nombre muy similar. Los casos ambiguos se omiten.
 
 ## Base de datos
-Crea una tabla nueva: `client_team_assignments`.
+Nueva tabla: `client_import_batches`
 
-No elimina ni altera tablas existentes.
+El XLSX original no se almacena.
 
 ## Railway
-Usar temporalmente en Pre-Deploy:
-
-`python -m scripts.upgrade_clients_v2_phase3`
-
-Después de un despliegue correcto, retirar el Pre-Deploy Command.
+Pre-Deploy temporal:
+`python -m scripts.upgrade_clients_v2_phase4`

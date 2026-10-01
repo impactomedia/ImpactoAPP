@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.7.0 — Clientes V2 · Fase 4
+
+- Nueva importación controlada del Excel operativo con flujo Vista previa → Confirmación → Ejecución.
+- El importador procesa únicamente la hoja `CLIENTES`.
+- La hoja `CONTRASEÑAS` nunca se lee ni se almacena.
+- Las filas `CLAVE` y `CONTRASEÑA DEL CORREO` de la hoja CLIENTES se eliminan antes de guardar el lote saneado.
+- La hoja `TAREAS` queda excluida para la futura fase de entregables.
+- Nueva conciliación de clientes existentes por correo, teléfono, nombre normalizado y nombre muy similar para reducir duplicados.
+- Los casos ambiguos se omiten automáticamente en lugar de crear un registro duplicado.
+- Importación de datos base, perfil operativo, Facebook/Instagram, Google Business/Maps y plataformas adicionales.
+- Resolución de responsable comercial por nombre y aliases operativos, sin reemplazar propietarios existentes salvo autorización explícita.
+- Los datos existentes no se sobrescriben por defecto; la importación completa campos vacíos.
+- Contratos automáticos únicamente cuando producto, fecha y estructura de inversiones tienen alta confianza.
+- Ventas, pagos, descuentos, créditos e inversiones múltiples no se crean automáticamente; permanecen en el lote saneado para revisión.
+- Nueva tabla `client_import_batches` para trazabilidad de vistas previas y resultados sin conservar el XLSX original.
+- Nueva interfaz `Clientes > Importar Excel Operativo`, restringida a Superadministración, Administración y Gerencia.
+- Script idempotente `python -m scripts.upgrade_clients_v2_phase4`.
+- Nueva batería `tests/test_clients_v2_phase4.py`.
+- El parser fue validado con el Excel operativo actual: 9 fichas detectadas y 12 campos sensibles omitidos.
+
 ## 1.6.0 — Clientes V2 · Fase 3
 
 - Nuevo Centro de coordinación por cliente con equipo operativo, alertas/renovaciones y línea de tiempo unificada.

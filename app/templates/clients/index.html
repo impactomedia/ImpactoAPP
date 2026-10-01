@@ -6,6 +6,9 @@
   <div><span class="eyebrow">Clientes</span><h1>Control de clientes</h1><p>Ficha operativa, servicios, pagos, responsables y proyecto comercial.</p></div>
   <div class="d-flex flex-wrap gap-2">
     <a class="btn btn-outline-secondary" href="{{ url_for('clients_v3.mine') }}">Mis clientes</a>
+    {% if role_name in ['superadmin','admin','manager'] and current_user.has_permission('clients.create') %}
+      <a class="btn btn-outline-primary" href="{{ url_for('clients_import.index') }}">Importar Excel Operativo</a>
+    {% endif %}
     {% if current_user.has_permission('clients.create') %}<a class="btn btn-light border" href="{{ url_for('clients.import_csv') }}">Importar CSV</a><a class="btn btn-brand" href="{{ url_for('clients.new_client') }}">Nuevo cliente</a>{% endif %}
     {% if current_user.has_permission('clients.export') %}<a class="btn btn-outline-secondary" href="{{ url_for('clients.export_csv') }}">Exportar</a>{% endif %}
   </div>

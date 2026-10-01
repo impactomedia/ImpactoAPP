@@ -200,3 +200,26 @@ class ClientTeamAssignment(db.Model, TimestampMixin):
     project = db.relationship("Project", backref="team_assignments_v3")
     assigned_by = db.relationship("User", foreign_keys=[assigned_by_id])
     ended_by = db.relationship("User", foreign_keys=[ended_by_id])
+
+
+class ClientImportBatch(db.Model, TimestampMixin):
+    """Lote saneado de importación del Excel operativo.
+
+    El archivo XLSX original no se almacena. payload_json conserva únicamente
+    información procesada y excluye contraseñas/secretos detectados.
+    """
+
+    __tablename__ = "client_import_batches"
+
+    id = db.Column(db.Integer, primary_key=True)
+    file_name = db.Column(db.String(255), nullable=False)
+    file_sha256 = db.Column(db.String(64), nullable=False, index=True)
+    file_size = db.Column(db.Integer, nullable=False, default=0)
+    status = db.Column(db.String(30), nullable=False, default="previewed", index=True)
+    client_count = db.Column(db.Integer, nullable=False, default=0)
+    payload_json = db.Column(db.JSON, nullable=False)
+    result_json = db.Column(db.JSON)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    executed_at = db.Column(db.DateTime)
+
+    created_by = db.relationship("User", backref="client_import_batches")

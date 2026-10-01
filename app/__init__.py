@@ -39,6 +39,7 @@ def create_app(config_object=Config):
     from app.blueprints.crm import bp as crm_bp
     from app.blueprints.clients import bp as clients_bp
     from app.blueprints.clients_v3 import bp as clients_v3_bp
+    from app.blueprints.clients_import import bp as clients_import_bp
     from app.blueprints.sales import bp as sales_bp
     from app.blueprints.operations import bp as operations_bp
     from app.blueprints.printing import bp as printing_bp
@@ -54,6 +55,7 @@ def create_app(config_object=Config):
         crm_bp,
         clients_bp,
         clients_v3_bp,
+        clients_import_bp,
         sales_bp,
         operations_bp,
         printing_bp,

@@ -1,0 +1,275 @@
+{% extends "app_base.html" %}
+{% block title %}Importar Excel Operativo | Impacto Manager{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Clientes V2 · Fase 4</span>
+    <h1>Importación controlada del Excel operativo</h1>
+    <p>Vista previa, conciliación de duplicados y carga segura de fichas sin importar contraseñas.</p>
+  </div>
+  <div>
+    <a class="btn btn-light border" href="{{ url_for('clients.index') }}">Volver a clientes</a>
+  </div>
+</div>
+
+<div class="alert alert-warning">
+  <strong>Seguridad:</strong> la hoja <strong>CONTRASEÑAS</strong> nunca se procesa y las filas
+  <strong>CLAVE</strong> / <strong>CONTRASEÑA DEL CORREO</strong> dentro de CLIENTES se omiten antes de guardar la vista previa.
+  La hoja <strong>TAREAS</strong> queda reservada para la fase de entregables.
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-7">
+    <section class="panel-card h-100">
+      <div class="panel-header">
+        <div>
+          <h2>1. Cargar archivo</h2>
+          <p>Selecciona el archivo .xlsx de fichas operativas.</p>
+        </div>
+      </div>
+      <form method="post" enctype="multipart/form-data" action="{{ url_for('clients_import.index') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-9">
+            <label class="form-label">Archivo XLSX</label>
+            <input class="form-control" type="file" name="file" accept=".xlsx" required>
+          </div>
+          <div class="col-md-3">
+            <button class="btn btn-brand w-100">Generar vista previa</button>
+          </div>
+        </div>
+      </form>
+      <hr>
+      <p class="small text-secondary mb-0">
+        El archivo original no se guarda en el sistema. Solo se conserva un lote saneado con datos no sensibles para permitir revisar y ejecutar la importación.
+      </p>
+    </section>
+  </div>
+
+  <div class="col-xl-5">
+    <section class="panel-card h-100">
+      <div class="panel-header"><div><h2>Lotes recientes</h2><p>Últimas vistas previas e importaciones.</p></div></div>
+      {% for item in recent_batches %}
+        <div class="d-flex justify-content-between gap-3 border-bottom py-2">
+          <div>
+            <a href="{{ url_for('clients_import.preview', batch_id=item.id) }}"><strong>Lote #{{ item.id }}</strong></a>
+            <small class="d-block text-secondary">{{ item.file_name }} · {{ item.client_count }} ficha(s)</small>
+          </div>
+          <span class="badge-soft {{ 'success' if item.status=='completed' else 'warning' if item.status=='previewed' else 'danger' }}">{{ item.status|label }}</span>
+        </div>
+      {% else %}
+        <p class="text-secondary mb-0">Todavía no hay lotes.</p>
+      {% endfor %}
+    </section>
+  </div>
+</div>
+
+{% if batch %}
+<div class="metric-grid mb-4">
+  <div class="metric-card">
+    <span>Fichas detectadas</span>
+    <strong>{{ batch.client_count }}</strong>
+    <small>Hoja CLIENTES</small>
+  </div>
+  <div class="metric-card">
+    <span>Clientes existentes</span>
+    <strong>{{ analysis|selectattr('match_state','equalto','existing')|list|length }}</strong>
+    <small>Coincidencia por nombre, teléfono o correo</small>
+  </div>
+  <div class="metric-card">
+    <span>Clientes nuevos</span>
+    <strong>{{ analysis|selectattr('match_state','equalto','new')|list|length }}</strong>
+    <small>Se crearán solo si lo autorizas</small>
+  </div>
+  <div class="metric-card">
+    <span>Secretos omitidos</span>
+    <strong>{{ batch.payload_json.security.secret_fields_skipped }}</strong>
+    <small>0 secretos importados</small>
+  </div>
+</div>
+
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div>
+      <h2>2. Vista previa · Lote #{{ batch.id }}</h2>
+      <p>{{ batch.file_name }} · Estado: {{ batch.status|label }}</p>
+    </div>
+    <div><span class="badge-soft success">Contraseñas excluidas</span></div>
+  </div>
+
+  <div class="alert alert-info">
+    <strong>Importación financiera:</strong> las inversiones, pagos, descuentos y negociaciones históricas se conservan dentro del lote saneado para revisión, pero esta fase no crea ventas ni pagos automáticamente.
+  </div>
+
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead>
+        <tr>
+          <th>Ficha</th>
+          <th>Cliente</th>
+          <th>Coincidencia</th>
+          <th>Asesor</th>
+          <th>Plan detectado</th>
+          <th>Contrato seguro</th>
+          <th>Plataformas</th>
+          <th>Revisión</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in analysis %}
+        {% set p = row.payload %}
+        <tr>
+          <td><strong>{{ p.slot }}</strong></td>
+          <td>
+            <strong>{{ p.business_name }}</strong>
+            <small class="d-block text-secondary">{{ p.contact_name }}</small>
+            <small class="d-block text-secondary">{{ p.phone or p.email or 'Sin contacto' }}</small>
+          </td>
+          <td>
+            {% if row.match_state == 'existing' %}
+              <span class="badge-soft success">Existente</span>
+              {% if row.matched_client %}<a class="small d-block mt-1" href="{{ url_for('clients.detail', client_id=row.matched_client.id) }}" target="_blank">{{ row.matched_client.code or 'Abrir ficha' }}</a>{% endif %}
+            {% elif row.match_state == 'ambiguous' %}
+              <span class="badge-soft danger">Ambiguo</span>
+            {% else %}
+              <span class="badge-soft info">Nuevo</span>
+            {% endif %}
+            <small class="d-block text-secondary mt-1">{{ row.match_reason }}</small>
+          </td>
+          <td>
+            <strong>{{ p.advisor or '—' }}</strong>
+            <small class="d-block text-secondary">{{ row.owner.user.name if row.owner and row.owner.user else row.owner_reason }}</small>
+          </td>
+          <td>
+            {{ p.current_plan_label or '—' }}
+            {% if row.product %}
+              <small class="d-block text-secondary">→ {{ row.product.name }} · confianza {{ row.product_confidence }}</small>
+            {% else %}
+              <small class="d-block text-secondary">{{ row.product_reason }}</small>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.safe_contract %}
+              <span class="badge-soft success">Sí</span>
+            {% else %}
+              <span class="badge-soft warning">Revisión</span>
+            {% endif %}
+            <small class="d-block text-secondary mt-1">{{ row.contract_reason }}</small>
+          </td>
+          <td>{{ p.platforms|length }} adicional(es)</td>
+          <td><button class="btn btn-sm btn-light border" type="button" data-bs-toggle="collapse" data-bs-target="#detail-{{ loop.index }}">Ver detalle</button></td>
+        </tr>
+        <tr class="collapse" id="detail-{{ loop.index }}">
+          <td colspan="8">
+            <div class="row g-3 py-2">
+              <div class="col-md-4">
+                <strong>Datos operativos</strong>
+                <small class="d-block text-secondary">Atención: {{ p.operational.attention_days or '—' }}</small>
+                <small class="d-block text-secondary">Horario: {{ p.operational.business_hours or '—' }}</small>
+                <small class="d-block text-secondary">Experiencia: {{ p.operational.experience_text or '—' }}</small>
+                <small class="d-block text-secondary">Cobertura: {{ p.operational.coverage_text or '—' }}</small>
+              </div>
+              <div class="col-md-4">
+                <strong>Fechas</strong>
+                <small class="d-block text-secondary">Plan: {{ p.plan_start or '—' }} → {{ p.plan_end or '—' }}</small>
+                <small class="d-block text-secondary">Dominio activado: {{ p.operational.domain_activated_on or '—' }}</small>
+                <small class="d-block text-secondary">Hosting activado: {{ p.operational.hosting_activated_on or '—' }}</small>
+              </div>
+              <div class="col-md-4">
+                <strong>Control</strong>
+                <small class="d-block text-secondary">{{ p.investments|length }} línea(s) históricas conservadas para revisión.</small>
+                <small class="d-block text-secondary">{{ p.secret_fields_skipped }} campo(s) sensible(s) omitido(s).</small>
+                {% for warning in p.warnings %}<small class="d-block text-warning">{{ warning }}</small>{% endfor %}
+              </div>
+              {% if p.benefits or p.courtesies %}
+              <div class="col-12">
+                <details>
+                  <summary>Beneficios y cortesías detectados</summary>
+                  {% if p.benefits %}<pre class="small mt-2 p-2 bg-light rounded border" style="white-space:pre-wrap">{{ p.benefits }}</pre>{% endif %}
+                  {% if p.courtesies %}<pre class="small mt-2 p-2 bg-light rounded border" style="white-space:pre-wrap">{{ p.courtesies }}</pre>{% endif %}
+                </details>
+              </div>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="text-center text-secondary py-4">No se detectaron fichas.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if batch.status == 'previewed' %}
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div>
+      <h2>3. Confirmar importación</h2>
+      <p>La operación se ejecuta en una sola transacción. Si ocurre un error, se revierten todos los cambios del lote.</p>
+    </div>
+  </div>
+
+  <form method="post" action="{{ url_for('clients_import.execute', batch_id=batch.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-check border rounded-3 p-3 h-100">
+          <input class="form-check-input" type="checkbox" name="create_missing" checked>
+          <span class="ms-2"><strong>Crear clientes que no existan</strong><small class="d-block text-secondary">Los ambiguos nunca se crean automáticamente.</small></span>
+        </label>
+      </div>
+      <div class="col-md-6">
+        <label class="form-check border rounded-3 p-3 h-100">
+          <input class="form-check-input" type="checkbox" name="import_contracts" checked>
+          <span class="ms-2"><strong>Importar contratos seguros</strong><small class="d-block text-secondary">Solo planes con mapeo de alta confianza, fecha exacta y sin inversiones múltiples.</small></span>
+        </label>
+      </div>
+      <div class="col-md-6">
+        <label class="form-check border rounded-3 p-3 h-100">
+          <input class="form-check-input" type="checkbox" name="overwrite_existing">
+          <span class="ms-2"><strong>Sobrescribir datos existentes</strong><small class="d-block text-secondary">Desmarcado: solo completa campos vacíos, recomendado.</small></span>
+        </label>
+      </div>
+      <div class="col-md-6">
+        <label class="form-check border rounded-3 p-3 h-100">
+          <input class="form-check-input" type="checkbox" name="replace_owner">
+          <span class="ms-2"><strong>Reemplazar responsable comercial</strong><small class="d-block text-secondary">Desmarcado: solo asigna asesor cuando el cliente no tiene responsable.</small></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="alert alert-danger mt-4">
+      <label class="form-check mb-0">
+        <input class="form-check-input" type="checkbox" name="confirm_import" required>
+        <span class="ms-2"><strong>Confirmo que revisé la vista previa y deseo ejecutar este lote.</strong></span>
+      </label>
+    </div>
+
+    <button class="btn btn-brand">Ejecutar importación controlada</button>
+  </form>
+</section>
+{% endif %}
+
+{% if batch.status == 'completed' and batch.result_json %}
+<section class="panel-card">
+  <div class="panel-header"><div><h2>Resultado del lote</h2><p>Importación finalizada.</p></div></div>
+  <div class="metric-grid mb-3">
+    <div class="metric-card"><span>Creados</span><strong>{{ batch.result_json.created_clients }}</strong></div>
+    <div class="metric-card"><span>Actualizados</span><strong>{{ batch.result_json.updated_clients }}</strong></div>
+    <div class="metric-card"><span>Omitidos</span><strong>{{ batch.result_json.skipped_clients }}</strong></div>
+    <div class="metric-card"><span>Contratos creados</span><strong>{{ batch.result_json.contracts_created }}</strong></div>
+  </div>
+  <p class="mb-0 text-secondary">
+    Ventas/pagos creados automáticamente: <strong>{{ batch.result_json.financial_rows_imported }}</strong>.
+    Contratos enviados a revisión manual: <strong>{{ batch.result_json.contracts_manual_review }}</strong>.
+  </p>
+</section>
+{% elif batch.status == 'failed' %}
+<section class="panel-card border-danger">
+  <h2 class="h5 text-danger">El lote falló</h2>
+  <p class="mb-0">{{ batch.result_json.error if batch.result_json else 'La importación fue revertida.' }}</p>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}
