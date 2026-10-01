@@ -1,0 +1,10 @@
+IMPACTO APP 1.3.0
+=================
+
+1. Copia TODO el contenido de esta carpeta sobre tu proyecto ImpactoAPP.
+2. Reemplaza los archivos existentes.
+3. Sube el proyecto a GitHub.
+4. Railway despliega normalmente. No necesitas comandos de migración.
+5. En GitHub > Actions podrás ver el resultado automático de pytest.
+
+VERSION esperada después de copiar: 1.3.0

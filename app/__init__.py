@@ -1,17 +1,19 @@
 from pathlib import Path
 
-from flask import Flask, redirect, render_template, url_for
+from flask import Flask, abort, redirect, render_template, request, url_for
 from flask_login import current_user
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from app.access_control import init_access_control
-from app.extensions import db, migrate, login_manager, csrf
+from app.extensions import csrf, db, login_manager, migrate
 from app.helpers import human_label, money
 
 
 def create_app(config_object=Config):
     app = Flask(__name__)
     app.config.from_object(config_object)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
 
     db.init_app(app)
@@ -27,7 +29,10 @@ def create_app(config_object=Config):
 
     @login_manager.user_loader
     def load_user(user_id):
-        return db.session.get(User, int(user_id))
+        try:
+            return db.session.get(User, int(user_id))
+        except (TypeError, ValueError):
+            return None
 
     from app.blueprints.auth import bp as auth_bp
     from app.blueprints.dashboard import bp as dashboard_bp
@@ -60,6 +65,29 @@ def create_app(config_object=Config):
 
     init_access_control(app)
 
+    @app.before_request
+    def protect_uploaded_static_files():
+        # Los archivos cargados no deben quedar disponibles para visitantes anónimos
+        # aunque físicamente estén dentro del directorio static/uploads heredado.
+        if (
+            request.endpoint == "static"
+            and request.path.startswith("/static/uploads/")
+            and not current_user.is_authenticated
+        ):
+            abort(404)
+        return None
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=()",
+        )
+        return response
+
     @app.template_filter("money")
     def money_filter(value):
         return money(value)
@@ -72,7 +100,7 @@ def create_app(config_object=Config):
     def inject_globals():
         unread = 0
         if current_user.is_authenticated:
-            unread = sum(1 for n in current_user.notifications if not n.read)
+            unread = sum(1 for notification in current_user.notifications if not notification.read)
         return {
             "company_name": app.config.get("COMPANY_NAME"),
             "unread_notifications": unread,

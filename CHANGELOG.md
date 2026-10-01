@@ -1,47 +1,39 @@
 # Changelog
 
-## 1.2.2
-Tercera pasada de auditoría de Impacto Manager.
+## 1.3.0 — Auditoría integral y endurecimiento final
 
-- Alcance de Ventas y Renovaciones por cartera para asesores y supervisores.
-- Alcance de Proyectos, Tareas, Kanban e Imprenta según rol y asignaciones.
-- Reportes segmentados por permisos; perfiles operativos ya no reciben métricas financieras globales.
-- Supervisores de RR. HH. limitados a su propio equipo.
-- Validación del orden de marcaciones de jornada desde backend.
-- Protección contra doble aprobación/descuento de vacaciones.
-- Validación de solicitudes de ausencia superpuestas.
-- Validaciones de montos, estados y fechas en Finanzas.
-- Planilla conciliada con comisiones aprobadas únicamente dentro del período.
-- Reconciliación de planilla antes del pago para evitar doble pago de comisiones en períodos solapados.
-- Protección contra pagos de clientes superiores al saldo pendiente.
-- Reversión de pago actualiza también el ingreso relacionado cuando es posible identificarlo.
-- Comisiones pagadas quedan congeladas ante recálculos posteriores.
-- Validaciones de productos, cantidades, diseños, envíos e incidencias de imprenta.
-- Mejoras de presentación, etiquetas y visibilidad de acciones según permisos.
+- Seguridad de autenticación: redirecciones internas seguras, invalidación de tokens de recuperación y contraseña actual obligatoria para cambios desde el perfil.
+- Mejor manejo de fallos SMTP en recuperación de contraseña sin revelar existencia de cuentas.
+- Soporte correcto de proxy inverso para Railway mediante `ProxyFix` y encabezados HTTP básicos de seguridad.
+- Los archivos de `static/uploads` dejan de ser accesibles para visitantes no autenticados.
+- CRM endurecido: validación de responsables por cartera/equipo, protección contra reasignaciones no autorizadas, validación de presupuestos, prioridades, interacciones y duplicados.
+- Cotizaciones: validación estricta de productos, cantidades, precios y descuentos; una cotización en borrador ya no mueve el prospecto a “Cotización enviada”.
+- Soporte: validación de responsables activos en creación y actualización de tickets.
+- Configuración: validaciones de roles, catálogos, productos y valores del sistema; duplicados de catálogo ya no provocan errores 500.
+- Roles: los permisos inherentes de Superadministrador se muestran como no editables para evitar configuraciones engañosas.
+- Reportes: las exportaciones CSV respetan el período seleccionado y generan UTF-8 con encabezados más claros.
+- Correcciones visuales de capitalización y etiquetas en CRM, Clientes, RR. HH., Ventas y Reportes.
+- Capacitaciones: estados de interfaz alineados con los estados realmente aceptados por el backend.
+- Pruebas nuevas de seguridad, CRM, soporte, reportes, configuración y CSRF.
+- GitHub Actions agregado para ejecutar `pytest -q` automáticamente en cada push a `main` y pull request.
 
-## 1.2.1
-Segunda pasada de auditoría de roles y alcance de cartera.
+## 1.2.2 — Auditoría funcional
 
-- Clientes limitados por cartera para asesores y supervisores.
-- Protección de acceso directo a fichas ajenas.
-- Controles de escritura ocultos según permisos.
-- Alcance comercial aplicado a soporte e imprenta.
+- Reglas de negocio reforzadas en ventas, pagos, comisiones, operaciones, imprenta, RR. HH., finanzas y reportes.
+- Protección contra sobrepagos, doble aprobación de vacaciones y comisiones fuera del período de planilla.
+- Alcance de datos más estricto para asesores, supervisores y producción.
 
-## 1.2.0
-Auditoría inicial de roles y seguridad.
+## 1.2.1 — Alcance por cartera y equipo
 
-- Capa central de autorización por permisos.
-- Menú alineado con permisos de backend.
-- Páginas 403/404.
-- Correcciones de etiquetas y SLA de soporte.
+- Clientes, ventas, proyectos, imprenta y soporte limitados según cartera/equipo cuando corresponde.
+- Controles visuales alineados con permisos reales.
 
-## 1.1.1
-Mejoras al módulo Clientes.
+## 1.2.0 — Roles y permisos
 
-- Creación manual de clientes.
-- Importación CSV mejorada.
-- Conversión de seguimientos a clientes.
-- Archivado y eliminación segura.
+- Capa central de autorización por módulo/acción.
+- Matriz de permisos para perfiles predefinidos.
+- Páginas 403/404 y mejoras de presentación de estados.
 
 ## 1.0.0-complete
+
 Entrega integral inicial de Impacto Manager: CRM, clientes, ventas/pagos, operaciones, imprenta, finanzas, comisiones/planilla, RR. HH., soporte, reportes, configuración, auditoría y despliegue base.

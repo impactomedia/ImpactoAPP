@@ -1,1 +1,39 @@
-{% extends "app_base.html" %}{% block app_content %}<div class="page-heading"><div><span class="eyebrow">Mi cuenta</span><h1>Perfil personal</h1><p>Actualiza tu nombre o contraseña.</p></div></div><section class="panel-card form-card"><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="row g-3"><div class="col-md-6"><label class="form-label">Nombre</label><input class="form-control" name="name" value="{{ current_user.name }}"></div><div class="col-md-6"><label class="form-label">Correo</label><input class="form-control" value="{{ current_user.email }}" disabled></div><div class="col-md-6"><label class="form-label">Nueva contraseña</label><input class="form-control" type="password" name="new_password" placeholder="Dejar vacío para conservar"></div></div><button class="btn btn-brand mt-4">Guardar cambios</button></form></section>{% endblock %}
+{% extends "app_base.html" %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Mi cuenta</span>
+    <h1>Perfil personal</h1>
+    <p>Actualiza tu nombre o cambia tu contraseña de forma segura.</p>
+  </div>
+</div>
+<section class="panel-card form-card">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Nombre</label>
+        <input class="form-control" name="name" value="{{ current_user.name }}" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Correo</label>
+        <input class="form-control" value="{{ current_user.email }}" disabled>
+      </div>
+      <div class="col-12"><hr><h2 class="h5">Cambiar contraseña</h2><p class="text-secondary">Completa estos campos solo si deseas cambiarla.</p></div>
+      <div class="col-md-4">
+        <label class="form-label">Contraseña actual</label>
+        <input class="form-control" type="password" name="current_password" autocomplete="current-password">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Nueva contraseña</label>
+        <input class="form-control" type="password" name="new_password" minlength="8" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Confirmar nueva contraseña</label>
+        <input class="form-control" type="password" name="confirm_password" minlength="8" autocomplete="new-password">
+      </div>
+    </div>
+    <button class="btn btn-brand mt-4">Guardar cambios</button>
+  </form>
+</section>
+{% endblock %}

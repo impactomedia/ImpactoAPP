@@ -1,30 +1,7 @@
 {% extends "app_base.html" %}
 {% block app_content %}
-<div class="page-heading">
-  <div><span class="eyebrow">Reportes</span><h1>Panel de indicadores</h1><p>Los indicadores se muestran según los permisos y el alcance de cada usuario.</p></div>
-  <form class="d-flex gap-2"><input type="date" name="starts" value="{{ start_date }}" class="form-control"><input type="date" name="ends" value="{{ end_date }}" class="form-control"><button class="btn btn-dark">Aplicar</button></form>
-</div>
-
-<div class="metric-grid mb-4">
-  {% if sales_total is not none %}<div class="metric-card"><span>Ventas</span><strong>{{ sales_total|money }}</strong><small>Período seleccionado</small></div>{% endif %}
-  {% if payment_total is not none %}<div class="metric-card"><span>Cobrado</span><strong>{{ payment_total|money }}</strong><small>Pagos confirmados</small></div>{% endif %}
-  {% if expense_total is not none %}<div class="metric-card"><span>Egresos</span><strong>{{ expense_total|money }}</strong><small>Solo información financiera autorizada</small></div>{% endif %}
-  {% if commissions is not none %}<div class="metric-card"><span>Comisiones</span><strong>{{ commissions|money }}</strong><small>Según cartera o permiso financiero</small></div>{% endif %}
-</div>
-
-<div class="row g-4">
-  {% if new_clients is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ new_clients }}</h2><p>Nuevos clientes</p></section></div>{% endif %}
-  {% if projects is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ projects }}</h2><p>Proyectos creados</p></section></div>{% endif %}
-  {% if print_orders is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ print_orders }}</h2><p>Órdenes de imprenta</p></section></div>{% endif %}
-  {% if tasks_created is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ tasks_created }}</h2><p>Tareas creadas</p></section></div>{% endif %}
-  {% if tasks_completed is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ tasks_completed }}</h2><p>Tareas completadas</p></section></div>{% endif %}
-</div>
-
-{% if can_export_sales or can_export_payments or can_export_printing %}
-<section class="panel-card mt-4"><h2 class="h5">Exportar información autorizada</h2><div class="d-flex flex-wrap gap-2">
-  {% if can_export_sales %}<a class="btn btn-light border" href="{{ url_for('reports.export_csv', report='sales') }}">Ventas CSV</a>{% endif %}
-  {% if can_export_payments %}<a class="btn btn-light border" href="{{ url_for('reports.export_csv', report='payments') }}">Pagos CSV</a>{% endif %}
-  {% if can_export_printing %}<a class="btn btn-light border" href="{{ url_for('reports.export_csv', report='printing') }}">Imprenta CSV</a>{% endif %}
-</div></section>
-{% endif %}
+<div class="page-heading"><div><span class="eyebrow">Reportes</span><h1>Panel de indicadores</h1><p>Los indicadores se muestran según los permisos y el alcance de cada usuario.</p></div><form class="d-flex gap-2"><input type="date" name="starts" value="{{ start_date }}" class="form-control"><input type="date" name="ends" value="{{ end_date }}" class="form-control"><button class="btn btn-dark">Aplicar</button></form></div>
+<div class="metric-grid mb-4">{% if sales_total is not none %}<div class="metric-card"><span>Ventas</span><strong>{{ sales_total|money }}</strong><small>Período seleccionado</small></div>{% endif %}{% if payment_total is not none %}<div class="metric-card"><span>Cobrado</span><strong>{{ payment_total|money }}</strong><small>Pagos confirmados</small></div>{% endif %}{% if expense_total is not none %}<div class="metric-card"><span>Egresos</span><strong>{{ expense_total|money }}</strong><small>Solo información financiera autorizada</small></div>{% endif %}{% if commissions is not none %}<div class="metric-card"><span>Comisiones</span><strong>{{ commissions|money }}</strong><small>Según cartera o permiso financiero</small></div>{% endif %}</div>
+<div class="row g-4">{% if new_clients is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ new_clients }}</h2><p>Nuevos clientes</p></section></div>{% endif %}{% if projects is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ projects }}</h2><p>Proyectos creados</p></section></div>{% endif %}{% if print_orders is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ print_orders }}</h2><p>Órdenes de imprenta</p></section></div>{% endif %}{% if tasks_created is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ tasks_created }}</h2><p>Tareas creadas</p></section></div>{% endif %}{% if tasks_completed is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ tasks_completed }}</h2><p>Tareas completadas</p></section></div>{% endif %}</div>
+{% if can_export_sales or can_export_payments or can_export_printing %}<section class="panel-card mt-4"><h2 class="h5">Exportar información autorizada</h2><p class="text-secondary">La exportación respeta el mismo período seleccionado arriba.</p><div class="d-flex flex-wrap gap-2">{% if can_export_sales %}<a class="btn btn-light border" href="{{ url_for('reports.export_csv', report='sales', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Ventas CSV</a>{% endif %}{% if can_export_payments %}<a class="btn btn-light border" href="{{ url_for('reports.export_csv', report='payments', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Pagos CSV</a>{% endif %}{% if can_export_printing %}<a class="btn btn-light border" href="{{ url_for('reports.export_csv', report='printing', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Imprenta CSV</a>{% endif %}</div></section>{% endif %}
 {% endblock %}

@@ -2,7 +2,7 @@ import csv
 import io
 from datetime import date, datetime
 
-from flask import Blueprint, abort, render_template, request, Response
+from flask import Blueprint, Response, abort, render_template, request
 from flask_login import current_user, login_required
 from sqlalchemy import func, or_
 
@@ -29,8 +29,16 @@ def _parse_date(value, fallback):
         return fallback
     try:
         return date.fromisoformat(value)
-    except ValueError:
+    except (TypeError, ValueError):
         return fallback
+
+
+def _requested_dates():
+    start_date = _parse_date(request.args.get("starts"), date.today().replace(day=1))
+    end_date = _parse_date(request.args.get("ends"), date.today())
+    if end_date < start_date:
+        start_date, end_date = end_date, start_date
+    return start_date, end_date
 
 
 def _client_query():
@@ -134,12 +142,17 @@ def _task_query():
     query = Task.query
     role = _role_name()
     collaborator = current_user.collaborator
+
     if role in {"superadmin", "admin", "manager", "audit"}:
         return query
     if not collaborator:
         return query.filter(Task.id == -1)
 
-    own = or_(Task.assignee_id == collaborator.id, Task.collaborators.any(id=collaborator.id))
+    own = or_(
+        Task.assignee_id == collaborator.id,
+        Task.collaborators.any(id=collaborator.id),
+    )
+
     if role == "supervisor":
         ids = _team_ids()
         return query.filter(
@@ -150,7 +163,12 @@ def _task_query():
             )
         )
     if role == "advisor":
-        return query.filter(or_(own, Task.project.has(Project.client.has(Client.owner_id == collaborator.id))))
+        return query.filter(
+            or_(
+                own,
+                Task.project.has(Project.client.has(Client.owner_id == collaborator.id)),
+            )
+        )
     if role == "production":
         return query.filter(
             or_(
@@ -173,13 +191,7 @@ def _is_audit():
 @bp.route("/")
 @login_required
 def index():
-    default_start = date.today().replace(day=1)
-    default_end = date.today()
-    start_date = _parse_date(request.args.get("starts"), default_start)
-    end_date = _parse_date(request.args.get("ends"), default_end)
-    if end_date < start_date:
-        start_date, end_date = end_date, start_date
-
+    start_date, end_date = _requested_dates()
     start_dt = datetime.combine(start_date, datetime.min.time())
     end_dt = datetime.combine(end_date, datetime.max.time())
 
@@ -238,10 +250,16 @@ def index():
         ).count()
 
     if can_projects:
-        projects = _project_query().filter(Project.created_at >= start_dt, Project.created_at <= end_dt).count()
+        projects = _project_query().filter(
+            Project.created_at >= start_dt,
+            Project.created_at <= end_dt,
+        ).count()
 
     if can_printing:
-        print_orders = _print_query().filter(PrintOrder.created_at >= start_dt, PrintOrder.created_at <= end_dt).count()
+        print_orders = _print_query().filter(
+            PrintOrder.created_at >= start_dt,
+            PrintOrder.created_at <= end_dt,
+        ).count()
 
     if can_tasks:
         task_query = _task_query().filter(Task.created_at >= start_dt, Task.created_at <= end_dt)
@@ -276,6 +294,9 @@ def index():
 def export_csv():
     report = request.args.get("report", "sales")
     audit_role = _is_audit()
+    start_date, end_date = _requested_dates()
+    start_dt = datetime.combine(start_date, datetime.min.time())
+    end_dt = datetime.combine(end_date, datetime.max.time())
 
     if report == "sales" and not (current_user.has_permission("sales.view") or audit_role):
         abort(403)
@@ -294,8 +315,12 @@ def export_csv():
     writer = csv.writer(buffer)
 
     if report == "payments":
-        writer.writerow(["fecha", "cliente", "venta", "monto", "metodo", "estado"])
-        for payment in _payment_query().order_by(Payment.effective_date.desc()).all():
+        writer.writerow(["Fecha", "Cliente", "Venta", "Monto", "Método", "Estado"])
+        rows = _payment_query().filter(
+            Payment.effective_date >= start_date,
+            Payment.effective_date <= end_date,
+        ).order_by(Payment.effective_date.desc()).all()
+        for payment in rows:
             writer.writerow([
                 payment.effective_date,
                 payment.client.business_name,
@@ -304,9 +329,14 @@ def export_csv():
                 payment.method,
                 payment.status,
             ])
+
     elif report == "printing":
-        writer.writerow(["orden", "cliente", "estado", "proveedor", "costo", "venta"])
-        for order in _print_query().order_by(PrintOrder.id.desc()).all():
+        writer.writerow(["Orden", "Cliente", "Estado", "Proveedor", "Costo", "Venta"])
+        rows = _print_query().filter(
+            PrintOrder.created_at >= start_dt,
+            PrintOrder.created_at <= end_dt,
+        ).order_by(PrintOrder.id.desc()).all()
+        for order in rows:
             writer.writerow([
                 order.order_no,
                 order.client.business_name,
@@ -315,9 +345,14 @@ def export_csv():
                 order.total_cost,
                 order.total_sale,
             ])
+
     else:
-        writer.writerow(["venta", "fecha", "cliente", "asesor", "total", "pagado", "saldo"])
-        for sale in _sale_query().order_by(Sale.sale_date.desc()).all():
+        writer.writerow(["Venta", "Fecha", "Cliente", "Asesor", "Total", "Pagado", "Saldo"])
+        rows = _sale_query().filter(
+            Sale.sale_date >= start_date,
+            Sale.sale_date <= end_date,
+        ).order_by(Sale.sale_date.desc()).all()
+        for sale in rows:
             writer.writerow([
                 sale.sale_no,
                 sale.sale_date,
@@ -328,10 +363,18 @@ def export_csv():
                 sale.balance,
             ])
 
-    audit("exportar_reporte", report)
+    audit(
+        "exportar_reporte",
+        report,
+        after={"starts": start_date.isoformat(), "ends": end_date.isoformat()},
+    )
     db.session.commit()
     return Response(
-        buffer.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=reporte_{report}.csv"},
+        "\ufeff" + buffer.getvalue(),
+        mimetype="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=reporte_{report}_{start_date.isoformat()}_{end_date.isoformat()}.csv"
+            )
+        },
     )

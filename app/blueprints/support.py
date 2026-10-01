@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
-from flask_login import login_required, current_user
+from flask_login import current_user, login_required
 
 from app.extensions import db
 from app.helpers import audit, next_code
-from app.models import SupportTicket, TicketComment, Client, Collaborator
+from app.models import Client, Collaborator, SupportTicket, TicketComment
 
 bp = Blueprint("support", __name__, url_prefix="/support")
 
@@ -22,10 +22,14 @@ def _client_scope(query):
         return query.filter(Client.owner_id == collaborator.id)
 
     if role == "supervisor" and collaborator:
-        allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
+        allowed_ids = [collaborator.id] + [row.id for row in collaborator.subordinates]
         return query.filter(Client.owner_id.in_(allowed_ids))
 
     return query
+
+
+def _active_collaborators():
+    return Collaborator.query.filter_by(status="activo").order_by(Collaborator.id).all()
 
 
 @bp.route("/", methods=["GET", "POST"])
@@ -33,18 +37,24 @@ def _client_scope(query):
 def index():
     clients = (
         _client_scope(Client.query)
-        .filter_by(record_type="cliente")
+        .filter(Client.record_type == "cliente", Client.client_status != "archivado")
         .order_by(Client.business_name)
         .all()
     )
     visible_client_ids = {client.id for client in clients}
-    collaborators = Collaborator.query.filter_by(status="activo").all()
+    collaborators = _active_collaborators()
+    collaborator_ids = {row.id for row in collaborators}
 
     if request.method == "POST":
         client_id = request.form.get("client_id", type=int)
         client = db.session.get(Client, client_id) if client_id else None
-        if not client or client.record_type != "cliente" or client.id not in visible_client_ids:
+        if not client or client.id not in visible_client_ids:
             flash("Selecciona un cliente válido dentro de tu cartera autorizada.", "danger")
+            return redirect(url_for("support.index"))
+
+        responsible_id = request.form.get("responsible_id", type=int)
+        if responsible_id and responsible_id not in collaborator_ids:
+            flash("Selecciona un responsable activo válido.", "danger")
             return redirect(url_for("support.index"))
 
         priority = request.form.get("priority", "normal")
@@ -56,6 +66,7 @@ def index():
             ticket_type = "otro"
 
         subject = (request.form.get("subject") or "").strip() or "Solicitud"
+        description = (request.form.get("description") or "").strip() or None
         first_hours = {"baja": 24, "normal": 8, "alta": 4, "urgente": 1}[priority]
         resolve_hours = {"baja": 96, "normal": 48, "alta": 24, "urgente": 8}[priority]
 
@@ -63,12 +74,12 @@ def index():
             ticket_no=next_code("TCK", SupportTicket),
             client_id=client.id,
             ticket_type=ticket_type,
-            channel=request.form.get("channel", "interno"),
+            channel=(request.form.get("channel") or "interno").strip(),
             priority=priority,
-            responsible_id=request.form.get("responsible_id", type=int),
+            responsible_id=responsible_id,
             status="nuevo",
             subject=subject,
-            description=request.form.get("description"),
+            description=description,
             first_response_due=datetime.utcnow() + timedelta(hours=first_hours),
             resolution_due=datetime.utcnow() + timedelta(hours=resolve_hours),
         )
@@ -85,8 +96,9 @@ def index():
     if role == "advisor" and collaborator:
         ticket_query = ticket_query.filter(SupportTicket.client.has(owner_id=collaborator.id))
     elif role == "supervisor" and collaborator:
-        allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
+        allowed_ids = [collaborator.id] + [row.id for row in collaborator.subordinates]
         ticket_query = ticket_query.filter(SupportTicket.client.has(Client.owner_id.in_(allowed_ids)))
+
     tickets = ticket_query.order_by(SupportTicket.created_at.desc()).all()
     return render_template(
         "support/index.html",
@@ -101,11 +113,10 @@ def index():
 @login_required
 def detail(ticket_id):
     ticket = db.get_or_404(SupportTicket, ticket_id)
-    collaborators = Collaborator.query.filter_by(status="activo").all()
     return render_template(
         "support/detail.html",
         ticket=ticket,
-        collaborators=collaborators,
+        collaborators=_active_collaborators(),
         now=datetime.utcnow(),
     )
 
@@ -119,9 +130,17 @@ def update(ticket_id):
         flash("Estado de ticket no válido.", "danger")
         return redirect(url_for("support.detail", ticket_id=ticket.id))
 
+    responsible_id = request.form.get("responsible_id", type=int)
+    if responsible_id:
+        responsible = db.session.get(Collaborator, responsible_id)
+        if not responsible or responsible.status != "activo":
+            flash("El responsable seleccionado no existe o está inactivo.", "danger")
+            return redirect(url_for("support.detail", ticket_id=ticket.id))
+
     before = {"status": ticket.status, "responsible_id": ticket.responsible_id}
     ticket.status = new_status
-    ticket.responsible_id = request.form.get("responsible_id", type=int) or ticket.responsible_id
+    if responsible_id:
+        ticket.responsible_id = responsible_id
 
     if ticket.status in {"resuelto", "cerrado"} and not ticket.resolved_at:
         ticket.resolved_at = datetime.utcnow()
@@ -144,7 +163,7 @@ def update(ticket_id):
 @login_required
 def comment(ticket_id):
     ticket = db.get_or_404(SupportTicket, ticket_id)
-    body = request.form.get("body", "").strip()
+    body = (request.form.get("body") or "").strip()
     if not body:
         flash("Escribe un comentario antes de guardar.", "warning")
         return redirect(url_for("support.detail", ticket_id=ticket.id))
