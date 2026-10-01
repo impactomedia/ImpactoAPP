@@ -54,6 +54,14 @@ ENDPOINT_PERMISSIONS = {
     "clients.save_platform": "clients.edit",
     "clients.delete_platform": "clients.edit",
     "clients.update_contract": "clients.edit",
+    "clients.download_attachment": "clients.view",
+    "clients.update_attachment_meta": "clients.edit",
+    "clients.delete_attachment": "clients.edit",
+    "clients.add_installment": "sales.edit",
+    "clients.delete_installment": "sales.edit",
+    "clients.add_collection_note": "sales.edit",
+    "clients.collection_note_action": "sales.edit",
+    "clients.statement": "sales.view",
 
     # Ventas
     "sales.new_sale": "sales.create",

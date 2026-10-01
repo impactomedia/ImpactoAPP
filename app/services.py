@@ -19,7 +19,7 @@ from app.models import (
     Task,
     TaskTemplate,
 )
-from app.client_v2_models import ClientContractDetail
+from app.client_v2_models import ClientCollectionNote, ClientContractDetail, ClientInstallment
 
 
 def D(value):
@@ -35,6 +35,59 @@ def recalc_quote(quote):
     return quote
 
 
+def sync_installments_for_sale(sale):
+    """Distribuye pagos confirmados sobre las cuotas, de la más antigua a la más reciente.
+
+    No crea movimientos financieros nuevos: únicamente refleja el avance del plan de pago
+    usando como fuente de verdad los pagos confirmados de la venta.
+    """
+    installments = sorted(
+        list(getattr(sale, "installments", []) or []),
+        key=lambda row: (row.due_date or date.max, row.sequence or 0, row.id or 0),
+    )
+    if not installments:
+        return
+
+    confirmed_total = sum(
+        (D(payment.amount) for payment in sale.payments if payment.status == "confirmado"),
+        Decimal("0"),
+    )
+    baseline = D(installments[0].base_paid_amount) if installments else Decimal("0")
+    remaining = max(Decimal("0"), confirmed_total - baseline)
+    today = date.today()
+    for row in installments:
+        amount = max(Decimal("0"), D(row.amount))
+        applied = min(amount, max(Decimal("0"), remaining))
+        row.paid_amount = applied
+        remaining = max(Decimal("0"), remaining - applied)
+
+        if amount > 0 and applied >= amount:
+            row.status = "pagada"
+        elif applied > 0:
+            row.status = "parcial"
+        elif row.due_date and row.due_date < today:
+            row.status = "vencida"
+        else:
+            row.status = "pendiente"
+
+
+def sync_collection_notes_for_sale(sale):
+    """Actualiza promesas abiertas con base en el saldo real de la venta."""
+    notes = list(getattr(sale, "collection_notes", []) or [])
+    if not notes:
+        return
+    today = date.today()
+    for note in notes:
+        if note.note_type != "promesa" or note.status in {"cancelada", "cumplida"}:
+            continue
+        if D(sale.balance) <= 0:
+            note.status = "cumplida"
+        elif note.promise_date and note.promise_date < today:
+            note.status = "incumplida"
+        else:
+            note.status = "abierta"
+
+
 def recalc_sale(sale):
     sale.total = sum((D(i.total) for i in sale.items), Decimal("0"))
     confirmed = sum((D(p.amount) for p in sale.payments if p.status == "confirmado"), Decimal("0"))
@@ -47,12 +100,17 @@ def recalc_sale(sale):
         today = date.today()
         if sale.balance <= 0:
             receivable.status = "pagado"
+        elif receivable.promise_date and receivable.promise_date >= today:
+            receivable.status = "promesa_pago"
         elif receivable.due_date and receivable.due_date < today:
             receivable.status = "vencido"
         elif receivable.due_date and (receivable.due_date - today).days <= 7:
             receivable.status = "proximo_vencer"
         else:
             receivable.status = "al_dia"
+
+    sync_installments_for_sale(sale)
+    sync_collection_notes_for_sale(sale)
     recalc_commission(sale)
     return sale
 

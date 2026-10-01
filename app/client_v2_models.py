@@ -82,3 +82,82 @@ class ClientContractDetail(db.Model, TimestampMixin):
             cascade="all, delete-orphan",
         ),
     )
+
+
+class ClientInstallment(db.Model, TimestampMixin):
+    __tablename__ = "client_installments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
+    sale_id = db.Column(db.Integer, db.ForeignKey("sales.id"), nullable=False, index=True)
+    sequence = db.Column(db.Integer, nullable=False, default=1)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    paid_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    base_paid_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    due_date = db.Column(db.Date, nullable=False, index=True)
+    status = db.Column(db.String(30), nullable=False, default="pendiente", index=True)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    client = db.relationship(
+        "Client",
+        backref=db.backref("installments", cascade="all, delete-orphan"),
+    )
+    sale = db.relationship(
+        "Sale",
+        backref=db.backref("installments", cascade="all, delete-orphan"),
+    )
+    created_by = db.relationship("User")
+
+    __table_args__ = (
+        db.UniqueConstraint("sale_id", "sequence", name="uq_client_installment_sale_sequence"),
+    )
+
+
+class ClientCollectionNote(db.Model, TimestampMixin):
+    __tablename__ = "client_collection_notes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
+    sale_id = db.Column(db.Integer, db.ForeignKey("sales.id"), index=True)
+    receivable_id = db.Column(db.Integer, db.ForeignKey("accounts_receivable.id"), index=True)
+    note_type = db.Column(db.String(40), nullable=False, default="cobranza", index=True)
+    promised_amount = db.Column(db.Numeric(12, 2))
+    promise_date = db.Column(db.Date, index=True)
+    status = db.Column(db.String(30), nullable=False, default="abierta", index=True)
+    body = db.Column(db.Text, nullable=False)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    client = db.relationship(
+        "Client",
+        backref=db.backref("collection_notes", cascade="all, delete-orphan"),
+    )
+    sale = db.relationship(
+        "Sale",
+        backref=db.backref("collection_notes", cascade="all, delete-orphan"),
+    )
+    receivable = db.relationship("AccountReceivable", backref="collection_notes")
+    created_by = db.relationship("User")
+
+
+class ClientDocumentMeta(db.Model, TimestampMixin):
+    __tablename__ = "client_document_meta"
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
+    attachment_id = db.Column(db.Integer, db.ForeignKey("attachments.id"), nullable=False, unique=True, index=True)
+    category = db.Column(db.String(50), nullable=False, default="otros", index=True)
+    description = db.Column(db.String(255))
+
+    client = db.relationship(
+        "Client",
+        backref=db.backref("document_metadata", cascade="all, delete-orphan"),
+    )
+    attachment = db.relationship(
+        "Attachment",
+        backref=db.backref(
+            "client_document_meta",
+            uselist=False,
+            cascade="all, delete-orphan",
+        ),
+    )

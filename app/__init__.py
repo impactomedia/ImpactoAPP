@@ -67,8 +67,11 @@ def create_app(config_object=Config):
 
     @app.before_request
     def protect_uploaded_static_files():
-        # Los archivos cargados no deben quedar disponibles para visitantes anónimos
-        # aunque físicamente estén dentro del directorio static/uploads heredado.
+        # Los archivos de cliente se sirven únicamente mediante una ruta autorizada
+        # que valida acceso a la ficha. El resto de uploads heredados conserva su
+        # comportamiento actual para no romper comprobantes/diseños existentes.
+        if request.endpoint == "static" and request.path.startswith("/static/uploads/client_"):
+            abort(404)
         if (
             request.endpoint == "static"
             and request.path.startswith("/static/uploads/")

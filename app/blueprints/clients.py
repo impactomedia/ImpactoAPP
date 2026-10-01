@@ -1,17 +1,19 @@
 import csv
 import io
 import unicodedata
+from pathlib import Path
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, current_app, send_from_directory, abort
 from flask_login import login_required, current_user
 from sqlalchemy import or_
 
 from app.extensions import db
 from app.decorators import permission_required, roles_required
-from app.access_control import _project_allowed, _task_allowed
+from app.access_control import _commercial_client_allowed, _project_allowed, _task_allowed
 from app.helpers import audit, next_code, save_upload
+from app.services import recalc_sale
 from app.models import (
     Client,
     Collaborator,
@@ -39,6 +41,9 @@ from app.client_v2_models import (
     ClientOperationalProfile,
     ClientPlatform,
     ClientContractDetail,
+    ClientInstallment,
+    ClientCollectionNote,
+    ClientDocumentMeta,
 )
 
 bp = Blueprint("clients", __name__, url_prefix="/clients")
@@ -62,6 +67,20 @@ PLATFORM_DEFINITIONS = {
     "yelp": "Yelp",
     "yellow_pages": "Yellow Pages",
 }
+
+DOCUMENT_CATEGORIES = {
+    "administrativo": "Administrativo",
+    "contrato": "Contrato / acuerdo",
+    "branding": "Branding / logotipo",
+    "website": "Website / dominio",
+    "redes_sociales": "Redes sociales",
+    "seo": "SEO / Google",
+    "imprenta": "Imprenta",
+    "comprobante": "Comprobante de pago",
+    "otros": "Otros",
+}
+COLLECTION_NOTE_TYPES = {"cobranza", "promesa", "acuerdo", "seguimiento", "interno"}
+COLLECTION_NOTE_STATUSES = {"abierta", "cumplida", "incumplida", "cancelada"}
 
 
 def _normalize_text(value):
@@ -402,6 +421,13 @@ def detail(client_id):
             title,
             f"{comment_detail} — {comment.body}" if comment_detail else comment.body,
         ))
+
+    if can_financial:
+        for note in client.collection_notes:
+            detail = note.body
+            if note.promise_date:
+                detail = f"{detail} · Compromiso {note.promise_date}"
+            timeline.append((note.created_at, "Cobranza", note.note_type.replace("_", " ").title(), detail))
 
     timeline.sort(key=lambda x: x[0] or date.min, reverse=True)
     attachments = Attachment.query.filter_by(entity_type="Client", entity_id=client.id).order_by(Attachment.created_at.desc()).all()
@@ -1126,22 +1152,313 @@ def upload_attachment(client_id):
     uploaded = request.files.get("file")
     if not uploaded:
         flash("Selecciona un archivo.", "danger")
-        return redirect(url_for("clients.detail", client_id=client.id))
+        return redirect(url_for("clients.detail", client_id=client.id) + "#archivos")
+
+    category = (request.form.get("category") or "otros").strip()
+    if category not in DOCUMENT_CATEGORIES:
+        category = "otros"
+    description = (request.form.get("description") or "").strip()[:255] or None
+
     try:
         path = save_upload(uploaded, prefix=f"client_{client.id}")
     except ValueError as exc:
         flash(str(exc), "danger")
-        return redirect(url_for("clients.detail", client_id=client.id))
+        return redirect(url_for("clients.detail", client_id=client.id) + "#archivos")
+
+    attachment = Attachment(
+        entity_type="Client",
+        entity_id=client.id,
+        file_name=uploaded.filename,
+        file_path=path,
+        uploaded_by_id=current_user.id,
+    )
+    db.session.add(attachment)
+    db.session.flush()
     db.session.add(
-        Attachment(
-            entity_type="Client",
-            entity_id=client.id,
-            file_name=uploaded.filename,
-            file_path=path,
-            uploaded_by_id=current_user.id,
+        ClientDocumentMeta(
+            client_id=client.id,
+            attachment_id=attachment.id,
+            category=category,
+            description=description,
         )
     )
-    audit("subir_archivo_cliente", "Client", client.id, after={"file": uploaded.filename})
+    audit(
+        "subir_archivo_cliente",
+        "Client",
+        client.id,
+        after={"file": uploaded.filename, "category": category},
+    )
     db.session.commit()
-    flash("Archivo agregado a la ficha.", "success")
-    return redirect(url_for("clients.detail", client_id=client.id))
+    flash("Archivo agregado y categorizado en la ficha.", "success")
+    return redirect(url_for("clients.detail", client_id=client.id) + "#archivos")
+
+
+@bp.route("/<int:client_id>/attachments/<int:attachment_id>/download")
+@login_required
+def download_attachment(client_id, attachment_id):
+    client = db.get_or_404(Client, client_id)
+    if not current_user.has_permission("clients.view") or not _commercial_client_allowed(client):
+        abort(403)
+
+    attachment = db.get_or_404(Attachment, attachment_id)
+    if attachment.entity_type != "Client" or attachment.entity_id != client.id:
+        abort(404)
+
+    filename = Path(attachment.file_path or "").name
+    if not filename:
+        abort(404)
+    return send_from_directory(
+        current_app.config["UPLOAD_FOLDER"],
+        filename,
+        as_attachment=False,
+        download_name=attachment.file_name,
+    )
+
+
+@bp.route("/<int:client_id>/attachments/<int:attachment_id>/meta", methods=["POST"])
+@login_required
+def update_attachment_meta(client_id, attachment_id):
+    client = db.get_or_404(Client, client_id)
+    attachment = db.get_or_404(Attachment, attachment_id)
+    if attachment.entity_type != "Client" or attachment.entity_id != client.id:
+        abort(404)
+
+    category = (request.form.get("category") or "otros").strip()
+    if category not in DOCUMENT_CATEGORIES:
+        category = "otros"
+    description = (request.form.get("description") or "").strip()[:255] or None
+
+    meta = ClientDocumentMeta.query.filter_by(attachment_id=attachment.id).first()
+    if not meta:
+        meta = ClientDocumentMeta(client_id=client.id, attachment_id=attachment.id)
+        db.session.add(meta)
+    meta.category = category
+    meta.description = description
+    audit(
+        "editar_metadatos_archivo_cliente",
+        "Attachment",
+        attachment.id,
+        after={"category": category, "description": description},
+    )
+    db.session.commit()
+    flash("Datos del archivo actualizados.", "success")
+    return redirect(url_for("clients.detail", client_id=client.id) + "#archivos")
+
+
+@bp.route("/<int:client_id>/attachments/<int:attachment_id>/delete", methods=["POST"])
+@login_required
+def delete_attachment(client_id, attachment_id):
+    client = db.get_or_404(Client, client_id)
+    attachment = db.get_or_404(Attachment, attachment_id)
+    if attachment.entity_type != "Client" or attachment.entity_id != client.id:
+        abort(404)
+
+    disk_path = Path(current_app.config["UPLOAD_FOLDER"]) / Path(attachment.file_path or "").name
+    if disk_path.is_file():
+        try:
+            disk_path.unlink()
+        except OSError:
+            current_app.logger.warning("No se pudo eliminar el archivo físico %s", disk_path)
+
+    audit("eliminar_archivo_cliente", "Attachment", attachment.id, before={"file": attachment.file_name})
+    db.session.delete(attachment)
+    db.session.commit()
+    flash("Archivo eliminado de la ficha.", "warning")
+    return redirect(url_for("clients.detail", client_id=client.id) + "#archivos")
+
+
+def _sale_for_client_or_404(client, sale_id):
+    sale = db.get_or_404(Sale, sale_id)
+    if sale.client_id != client.id:
+        abort(404)
+    return sale
+
+
+@bp.route("/<int:client_id>/installments", methods=["POST"])
+@login_required
+def add_installment(client_id):
+    client = db.get_or_404(Client, client_id)
+    sale_id = request.form.get("sale_id", type=int)
+    if not sale_id:
+        flash("Selecciona una venta para registrar la cuota.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+    sale = _sale_for_client_or_404(client, sale_id)
+
+    amount = _decimal_or_none(request.form.get("amount"))
+    due_date = _date_or_none(request.form.get("due_date"))
+    if amount is None or amount <= 0 or not due_date:
+        flash("La cuota requiere monto mayor que cero y fecha de vencimiento válida.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+
+    recalc_sale(sale)
+    scheduled_outstanding = sum(
+        (Decimal(str(row.amount or 0)) - Decimal(str(row.paid_amount or 0)) for row in sale.installments),
+        Decimal("0"),
+    )
+    remaining_to_schedule = max(Decimal("0"), Decimal(str(sale.balance or 0)) - scheduled_outstanding)
+    if amount > remaining_to_schedule:
+        flash(
+            f"La cuota excede el saldo aún no programado de {sale.currency} {remaining_to_schedule:,.2f}.",
+            "danger",
+        )
+        return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+
+    sequence = max([row.sequence or 0 for row in sale.installments] or [0]) + 1
+    baseline_paid = (
+        Decimal(str(sale.installments[0].base_paid_amount or 0))
+        if sale.installments
+        else Decimal(str(sale.amount_paid or 0))
+    )
+    row = ClientInstallment(
+        client_id=client.id,
+        sale_id=sale.id,
+        sequence=sequence,
+        amount=amount,
+        paid_amount=0,
+        base_paid_amount=baseline_paid,
+        due_date=due_date,
+        status="vencida" if due_date < date.today() else "pendiente",
+        notes=(request.form.get("notes") or "").strip() or None,
+        created_by_id=current_user.id,
+    )
+    db.session.add(row)
+    db.session.flush()
+    recalc_sale(sale)
+    audit(
+        "crear_cuota_cliente",
+        "ClientInstallment",
+        row.id,
+        after={"sale_id": sale.id, "amount": str(amount), "due_date": str(due_date)},
+    )
+    db.session.commit()
+    flash("Cuota agregada al plan de pago.", "success")
+    return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+
+
+@bp.route("/<int:client_id>/installments/<int:installment_id>/delete", methods=["POST"])
+@login_required
+def delete_installment(client_id, installment_id):
+    client = db.get_or_404(Client, client_id)
+    row = db.get_or_404(ClientInstallment, installment_id)
+    if row.client_id != client.id:
+        abort(404)
+    if Decimal(str(row.paid_amount or 0)) > 0:
+        flash("No se puede eliminar una cuota que ya tiene pagos aplicados.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+
+    sale = row.sale
+    audit("eliminar_cuota_cliente", "ClientInstallment", row.id, before={"amount": str(row.amount)})
+    db.session.delete(row)
+    db.session.flush()
+    recalc_sale(sale)
+    db.session.commit()
+    flash("Cuota eliminada del plan de pago.", "warning")
+    return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+
+
+@bp.route("/<int:client_id>/collection-notes", methods=["POST"])
+@login_required
+def add_collection_note(client_id):
+    client = db.get_or_404(Client, client_id)
+    note_type = (request.form.get("note_type") or "cobranza").strip()
+    if note_type not in COLLECTION_NOTE_TYPES:
+        note_type = "cobranza"
+    body = (request.form.get("body") or "").strip()
+    if not body:
+        flash("La nota de cobranza no puede estar vacía.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+
+    sale_id = request.form.get("sale_id", type=int)
+    sale = _sale_for_client_or_404(client, sale_id) if sale_id else None
+    promised_amount = _decimal_or_none(request.form.get("promised_amount"))
+    promise_date = _date_or_none(request.form.get("promise_date"))
+
+    if promised_amount is not None and promised_amount < 0:
+        flash("El monto prometido no puede ser negativo.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+    if note_type == "promesa" and (not sale or not promise_date or promised_amount is None or promised_amount <= 0):
+        flash("Una promesa requiere venta, monto prometido y fecha de compromiso.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+    if sale and promised_amount is not None and promised_amount > Decimal(str(sale.balance or 0)):
+        flash("El monto prometido no puede superar el saldo de la venta.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+
+    receivable = sale.receivable if sale else None
+    row = ClientCollectionNote(
+        client_id=client.id,
+        sale_id=sale.id if sale else None,
+        receivable_id=receivable.id if receivable else None,
+        note_type=note_type,
+        promised_amount=promised_amount,
+        promise_date=promise_date,
+        status="abierta",
+        body=body,
+        created_by_id=current_user.id,
+    )
+    db.session.add(row)
+    if note_type == "promesa" and receivable:
+        receivable.promise_date = promise_date
+        receivable.status = "promesa_pago"
+    if sale:
+        recalc_sale(sale)
+    db.session.flush()
+    audit(
+        "nota_cobranza_cliente",
+        "ClientCollectionNote",
+        row.id,
+        after={"type": note_type, "sale_id": sale.id if sale else None, "promise_date": str(promise_date) if promise_date else None},
+    )
+    db.session.commit()
+    flash("Seguimiento de cobranza registrado.", "success")
+    return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+
+
+@bp.route("/<int:client_id>/collection-notes/<int:note_id>/<action>", methods=["POST"])
+@login_required
+def collection_note_action(client_id, note_id, action):
+    client = db.get_or_404(Client, client_id)
+    row = db.get_or_404(ClientCollectionNote, note_id)
+    if row.client_id != client.id:
+        abort(404)
+    target = {"complete": "cumplida", "miss": "incumplida", "cancel": "cancelada"}.get(action)
+    if not target:
+        abort(404)
+    row.status = target
+    if row.note_type == "promesa" and row.receivable and row.receivable.promise_date == row.promise_date:
+        other_open = ClientCollectionNote.query.filter(
+            ClientCollectionNote.receivable_id == row.receivable_id,
+            ClientCollectionNote.id != row.id,
+            ClientCollectionNote.note_type == "promesa",
+            ClientCollectionNote.status == "abierta",
+        ).order_by(ClientCollectionNote.promise_date.desc()).first()
+        row.receivable.promise_date = other_open.promise_date if other_open else None
+    if row.sale:
+        recalc_sale(row.sale)
+    audit("actualizar_nota_cobranza", "ClientCollectionNote", row.id, after={"status": target})
+    db.session.commit()
+    flash("Estado del seguimiento actualizado.", "success")
+    return redirect(url_for("clients.detail", client_id=client.id) + "#cobranza")
+
+
+@bp.route("/<int:client_id>/statement")
+@login_required
+def statement(client_id):
+    client = db.get_or_404(Client, client_id)
+    if not (current_user.has_permission("sales.view") or current_user.has_permission("finance.view")):
+        abort(403)
+    if not _commercial_client_allowed(client):
+        abort(403)
+
+    sales = sorted(client.sales, key=lambda row: (row.sale_date or date.min, row.id), reverse=True)
+    payments = sorted(client.payments, key=lambda row: (row.effective_date or date.min, row.id), reverse=True)
+    installments = sorted(client.installments, key=lambda row: (row.due_date or date.max, row.sequence or 0))
+    notes = sorted(client.collection_notes, key=lambda row: row.created_at or datetime.min, reverse=True)
+    return render_template(
+        "clients/statement.html",
+        client=client,
+        sales=sales,
+        payments=payments,
+        installments=installments,
+        collection_notes=notes,
+        generated_at=datetime.now(),
+    )

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.0 — Clientes V2 · Fase 2
+
+- Nuevo plan de cuotas por venta dentro de la ficha del cliente, con monto, vencimiento, saldo aplicado y estado automático.
+- Los pagos confirmados se distribuyen automáticamente entre las cuotas programadas y las reversas recalculan el plan sin duplicar movimientos.
+- Las cuotas creadas después de un pago inicial conservan una línea base para no reaplicar dinero cobrado anteriormente.
+- Nuevo historial de cobranza con notas, acuerdos y promesas de pago vinculables a una venta/cuenta por cobrar.
+- Las promesas pueden marcarse como cumplidas, incumplidas o canceladas y actualizan la cuenta por cobrar.
+- Nuevo estado de cuenta imprimible desde la ficha con ventas, pagos confirmados, cuotas y seguimientos de cobranza.
+- Documentos del cliente categorizados: administrativo, contratos, branding, website, redes, SEO/Google, imprenta, comprobantes y otros.
+- Los archivos de cliente dejan de abrirse mediante URL directa de `static/uploads/client_*`; se descargan mediante una ruta que valida acceso a la ficha.
+- Metadatos editables para documentos y opción de eliminar archivos desde la ficha.
+- Script MySQL-safe e idempotente `python -m scripts.upgrade_clients_v2_phase2` para crear las tablas nuevas y categorizar archivos históricos como “Otros”.
+- Nueva batería `tests/test_clients_v2_phase2.py` para cuotas, asignación automática de pagos, promesas, documentos y permisos.
+
 ## 1.4.0 — Clientes V2 · Fase 1
 
 - Nueva ficha operativa de cliente organizada por pestañas: Resumen, Datos, Compras, Servicios, Pagos, Operaciones, Plataformas, Equipo, Archivos e Historial.
