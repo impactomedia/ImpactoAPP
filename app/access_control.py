@@ -299,11 +299,6 @@ def _enforce_record_scope(endpoint):
         if client is not None and not _commercial_client_allowed(client):
             abort(403)
 
-    # Producción trabaja desde la vista operativa V3 de clientes.
-    # La ficha comercial completa queda fuera de su alcance.
-    if request.blueprint == "clients" and role == "production":
-        abort(403)
-
     # Clientes: las rutas por ID respetan la misma cartera comercial.
     if request.blueprint == "clients" and "client_id" in args:
         from app.models import Client
