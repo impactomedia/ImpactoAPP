@@ -385,6 +385,7 @@ def _close_replaced_principal(contract):
                 f"pagado real USD {actual_paid:,.2f}."
             ).strip()
             sale.receivable.total_amount = actual_paid
+            sale.receivable.paid_amount = actual_paid
             sale.receivable.due_date = None
             sale.receivable.promise_date = None
         for row in getattr(sale, "installments", []) or []:

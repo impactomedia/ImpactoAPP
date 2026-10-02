@@ -1,9 +1,7 @@
-# Impacto Nexora v1.9.1 — Hotfix Bloque 2
+# Impacto Nexora v1.9.2 — Hotfix final Bloque 2
 
-Corrige únicamente los dos fallos detectados por GitHub Actions en v1.9.0.
-
-- Cuenta histórica del plan sustituido: usa el pago real de la venta al cerrar el saldo.
-- Prueba legacy de contratos: ahora valida un servicio complementario y no intenta crear un paquete principal por la ruta antigua.
+Corrige el único fallo restante detectado por GitHub Actions en v1.9.1:
+la cuenta histórica del plan sustituido ahora sincroniza tanto total_amount como paid_amount con el dinero realmente pagado.
 
 No requiere migración.
 Pre-Deploy: vacío.

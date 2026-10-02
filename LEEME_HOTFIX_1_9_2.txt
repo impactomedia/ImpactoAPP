@@ -1,0 +1,7 @@
+IMPACTO NEXORA v1.9.2 — HOTFIX FINAL BLOQUE 2
+
+Reemplaza los archivos respetando sus rutas y sube a GitHub.
+
+NO hay migración.
+NO cambies Railway Pre-Deploy.
+NO cambies Start Command.
