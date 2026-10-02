@@ -1,25 +1,8 @@
-# Impacto Nexora 1.8.1 — Bloque 1
+# Impacto Nexora v1.8.2 — Hotfix
 
-## Objetivo
-Alinear el sistema con la regla comercial real de Impacto Media:
+Corrige los fallos de CI detectados en v1.8.0 y v1.8.1.
 
-**Seguimiento → compra confirmada → Cliente Activo**
-
-## Cambios principales
-- Alta manual únicamente como Seguimiento.
-- La venta es el evento que convierte el registro en Cliente.
-- La conversión conserva el mismo `Client.id` y todo el historial de CRM.
-- Ventas y cotizaciones nuevas usan únicamente USD.
-- Los registros manuales se fijan a USA.
-- Los botones de “Convertir a cliente” del CRM se reemplazan por “Registrar compra”.
-- Nueva Venta lista Seguimientos y Clientes y puede abrirse preseleccionando un seguimiento desde CRM.
-
-## Compatibilidad
-- No borra ni migra clientes existentes.
-- No modifica ventas ni pagos históricos.
-- No cambia el esquema de la base de datos.
-- Los clientes importados previamente continúan funcionando.
-
-## Railway
-No agregues ningún comando a **Pre-Deploy** ni a **Start Command** para esta versión.
-El Dockerfile actual debe seguir iniciando Gunicorn normalmente.
+- `app/services.py`: sincroniza inmediatamente el pago con la relación ORM de la venta.
+- `tests/test_roles_permissions.py`: separa Seguimiento y Cliente en la prueba de alcance.
+- Sin migración de base de datos.
+- Railway: Pre-Deploy vacío; no cambiar Start Command.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.2 — Hotfix de pagos y pruebas de alcance
+
+- Corregida la sincronización inmediata entre un pago recién creado y `sale.payments`, evitando que `amount_paid` y `balance` quedaran desactualizados al crear una venta con pago inicial.
+- La corrección aplica a todos los flujos que usan `add_payment()`.
+- Ajustada la prueba de permisos para representar por separado Seguimientos y Clientes conforme al ciclo comercial de Impacto Nexora.
+- No hay cambios de esquema ni migración de base de datos.
+
 ## 1.8.1 — Impacto Nexora · Bloque 1: Seguimiento → Cliente + USA/USD
 
 - Todo registro manual nuevo inicia como **Seguimiento** en CRM; `/clients/new` redirige al alta de seguimiento.

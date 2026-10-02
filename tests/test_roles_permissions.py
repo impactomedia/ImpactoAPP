@@ -189,9 +189,11 @@ def test_advisor_cannot_open_another_advisors_crm_or_sale(client, app):
         db.session.add(other_advisor)
         db.session.flush()
 
-        own_client = Client(code="CLI-OWN", business_name="Cliente propio", contact_name="Contacto", owner_id=advisor.id, record_type="seguimiento")
-        other_client = Client(code="CLI-OTHER", business_name="Cliente ajeno", contact_name="Contacto", owner_id=other_advisor.id, record_type="seguimiento")
-        db.session.add_all([own_client, other_client])
+        own_followup = Client(code="SEG-OWN", business_name="Seguimiento propio", contact_name="Contacto", owner_id=advisor.id, record_type="seguimiento")
+        other_followup = Client(code="SEG-OTHER", business_name="Seguimiento ajeno", contact_name="Contacto", owner_id=other_advisor.id, record_type="seguimiento")
+        own_client = Client(code="CLI-OWN", business_name="Cliente propio", contact_name="Contacto", owner_id=advisor.id, record_type="cliente", pipeline_stage="venta_cerrada", client_status="activo")
+        other_client = Client(code="CLI-OTHER", business_name="Cliente ajeno", contact_name="Contacto", owner_id=other_advisor.id, record_type="cliente", pipeline_stage="venta_cerrada", client_status="activo")
+        db.session.add_all([own_followup, other_followup, own_client, other_client])
         db.session.flush()
 
         own_sale = Sale(sale_no="VEN-OWN", client_id=own_client.id, advisor_id=advisor.id, sale_date=date.today(), total=100, amount_paid=0, balance=100)
@@ -199,14 +201,16 @@ def test_advisor_cannot_open_another_advisors_crm_or_sale(client, app):
         db.session.add_all([own_sale, other_sale])
         db.session.commit()
 
+        own_followup_id = own_followup.id
+        other_followup_id = other_followup.id
         own_client_id = own_client.id
         other_client_id = other_client.id
         own_sale_id = own_sale.id
         other_sale_id = other_sale.id
 
     _login(client, "advisor")
-    assert client.get(f"/crm/{own_client_id}", follow_redirects=False).status_code == 200
-    assert client.get(f"/crm/{other_client_id}", follow_redirects=False).status_code == 403
+    assert client.get(f"/crm/{own_followup_id}", follow_redirects=False).status_code == 200
+    assert client.get(f"/crm/{other_followup_id}", follow_redirects=False).status_code == 403
     assert client.get(f"/clients/{own_client_id}", follow_redirects=False).status_code == 200
     assert client.get(f"/clients/{other_client_id}", follow_redirects=False).status_code == 403
     assert client.get(f"/sales/{own_sale_id}", follow_redirects=False).status_code == 200

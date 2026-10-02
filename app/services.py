@@ -200,7 +200,7 @@ def add_payment(
 
     payment = Payment(
         client_id=sale.client_id,
-        sale_id=sale.id,
+        sale=sale,
         effective_date=effective_date or date.today(),
         amount=amount,
         currency=sale.currency,
