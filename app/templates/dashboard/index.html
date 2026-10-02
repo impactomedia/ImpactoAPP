@@ -1,6 +1,7 @@
 {% extends "app_base.html" %}
 {% block title %}Inicio | Impacto Manager{% endblock %}
 {% block app_content %}
+{% set role_name = current_user.role.name if current_user.role else '' %}
 <div class="page-heading">
   <div>
     <span class="eyebrow">Panel principal</span>
@@ -31,7 +32,10 @@
       <div class="panel-header">
         <div><h2>Registros recientes</h2><p>Últimos registros a los que tienes acceso.</p></div>
         <div class="d-flex gap-2">
-          {% if current_user.has_permission('clients.view') %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients_v3.mine') }}">Mis clientes</a><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.index') }}">Ver todos</a>{% endif %}
+          {% if current_user.has_permission('clients.view') %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients_v3.mine') }}">Mis clientes</a>
+          {% if role_name != 'production' %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.index') }}">Ver todos</a>{% endif %}
+          {% endif %}
         </div>
       </div>
       <div class="table-responsive">
@@ -46,7 +50,11 @@
               <td>{{ c.owner.user.name if c.owner else 'Sin asignar' }}</td>
               <td>
                 {% if c.record_type == 'cliente' and current_user.has_permission('clients.view') %}
+                  {% if role_name == 'production' %}
+                  <a class="btn btn-sm btn-light border" href="{{ url_for('clients_v3.coordination', client_id=c.id) }}">Abrir</a>
+                  {% else %}
                   <a class="btn btn-sm btn-light border" href="{{ url_for('clients.detail', client_id=c.id) }}">Abrir</a>
+                  {% endif %}
                 {% elif c.record_type != 'cliente' and current_user.has_permission('crm.view') %}
                   <a class="btn btn-sm btn-light border" href="{{ url_for('crm.detail', client_id=c.id) }}">Abrir</a>
                 {% endif %}

@@ -6,7 +6,7 @@
     <section class="panel-card mb-4">
       <div class="d-flex justify-content-between"><div><h2 class="h5">Estado operativo</h2><p>{{ project.status|label }}</p></div><div class="display-6">{{ project.progress }}%</div></div>
       <div class="progress mb-3"><div class="progress-bar" style="width:{{ project.progress }}%"></div></div>
-      {% if current_user.has_permission('projects.edit') %}
+      {% if current_user.has_permission('projects.progress') %}
       <form method="post" action="{{ url_for('operations.update_project', project_id=project.id) }}" class="row g-2">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="col-md-5"><select name="status" class="form-select">{% for s in project_states %}<option value="{{ s }}" {% if s==project.status %}selected{% endif %}>{{ s|label }}</option>{% endfor %}</select></div>
@@ -37,7 +37,7 @@
       {% endif %}
     </section>
 
-    {% if current_user.has_permission('projects.edit') %}
+    {% if current_user.has_permission('projects.progress') %}
     <section class="panel-card"><h2 class="h5">Solicitud de cambio</h2><form method="post" action="{{ url_for('operations.change_request', project_id=project.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="title" class="form-control mb-2" placeholder="Título" required><textarea name="description" class="form-control mb-2" placeholder="Detalle"></textarea><select name="scope_class" class="form-select mb-2"><option value="incluida">Incluida</option><option value="cortesia">Cortesía</option><option value="adicional">Cotización adicional</option></select><button class="btn btn-dark w-100">Registrar</button></form></section>
     {% endif %}
   </div>

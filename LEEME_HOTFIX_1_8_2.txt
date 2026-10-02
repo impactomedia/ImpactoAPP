@@ -1,7 +1,0 @@
-IMPACTO NEXORA v1.8.2 — HOTFIX
-
-Reemplaza los archivos incluidos respetando sus rutas y sube los cambios a GitHub.
-
-No requiere migración.
-No agregues Pre-Deploy.
-No cambies el Start Command de Railway.

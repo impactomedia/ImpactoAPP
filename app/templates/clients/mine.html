@@ -1,13 +1,16 @@
 {% extends "app_base.html" %}
 {% block title %}Mis clientes | Impacto Manager{% endblock %}
 {% block app_content %}
+{% set role_name = current_user.role.name if current_user.role else '' %}
 <div class="page-heading">
   <div>
     <span class="eyebrow">Clientes V2 · Fase 3</span>
     <h1>Mis clientes</h1>
     <p>Clientes vinculados a tu cartera comercial o a tu equipo operativo activo.</p>
   </div>
+  {% if role_name != 'production' %}
   <div class="d-flex gap-2"><a class="btn btn-light border" href="{{ url_for('clients.index') }}">Todos los clientes</a></div>
+  {% endif %}
 </div>
 
 <div class="metric-grid mb-4">

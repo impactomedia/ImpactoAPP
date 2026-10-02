@@ -68,6 +68,8 @@ def _assignable_collaborators():
 def _full_detail_ids(clients):
     role = _role_name()
     collaborator = current_user.collaborator
+    if role == "production":
+        return set()
     if role == "advisor" and collaborator:
         return {client.id for client in clients if client.owner_id == collaborator.id}
     if role == "supervisor" and collaborator:
@@ -181,7 +183,9 @@ def coordination(client_id):
 
     role = _role_name()
     collaborator = current_user.collaborator
-    if role == "advisor" and collaborator:
+    if role == "production":
+        can_open_full_detail = False
+    elif role == "advisor" and collaborator:
         can_open_full_detail = client.owner_id == collaborator.id
     elif role == "supervisor" and collaborator:
         allowed_owner_ids = {collaborator.id, *(row.id for row in collaborator.subordinates)}

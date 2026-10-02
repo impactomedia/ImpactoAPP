@@ -4,6 +4,7 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, u
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 
+from app.access_control import _task_write_allowed
 from app.extensions import db
 from app.helpers import audit, next_code
 from app.models import ChangeRequest, Client, Collaborator, Project, Task, TaskComment
@@ -45,6 +46,8 @@ def _visible_projects_query():
     collaborator = current_user.collaborator
 
     if not collaborator:
+        if role in {"advisor", "supervisor", "production"}:
+            return query.filter(Project.id == -1)
         return query
 
     if role == "advisor":
@@ -197,10 +200,6 @@ def new_project():
         name = (request.form.get("name") or "").strip()
         status = request.form.get("status", "pendiente_onboarding")
         coordinator_id = request.form.get("coordinator_id", type=int)
-        if _role_name() == "production" and current_user.collaborator:
-            # Producción solo puede crear proyectos quedando asignado como coordinador,
-            # para evitar crear un proyecto que luego quede fuera de su propio alcance.
-            coordinator_id = current_user.collaborator.id
 
         if not client_id or client_id not in visible_client_ids:
             abort(403)
@@ -421,12 +420,17 @@ def task_detail(task_id):
     task = db.get_or_404(Task, task_id)
     can_reassign = _can_reassign_tasks()
     collaborators = _assignable_collaborators() if can_reassign else []
+    can_update_task = (
+        current_user.has_permission("tasks.update")
+        and _task_write_allowed(task)
+    )
     return render_template(
         "operations/task_detail.html",
         task=task,
         collaborators=collaborators,
         states=TASK_STATES,
         can_reassign=can_reassign,
+        can_update_task=can_update_task,
     )
 
 

@@ -21,6 +21,10 @@ def _client_scope(query):
         allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
         return query.filter(Client.owner_id.in_(allowed_ids))
 
+    if role == "production":
+        allowed_ids = [row[0] for row in my_clients_query().with_entities(Client.id).all()]
+        return query.filter(Client.id.in_(allowed_ids or [-1]))
+
     return query
 
 
@@ -80,7 +84,12 @@ def index():
 
     client_query = _client_scope(Client.query)
 
-    total_clients = client_query.filter_by(record_type="cliente").count() if can_clients else None
+    role_name = current_user.role.name if current_user.role else ""
+    total_clients = (
+        client_query.filter_by(record_type="cliente").count()
+        if can_clients and role_name != "production"
+        else None
+    )
     followups = client_query.filter_by(record_type="seguimiento").count() if can_crm else None
     my_clients_count = my_clients_query().count() if can_clients else None
 

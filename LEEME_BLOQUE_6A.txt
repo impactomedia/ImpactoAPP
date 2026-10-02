@@ -1,0 +1,59 @@
+IMPACTO APP / IMPACTO NEXORA
+BLOQUE 6A - PERMISOS ASESOR Y DESARROLLO
+==========================================
+
+ESTA CARPETA FUNCIONA IGUAL QUE LOS BLOQUES ANTERIORES.
+NO HAY QUE APLICAR PARCHES NI EJECUTAR INSTALADORES.
+
+QUE HACER
+---------
+1. Abre esta carpeta.
+2. Copia las carpetas "app" y "scripts" sobre la raiz de tu proyecto ImpactoAPP.
+3. Cuando Windows pregunte, selecciona REEMPLAZAR LOS ARCHIVOS EN EL DESTINO.
+4. Sube los cambios a GitHub como lo hemos venido haciendo.
+5. Vuelve a desplegar la aplicacion.
+
+NO HAY MIGRACION DE BASE DE DATOS EN ESTE BLOQUE.
+El despliegue actual ejecuta scripts.init_db y seed_all(), por lo que los permisos nuevos
+se crean/actualizan automaticamente al volver a desplegar.
+
+ARCHIVOS COMPLETOS QUE SE REEMPLAZAN
+-------------------------------------
+app/access_control.py
+app/blueprints/clients_v3.py
+app/blueprints/dashboard.py
+app/blueprints/operations.py
+app/templates/app_base.html
+app/templates/clients/mine.html
+app/templates/dashboard/index.html
+app/templates/operations/project_detail.html
+app/templates/operations/task_detail.html
+scripts/seed.py
+
+QUE CAMBIA EN BLOQUE 6A
+-----------------------
+ASESOR COMERCIAL
+- Mantiene CRM, seguimientos, clientes, ventas y pagos de su cartera.
+- Puede consultar proyectos y tareas para ver progreso.
+- Ya no puede crear, reasignar ni actualizar tareas tecnicas.
+- Imprenta y soporte quedan en modo consulta para el asesor.
+
+DESARROLLO / PRODUCCION
+- Trabaja desde Mis clientes, Proyectos y Tareas.
+- No entra a CRM, ventas, pagos, finanzas ni ficha comercial completa.
+- Solo ve proyectos asignados como coordinador o miembro.
+- Puede actualizar estado/progreso de proyectos asignados.
+- Puede ver tareas del trabajo asignado.
+- Solo puede actualizar/comentar tareas realmente asignadas a el.
+- No puede crear proyectos ni crear/reasignar tareas.
+
+SEGURIDAD
+---------
+- La ficha comercial completa de /clients queda bloqueada para Produccion.
+- Produccion usa el Centro de coordinacion / Mis clientes, que ya filtra su alcance.
+- El dashboard y la busqueda respetan el alcance operativo de Produccion.
+
+SIGUIENTE PASO
+--------------
+Bloque 6B: Panel del Encargado / Coordinador de Desarrollo para asignar y reasignar,
+supervisar carga, prioridades, fechas, vencimientos, entregables y progreso.

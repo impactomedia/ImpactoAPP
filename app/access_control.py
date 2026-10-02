@@ -132,15 +132,15 @@ OPERATIONS_ENDPOINT_PERMISSIONS = {
     "operations.projects": "projects.view",
     "operations.project_detail": "projects.view",
     "operations.new_project": "projects.edit",
-    "operations.update_project": "projects.edit",
+    "operations.update_project": "projects.progress",
     "operations.add_project_member": "projects.edit",
-    "operations.change_request": "projects.edit",
+    "operations.change_request": "projects.progress",
     "operations.tasks": "tasks.view",
     "operations.task_kanban": "tasks.view",
     "operations.task_detail": "tasks.view",
     "operations.new_task": "tasks.edit",
-    "operations.update_task": "tasks.edit",
-    "operations.task_comment": "tasks.edit",
+    "operations.update_task": "tasks.update",
+    "operations.task_comment": "tasks.update",
 }
 
 HR_VIEW_ENDPOINTS = {
@@ -261,6 +261,22 @@ def _task_allowed(task):
     return False
 
 
+def _task_write_allowed(task):
+    """Permite a Producción actualizar únicamente tareas realmente asignadas."""
+    role = current_user.role.name if current_user.role else ""
+    collaborator = current_user.collaborator
+
+    if role in {"superadmin", "admin", "manager", "supervisor"}:
+        return True
+    if not collaborator:
+        return False
+
+    if role in {"production", "hr"}:
+        return task.assignee_id == collaborator.id or collaborator in task.collaborators
+
+    return False
+
+
 def _enforce_record_scope(endpoint):
     """Evita saltarse filtros de propiedad escribiendo IDs directamente en la URL."""
     if not current_user.is_authenticated:
@@ -282,6 +298,11 @@ def _enforce_record_scope(endpoint):
 
         if client is not None and not _commercial_client_allowed(client):
             abort(403)
+
+    # Producción trabaja desde la vista operativa V3 de clientes.
+    # La ficha comercial completa queda fuera de su alcance.
+    if request.blueprint == "clients" and role == "production":
+        abort(403)
 
     # Clientes: las rutas por ID respetan la misma cartera comercial.
     if request.blueprint == "clients" and "client_id" in args:
@@ -325,6 +346,14 @@ def _enforce_record_scope(endpoint):
         if "task_id" in args:
             task = Task.query.get(args["task_id"])
             if task is not None and not _task_allowed(task):
+                abort(403)
+
+            if (
+                task is not None
+                and request.method != "GET"
+                and endpoint in {"operations.update_task", "operations.task_comment"}
+                and not _task_write_allowed(task)
+            ):
                 abort(403)
 
     # Imprenta: asesor/supervisor solo acceden a órdenes de su cartera/equipo.

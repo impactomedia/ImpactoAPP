@@ -5,7 +5,7 @@
   <div class="col-xl-8">
     <section class="panel-card mb-4">
       <h2 class="h5">Detalle</h2><p>{{ task.description or '—' }}</p><pre class="bg-light p-3 rounded">{{ task.checklist or 'Sin checklist' }}</pre>
-      {% if current_user.has_permission('tasks.edit') %}
+      {% if can_update_task %}
       <form method="post" action="{{ url_for('operations.update_task', task_id=task.id) }}" class="row g-2">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="{{ 'col-md-5' if can_reassign else 'col-md-9' }}"><select name="status" class="form-select">{% for s in states %}<option value="{{ s }}" {% if s==task.status %}selected{% endif %}>{{ s|label }}</option>{% endfor %}</select></div>
@@ -14,7 +14,7 @@
       </form>
       {% endif %}
     </section>
-    <section class="panel-card"><h2 class="h5">Comentarios</h2>{% for c in task.comments %}<div class="border-bottom py-2"><strong>{{ c.user.name }}</strong><small class="text-secondary"> · {{ c.created_at.strftime('%d/%m/%Y %H:%M') }}</small><p>{{ c.body }}</p></div>{% else %}<p class="text-secondary">Sin comentarios.</p>{% endfor %}{% if current_user.has_permission('tasks.edit') %}<form method="post" action="{{ url_for('operations.task_comment', task_id=task.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><textarea name="body" class="form-control mt-2" placeholder="Comentario" required></textarea><button class="btn btn-brand mt-2">Comentar</button></form>{% endif %}</section>
+    <section class="panel-card"><h2 class="h5">Comentarios</h2>{% for c in task.comments %}<div class="border-bottom py-2"><strong>{{ c.user.name }}</strong><small class="text-secondary"> · {{ c.created_at.strftime('%d/%m/%Y %H:%M') }}</small><p>{{ c.body }}</p></div>{% else %}<p class="text-secondary">Sin comentarios.</p>{% endfor %}{% if can_update_task %}<form method="post" action="{{ url_for('operations.task_comment', task_id=task.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><textarea name="body" class="form-control mt-2" placeholder="Comentario" required></textarea><button class="btn btn-brand mt-2">Comentar</button></form>{% endif %}</section>
   </div>
   <div class="col-xl-4"><section class="panel-card"><p><strong>Estado:</strong> {{ task.status|label }}</p><p><strong>Prioridad:</strong> {{ task.priority|label }}</p><p><strong>Responsable:</strong> {{ task.assignee.user.name if task.assignee else '—' }}</p><p><strong>Vence:</strong> {{ task.due_at.strftime('%d/%m/%Y %H:%M') if task.due_at else '—' }}</p></section></div>
 </div>
