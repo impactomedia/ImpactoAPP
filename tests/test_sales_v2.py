@@ -120,8 +120,8 @@ def test_new_sale_page_loads_for_admin(client, app):
     _login(client, "admin-sales@test.local")
     response = client.get("/sales/new")
     assert response.status_code == 200
-    assert b"Nueva venta" in response.data
-    assert b"Plan de pago" in response.data
+    assert b"Nueva compra adicional" in response.data
+    assert b"Forma de pago" in response.data
     assert b"Cliente Sales V2" in response.data
     assert b"Seguimiento Sales V2" in response.data
     assert b"NIO" not in response.data

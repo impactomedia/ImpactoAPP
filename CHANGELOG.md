@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.1 — Hotfix de pruebas Bloque 3
+
+- Actualizada la prueba de carga de Nueva Venta para la terminología definitiva de Nexora: “Nueva compra adicional” y “Forma de pago”.
+- No cambia lógica de aplicación, base de datos ni migración.
+- No requiere volver a ejecutar `upgrade_nexora_1_10_0` si ya se ejecutó correctamente.
+
 ## 1.10.0 — Impacto Nexora · Bloque 3: Compras adicionales y formas de pago
 
 - Nueva metadata comercial `sale_operation_meta` para clasificar cada operación como servicio principal, upgrade o compra adicional.

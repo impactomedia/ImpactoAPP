@@ -1,29 +1,13 @@
-# Impacto Nexora v1.10.0 — Bloque 3
+# Impacto Nexora v1.10.1
 
-## Qué implementa
-- Compra adicional separada del servicio principal.
-- Contado.
-- Pago inicial + saldo en entrega.
-- Cuotas.
-- Financiamiento personalizado.
-- Metadata comercial por operación.
-- Total invertido / saldo pendiente / servicio actual / compras adicionales.
+Hotfix exclusivamente de pruebas.
 
-## Migración
-Esta versión SÍ requiere una migración única:
+GitHub Actions v1.10.0 tuvo 86 pruebas aprobadas y 1 prueba fallida porque esperaba textos anteriores de la interfaz:
+- “Nueva venta”
+- “Plan de pago”
 
-    python -m scripts.upgrade_nexora_1_10_0
+La aplicación ahora usa correctamente:
+- “Nueva compra adicional”
+- “Forma de pago”
 
-La migración:
-- crea `sale_operation_meta`;
-- no elimina ventas ni pagos;
-- clasifica operaciones históricas;
-- es idempotente.
-
-## Railway
-1. Coloca temporalmente en Pre-Deploy:
-   `python -m scripts.upgrade_nexora_1_10_0`
-2. Despliega.
-3. Cuando el deploy termine correctamente, elimina ese comando y deja Pre-Deploy vacío.
-4. NO cambies Start Command.
-5. NO cambies Dockerfile.
+No hay cambios funcionales ni de base de datos.

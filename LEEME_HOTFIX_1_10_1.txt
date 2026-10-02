@@ -1,0 +1,8 @@
+IMPACTO NEXORA v1.10.1 — HOTFIX
+
+Reemplaza los archivos y sube a GitHub.
+
+NO requiere migración adicional.
+Si `python -m scripts.upgrade_nexora_1_10_0` ya se ejecutó correctamente en Railway, no necesitas ejecutarlo otra vez.
+
+No cambies Start Command.
