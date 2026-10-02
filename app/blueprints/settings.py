@@ -156,9 +156,7 @@ def products():
             flash("La duración no puede ser negativa.", "danger")
             return redirect(url_for("settings.products"))
 
-        currency = request.form.get("currency", "USD")
-        if currency not in {"USD", "NIO"}:
-            currency = "USD"
+        currency = "USD"
 
         product = ProductService(
             name=name,
@@ -185,6 +183,62 @@ def products():
         "settings/products.html",
         products=ProductService.query.order_by(ProductService.name).all(),
     )
+
+
+@bp.route("/products/<int:product_id>/edit", methods=["POST"])
+@login_required
+@roles_required("superadmin", "admin", "manager")
+def update_product(product_id):
+    product = db.get_or_404(ProductService, product_id)
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        flash("El nombre del producto o servicio es obligatorio.", "danger")
+        return redirect(url_for("settings.products"))
+
+    raw_price = request.form.get("base_price")
+    base_price = None
+    if raw_price not in (None, ""):
+        try:
+            base_price = Decimal(str(raw_price))
+        except (InvalidOperation, TypeError, ValueError):
+            flash("El precio fijo no es válido.", "danger")
+            return redirect(url_for("settings.products"))
+        if base_price < 0:
+            flash("El precio fijo no puede ser negativo.", "danger")
+            return redirect(url_for("settings.products"))
+
+    duration = request.form.get("duration_months", type=int)
+    if duration is not None and duration < 0:
+        flash("La duración no puede ser negativa.", "danger")
+        return redirect(url_for("settings.products"))
+
+    duplicate = ProductService.query.filter(ProductService.name == name, ProductService.id != product.id).first()
+    if duplicate:
+        flash("Ya existe otro producto o servicio con ese nombre.", "danger")
+        return redirect(url_for("settings.products"))
+
+    before = {"name": product.name, "category": product.category, "base_price": str(product.base_price)}
+    product.name = name
+    product.category = (request.form.get("category") or "servicio").strip()
+    product.base_price = base_price
+    product.currency = "USD"
+    product.duration_months = duration
+    product.modality = (request.form.get("modality") or "").strip() or None
+    product.maintenance = (request.form.get("maintenance") or "no_aplica").strip()
+    product.responsible_area = (request.form.get("responsible_area") or "").strip() or None
+    product.renewal_required = bool(request.form.get("renewal_required"))
+    product.is_physical = bool(request.form.get("is_physical"))
+    product.components = request.form.get("components")
+    audit(
+        "editar_producto_servicio",
+        "ProductService",
+        product.id,
+        before=before,
+        after={"name": product.name, "category": product.category, "base_price": str(product.base_price), "currency": "USD"},
+    )
+    db.session.commit()
+    flash("Producto/servicio actualizado.", "success")
+    return redirect(url_for("settings.products"))
 
 
 @bp.route("/values", methods=["POST"])

@@ -184,7 +184,10 @@
     {% endif %}
 
     <div class="tab-pane fade" id="servicios">
-      <div class="panel-header"><div><h2>Planes y servicios</h2><p>Historial independiente por paquete, modalidad, vigencia, beneficios y cortesías.</p></div></div>
+      <div class="panel-header">
+        <div><h2>Planes y servicios</h2><p>El servicio principal usa precio fijo de catálogo y los upgrades sustituyen al plan anterior sin duplicar la deuda.</p></div>
+        {% if current_user.has_permission('sales.create') %}<a class="btn btn-brand" href="{{ url_for('sales.principal_service', client_id=client.id) }}">Servicio principal / Upgrade</a>{% endif %}
+      </div>
       <div class="row g-3">
         {% for c in client.contracts|sort(attribute='starts_on', reverse=true) %}
         <div class="col-12">
@@ -212,7 +215,7 @@
                   <div class="col-md-2"><label class="form-label">Estado</label><select name="status" class="form-select"><option value="activo" {% if c.status=='activo' %}selected{% endif %}>Activo</option><option value="inactivo" {% if c.status=='inactivo' %}selected{% endif %}>Inactivo</option><option value="caducado" {% if c.status=='caducado' %}selected{% endif %}>Caducado</option></select></div>
                   <div class="col-md-2"><label class="form-label">Activación</label><input type="date" name="starts_on" class="form-control" value="{{ c.starts_on.isoformat() if c.starts_on else '' }}"></div>
                   <div class="col-md-2"><label class="form-label">Vencimiento</label><input type="date" name="ends_on" class="form-control" value="{{ c.ends_on.isoformat() if c.ends_on else '' }}"></div>
-                  <div class="col-md-2"><label class="form-label">Precio</label><input type="number" step="0.01" min="0" name="agreed_price" class="form-control" value="{{ c.agreed_price or '' }}"></div>
+                  <div class="col-md-2"><label class="form-label">Precio</label><input type="number" step="0.01" min="0" name="agreed_price" class="form-control" value="{{ c.agreed_price or '' }}" {% if c.product.category=='paquete' %}readonly{% endif %}>{% if c.product.category=='paquete' %}<small class="text-secondary">Precio fijo del catálogo.</small>{% endif %}</div>
                   <div class="col-md-2"><label class="form-label">Modalidad</label><input name="modality_snapshot" class="form-control" value="{{ c.v2_detail.modality_snapshot if c.v2_detail else (c.product.modality or '') }}"></div>
                   <div class="col-md-2"><label class="form-label">Mantenimiento</label><input name="maintenance_snapshot" class="form-control" value="{{ c.v2_detail.maintenance_snapshot if c.v2_detail else (c.product.maintenance or '') }}"></div>
                   <div class="col-md-6"><label class="form-label">Beneficios</label><textarea name="benefits_snapshot" class="form-control" rows="5">{{ c.v2_detail.benefits_snapshot if c.v2_detail else (c.product.components or '') }}</textarea></div>
@@ -232,12 +235,12 @@
 
       {% if can_edit %}
       <section class="border rounded-4 p-3 mt-4">
-        <h3 class="h5">Agregar nuevo período / servicio</h3>
-        <p class="text-secondary small">Úsalo para renovaciones, migraciones de plan o servicios adicionales. No reemplaza el historial anterior.</p>
+        <h3 class="h5">Agregar servicio histórico / complementario</h3>
+        <p class="text-secondary small">Los paquetes principales y upgrades se registran con el botón “Servicio principal / Upgrade”. Este formulario queda para servicios no principales.</p>
         <form method="post" action="{{ url_for('clients.add_contract', client_id=client.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="row g-2">
-            <div class="col-md-4"><label class="form-label">Producto / paquete</label><select name="product_id" class="form-select" required><option value="">Seleccionar</option>{% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
+            <div class="col-md-4"><label class="form-label">Producto / paquete</label><select name="product_id" class="form-select" required><option value="">Seleccionar</option>{% for p in products %}{% if p.category != 'paquete' %}<option value="{{ p.id }}">{{ p.name }}</option>{% endif %}{% endfor %}</select></div>
             <div class="col-md-2"><label class="form-label">Estado</label><select name="status" class="form-select"><option value="activo">Activo</option><option value="inactivo">Inactivo</option><option value="caducado">Caducado</option></select></div>
             <div class="col-md-2"><label class="form-label">Activación</label><input name="starts_on" type="date" class="form-control"></div>
             <div class="col-md-2"><label class="form-label">Vencimiento</label><input name="ends_on" type="date" class="form-control"></div>

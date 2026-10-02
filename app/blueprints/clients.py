@@ -615,6 +615,12 @@ def add_contract(client_id):
     if not product or not product.active:
         flash("Selecciona un producto o paquete activo.", "danger")
         return redirect(url_for("clients.detail", client_id=client.id))
+    if product.category == "paquete":
+        flash(
+            "Los paquetes principales se registran desde Servicio principal / Upgrade para mantener precio, pagos y saldo sincronizados.",
+            "info",
+        )
+        return redirect(url_for("sales.principal_service", client_id=client.id))
 
     status = request.form.get("status", "activo")
     if status not in CONTRACT_STATUSES:
@@ -708,6 +714,8 @@ def update_contract(client_id, contract_id):
     if agreed_price is not None and agreed_price < 0:
         flash("El precio acordado no puede ser negativo.", "danger")
         return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+    if contract.product and contract.product.category == "paquete" and contract.product.base_price is not None:
+        agreed_price = Decimal(str(contract.product.base_price))
 
     detail = contract.v2_detail or ClientContractDetail(contract_id=contract.id)
     if not contract.v2_detail:

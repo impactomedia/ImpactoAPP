@@ -1,0 +1,121 @@
+{% extends "app_base.html" %}
+{% block title %}Servicio principal | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Impacto Nexora · Servicio principal</span>
+    <h1>{{ 'Upgrade de plan' if current_contract else 'Registrar plan principal' }}</h1>
+    <p>{{ client.business_name }} · USD únicamente</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('clients.detail', client_id=client.id) }}">Volver al expediente</a>
+</div>
+
+{% if current_contract %}
+<div class="alert alert-light border">
+  <strong>Plan actual:</strong> {{ current_contract.product.name }}
+  · Valor USD {{ current_price|money }}
+  · Pagado reconocido para upgrade USD {{ recognized_credit|money }}.
+  <div class="small text-secondary mt-1">Solo se muestran planes con precio superior. El nuevo plan sustituirá al actual; no se sumarán ambas deudas.</div>
+</div>
+{% endif %}
+
+<section class="panel-card form-card">
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <label class="form-label">Nuevo plan *</label>
+      <select name="product_id" id="planSelect" class="form-select" required>
+        <option value="">Seleccionar</option>
+        {% for p in plans %}
+        <option value="{{ p.id }}" data-price="{{ p.base_price or 0 }}">{{ p.name }} — USD {{ p.base_price|money }}</option>
+        {% endfor %}
+      </select>
+      {% if not plans %}<small class="text-danger">No hay planes elegibles con precio fijo configurado.</small>{% endif %}
+    </div>
+    <div class="col-lg-3"><label class="form-label">Precio catálogo</label><input id="catalogDisplay" class="form-control" value="USD 0.00" disabled></div>
+    <div class="col-lg-3"><label class="form-label">Crédito reconocido</label><input id="creditDisplay" class="form-control" value="USD {{ recognized_credit|money }}" disabled></div>
+
+    <div class="col-lg-3"><label class="form-label">Fecha</label><input name="sale_date" type="date" class="form-control" value="{{ today }}"></div>
+    <div class="col-lg-3"><label class="form-label">Pago inicial</label><input name="initial_payment" id="initialPayment" type="number" min="0" step="0.01" class="form-control" value="0"></div>
+    <div class="col-lg-3"><label class="form-label">Método</label><select name="payment_method" class="form-select">{% for m in ['transferencia','efectivo','Zelle','ACH','Wise','tarjeta','otro'] %}<option value="{{ m }}">{{ m|label }}</option>{% endfor %}</select></div>
+    <div class="col-lg-3"><label class="form-label">Fecha del pago</label><input name="initial_payment_date" type="date" class="form-control" value="{{ today }}"></div>
+    <div class="col-lg-6"><label class="form-label">Referencia del pago</label><input name="initial_payment_reference" class="form-control" placeholder="Zelle, ACH, transferencia..."></div>
+    <div class="col-lg-6"><label class="form-label">Cortesías acordadas</label><textarea name="courtesies" class="form-control" rows="2" placeholder="Ej. Business Cards, QR, portada..."></textarea></div>
+  </div>
+
+  <hr class="my-4">
+  <h2 class="h5">Plan de pago del saldo</h2>
+  <div class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label">Modalidad</label>
+      <select name="payment_plan_mode" id="paymentPlanMode" class="form-select">
+        <option value="single">Un solo vencimiento</option>
+        <option value="custom">Cuotas personalizadas</option>
+      </select>
+    </div>
+    <div class="col-md-4" id="singleDueWrap">
+      <label class="form-label">Vencimiento del saldo</label>
+      <input name="due_date" type="date" class="form-control">
+    </div>
+  </div>
+
+  <div id="customPlan" class="mt-3 d-none">
+    <div class="d-flex justify-content-between align-items-center mb-2"><strong>Cuotas</strong><button type="button" class="btn btn-sm btn-light border" id="addInstallment">+ Agregar cuota</button></div>
+    <div id="installmentRows">
+      <div class="row g-2 mb-2 installment-row">
+        <div class="col-md-3"><input name="installment_amount[]" type="number" min="0.01" step="0.01" class="form-control installment-amount" placeholder="Monto"></div>
+        <div class="col-md-3"><input name="installment_due_date[]" type="date" class="form-control"></div>
+        <div class="col-md-5"><input name="installment_notes[]" class="form-control" placeholder="Nota"></div>
+        <div class="col-md-1"><button type="button" class="btn btn-outline-danger remove-installment">×</button></div>
+      </div>
+    </div>
+    <template id="installmentTemplate"><div class="row g-2 mb-2 installment-row"><div class="col-md-3"><input name="installment_amount[]" type="number" min="0.01" step="0.01" class="form-control installment-amount" placeholder="Monto"></div><div class="col-md-3"><input name="installment_due_date[]" type="date" class="form-control"></div><div class="col-md-5"><input name="installment_notes[]" class="form-control" placeholder="Nota"></div><div class="col-md-1"><button type="button" class="btn btn-outline-danger remove-installment">×</button></div></div></template>
+  </div>
+
+  <div class="border rounded-4 p-3 mt-4">
+    <div class="d-flex flex-wrap justify-content-between gap-3">
+      <div><small class="text-secondary">Precio oficial</small><div class="fs-5 fw-bold" id="summaryCatalog">USD 0.00</div></div>
+      <div><small class="text-secondary">Crédito</small><div class="fs-5 fw-bold">USD {{ recognized_credit|money }}</div></div>
+      <div><small class="text-secondary">Saldo del nuevo plan</small><div class="fs-5 fw-bold" id="summaryNet">USD 0.00</div></div>
+      <div><small class="text-secondary">Saldo después del inicial</small><div class="fs-5 fw-bold" id="summaryBalance">USD 0.00</div></div>
+    </div>
+    <button class="btn btn-brand w-100 mt-3" {% if not plans %}disabled{% endif %}>{{ 'Confirmar upgrade' if current_contract else 'Confirmar servicio principal' }}</button>
+  </div>
+</form>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const plan = document.getElementById('planSelect');
+  const initial = document.getElementById('initialPayment');
+  const credit = parseFloat('{{ recognized_credit or 0 }}') || 0;
+  const mode = document.getElementById('paymentPlanMode');
+  const single = document.getElementById('singleDueWrap');
+  const custom = document.getElementById('customPlan');
+  const rows = document.getElementById('installmentRows');
+  const tpl = document.getElementById('installmentTemplate');
+
+  function money(v){ return 'USD ' + Math.max(0,v).toFixed(2); }
+  function refresh(){
+    const opt=plan.options[plan.selectedIndex];
+    const catalog=parseFloat(opt?.dataset.price||'0')||0;
+    const net=Math.max(0,catalog-credit);
+    const init=parseFloat(initial.value||'0')||0;
+    document.getElementById('catalogDisplay').value=money(catalog);
+    document.getElementById('summaryCatalog').textContent=money(catalog);
+    document.getElementById('summaryNet').textContent=money(net);
+    document.getElementById('summaryBalance').textContent=money(net-init);
+  }
+  function bind(row){
+    row.querySelector('.remove-installment').addEventListener('click',()=>{ if(rows.querySelectorAll('.installment-row').length>1) row.remove(); });
+  }
+  document.querySelectorAll('.installment-row').forEach(bind);
+  document.getElementById('addInstallment').addEventListener('click',()=>{ const f=tpl.content.cloneNode(true); bind(f.querySelector('.installment-row')); rows.appendChild(f); });
+  mode.addEventListener('change',()=>{ const c=mode.value==='custom'; custom.classList.toggle('d-none',!c); single.classList.toggle('d-none',c); });
+  plan.addEventListener('change',refresh);
+  initial.addEventListener('input',refresh);
+  refresh();
+});
+</script>
+{% endblock %}

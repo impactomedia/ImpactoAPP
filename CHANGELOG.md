@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.9.0 — Impacto Nexora · Bloque 2: Servicio principal y Upgrades
+
+- Nuevo flujo independiente `Servicio principal / Upgrade` para separar el plan principal de las compras adicionales.
+- Solo puede existir un servicio principal vigente por cliente.
+- Los paquetes principales usan exclusivamente el `base_price` del catálogo en USD; el precio no se escribe manualmente al vender.
+- Si el cliente ya tiene un plan principal activo, Nexora muestra únicamente paquetes de mayor precio.
+- Un upgrade sustituye al plan anterior en lugar de sumar ambos planes como deuda.
+- El dinero ya reconocido en el plan principal se acredita automáticamente contra el precio del nuevo plan.
+- Los upgrades sucesivos conservan el crédito heredado más los nuevos pagos realizados.
+- El plan anterior queda en el historial como inactivo y deja de generar saldo exigible.
+- Las cuotas y cuenta por cobrar del plan reemplazado quedan canceladas, sin crear pagos ficticios.
+- El nuevo plan genera su contrato principal, snapshot de beneficios/cortesías, proyecto operativo y tareas de onboarding.
+- Los paquetes principales quedan excluidos de la venta genérica para impedir precios manuales.
+- Las cotizaciones que incluyen paquetes usan el precio fijo del catálogo; su confirmación comercial se realiza desde Servicio principal / Upgrade.
+- Configuración > Productos/Servicios ahora permite editar precio fijo, categoría, duración, modalidad, mantenimiento, área, renovación, tipo físico y beneficios.
+- Catálogo comercial fijado a USD.
+- Compatibilidad con contratos históricos: si no existe un `principal=True`, se toma el paquete activo más reciente como referencia.
+- Nueva batería `tests/test_nexora_principal.py` para plan inicial, upgrade y crédito acumulado.
+- No hay cambios de esquema ni migración de base de datos.
+
 ## 1.8.2 — Hotfix de pagos y pruebas de alcance
 
 - Corregida la sincronización inmediata entre un pago recién creado y `sale.payments`, evitando que `amount_paid` y `balance` quedaran desactualizados al crear una venta con pago inicial.

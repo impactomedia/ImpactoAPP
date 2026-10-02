@@ -12,6 +12,7 @@ from app.models import (
     Payment,
     PrintItem,
     PrintOrder,
+    ProductService,
     Project,
     Renewal,
     Sale,
@@ -238,6 +239,11 @@ def create_sale_from_quote(quote, initial_payment=0, payment_method="transferenc
         raise ValueError("La cotización no puede convertirse en venta desde su estado actual.")
     if not quote.items:
         raise ValueError("La cotización no contiene ítems para convertir en venta.")
+    if any(item.product and item.product.category == "paquete" for item in quote.items):
+        raise ValueError(
+            "Los paquetes principales se confirman desde Servicio principal / Upgrade "
+            "para aplicar el precio fijo y reconocer correctamente cualquier crédito previo."
+        )
 
     client = quote.client
     was_followup = client.record_type == "seguimiento"
@@ -307,6 +313,189 @@ def create_sale_from_quote(quote, initial_payment=0, payment_method="transferenc
     recalc_sale(sale)
     audit("convertir_cotizacion_venta", "Sale", sale.id, after={"sale_no": sale.sale_no, "client": client.business_name})
     return sale
+
+
+
+def active_principal_contract(client):
+    explicit = (
+        ClientContract.query
+        .filter_by(client_id=client.id, principal=True, status="activo")
+        .order_by(ClientContract.starts_on.desc(), ClientContract.id.desc())
+        .first()
+    )
+    if explicit:
+        return explicit
+
+    # Compatibilidad con contratos históricos creados antes de Nexora:
+    # el paquete activo más reciente se toma como principal si no existe uno explícito.
+    return (
+        ClientContract.query
+        .join(ProductService, ClientContract.product_id == ProductService.id)
+        .filter(
+            ClientContract.client_id == client.id,
+            ClientContract.status == "activo",
+            ProductService.category == "paquete",
+        )
+        .order_by(ClientContract.starts_on.desc(), ClientContract.id.desc())
+        .first()
+    )
+
+
+def principal_paid_credit(contract):
+    """Crédito acumulado reconocido al servicio principal vigente."""
+    if not contract or not contract.sale_id:
+        return Decimal("0")
+    sale = db.session.get(Sale, contract.sale_id)
+    if not sale:
+        return Decimal("0")
+    item = next(
+        (row for row in sale.items if row.product_id == contract.product_id),
+        sale.items[0] if sale.items else None,
+    )
+    inherited = D(item.discount) if item else Decimal("0")
+    paid = D(sale.amount_paid)
+    contract_value = D(contract.agreed_price or (contract.product.base_price if contract.product else 0))
+    return min(contract_value, inherited + paid)
+
+
+def _close_replaced_principal(contract):
+    if not contract:
+        return
+    contract.principal = False
+    contract.status = "inactivo"
+    note = "Sustituido por upgrade de servicio principal."
+    contract.notes = f"{contract.notes}\n{note}".strip() if contract.notes else note
+
+    sale = db.session.get(Sale, contract.sale_id) if contract.sale_id else None
+    if sale:
+        sale.status = "reemplazada"
+        sale.balance = Decimal("0")
+        sale_note = "Saldo pendiente sustituido por el nuevo plan principal."
+        sale.notes = f"{sale.notes}\n{sale_note}".strip() if sale.notes else sale_note
+        if sale.receivable:
+            # Se conserva la deuda original en la venta y se cierra la cuenta por cobrar
+            # sin fingir pagos que nunca existieron. El monto exigible queda igual a lo
+            # efectivamente pagado y la nota conserva el total anterior.
+            original_total = D(sale.receivable.total_amount)
+            actual_paid = D(sale.receivable.paid_amount)
+            sale.receivable.status = "cancelado"
+            sale.receivable.notes = (
+                f"{sale.receivable.notes or ''}\n"
+                f"Upgrade: cuenta anterior cerrada. Total anterior USD {original_total:,.2f}; "
+                f"pagado real USD {actual_paid:,.2f}."
+            ).strip()
+            sale.receivable.total_amount = actual_paid
+            sale.receivable.due_date = None
+            sale.receivable.promise_date = None
+        for row in getattr(sale, "installments", []) or []:
+            if row.status != "pagada":
+                row.status = "cancelada"
+
+    for renewal in contract.client.renewals:
+        if renewal.contract_id == contract.id and renewal.status not in {"renovado", "cancelado"}:
+            renewal.status = "cancelado"
+
+
+def generate_principal_operational_work(sale, product, previous_contract=None, courtesies=None):
+    """Crea el nuevo plan principal y conserva el anterior como historial."""
+    if previous_contract:
+        _close_replaced_principal(previous_contract)
+
+    for row in ClientContract.query.filter_by(
+        client_id=sale.client_id,
+        principal=True,
+        status="activo",
+    ).all():
+        row.principal = False
+        row.status = "inactivo"
+
+    starts_on = sale.sale_date or date.today()
+    duration = product.duration_months or 0
+    end_date = starts_on + timedelta(days=duration * 30) if duration else None
+
+    contract = ClientContract(
+        client_id=sale.client_id,
+        product_id=product.id,
+        sale_id=sale.id,
+        status="activo",
+        starts_on=starts_on,
+        ends_on=end_date,
+        agreed_price=product.base_price,
+        principal=True,
+        notes=(
+            f"Upgrade desde {previous_contract.product.name}."
+            if previous_contract and previous_contract.product
+            else "Servicio principal registrado desde Impacto Nexora."
+        ),
+    )
+    db.session.add(contract)
+    db.session.flush()
+    db.session.add(
+        ClientContractDetail(
+            contract_id=contract.id,
+            modality_snapshot=product.modality,
+            maintenance_snapshot=product.maintenance,
+            benefits_snapshot=product.components,
+            courtesies_snapshot=(courtesies or "").strip() or None,
+        )
+    )
+
+    if product.renewal_required or end_date:
+        db.session.add(
+            Renewal(
+                client_id=sale.client_id,
+                contract=contract,
+                renewal_type=product.name,
+                due_date=end_date or (starts_on + timedelta(days=365)),
+                status="pendiente",
+            )
+        )
+
+    project = Project(
+        project_no=next_code("PRJ", Project),
+        client_id=sale.client_id,
+        sale_id=sale.id,
+        product_id=product.id,
+        name=f"{product.name} - {sale.client.business_name}",
+        department=product.responsible_area or "Desarrollo",
+        status="pendiente_onboarding",
+        progress=0,
+        starts_on=starts_on,
+        due_on=starts_on + timedelta(days=30),
+    )
+    db.session.add(project)
+    db.session.flush()
+
+    template = TaskTemplate.query.filter_by(product_id=product.id, active=True).first()
+    if template and template.items:
+        for template_item in template.items:
+            db.session.add(
+                Task(
+                    title=template_item.title,
+                    description=template_item.description,
+                    task_type=template_item.task_type,
+                    client_id=sale.client_id,
+                    project_id=project.id,
+                    priority=template_item.priority,
+                    status="pendiente",
+                    due_at=datetime.utcnow() + timedelta(days=template_item.due_days or 3),
+                    checklist="[ ] Requisito obligatorio" if template_item.required else None,
+                )
+            )
+    else:
+        db.session.add(
+            Task(
+                title=f"Onboarding: {product.name}",
+                description="Revisar ficha, beneficios, cortesías, materiales y próximos entregables.",
+                task_type="cliente",
+                client_id=sale.client_id,
+                project_id=project.id,
+                priority="alta",
+                status="pendiente",
+                due_at=datetime.utcnow() + timedelta(days=3),
+            )
+        )
+    return contract
 
 
 def generate_operational_work(sale):

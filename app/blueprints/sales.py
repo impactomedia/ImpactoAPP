@@ -24,7 +24,7 @@ from app.models import (
     User,
 )
 from app.client_v2_models import ClientInstallment
-from app.services import D, add_payment, create_sale_from_quote, generate_operational_work, recalc_sale
+from app.services import D, add_payment, create_sale_from_quote, generate_operational_work, recalc_sale, active_principal_contract, principal_paid_credit, generate_principal_operational_work
 
 bp = Blueprint("sales", __name__, url_prefix="/sales")
 
@@ -140,7 +140,15 @@ def _parse_money(value, label, *, allow_zero=True):
 
 def _sale_form_context():
     clients = _visible_clients_query().order_by(Client.business_name).all()
-    products = ProductService.query.filter_by(active=True).order_by(ProductService.name).all()
+    products = (
+        ProductService.query
+        .filter(
+            ProductService.active.is_(True),
+            ProductService.category != "paquete",
+        )
+        .order_by(ProductService.name)
+        .all()
+    )
     advisors = _allowed_advisors()
     selected_client_id = (
         request.form.get("client_id", type=int)
@@ -537,6 +545,232 @@ def from_quote(quote_id):
         return redirect(url_for("crm.quote_detail", quote_id=quote.id))
 
 
+
+@bp.route("/principal/<int:client_id>", methods=["GET", "POST"])
+@login_required
+def principal_service(client_id):
+    client = _visible_clients_query().filter(Client.id == client_id).first_or_404()
+    plans = (
+        ProductService.query
+        .filter_by(active=True, category="paquete")
+        .order_by(ProductService.base_price, ProductService.name)
+        .all()
+    )
+    current_contract = active_principal_contract(client)
+    current_price = D(
+        current_contract.agreed_price
+        if current_contract and current_contract.agreed_price is not None
+        else (current_contract.product.base_price if current_contract and current_contract.product else 0)
+    )
+    recognized_credit = principal_paid_credit(current_contract) if current_contract else Decimal("0")
+
+    eligible_plans = []
+    for plan in plans:
+        price = D(plan.base_price)
+        if price <= 0:
+            continue
+        if current_contract and (plan.id == current_contract.product_id or price <= current_price):
+            continue
+        eligible_plans.append(plan)
+
+    if request.method == "GET":
+        return render_template(
+            "sales/principal_form.html",
+            client=client,
+            plans=eligible_plans,
+            current_contract=current_contract,
+            current_price=current_price,
+            recognized_credit=recognized_credit,
+            today=date.today(),
+        )
+
+    try:
+        product_id = request.form.get("product_id", type=int)
+        plan = next((row for row in eligible_plans if row.id == product_id), None)
+        if not plan:
+            raise ValueError(
+                "Selecciona un paquete principal con precio fijo superior al plan actual."
+                if current_contract
+                else "Selecciona un paquete principal con precio fijo configurado."
+            )
+
+        catalog_price = D(plan.base_price).quantize(MONEY)
+        credit = (
+            min(catalog_price, recognized_credit.quantize(MONEY))
+            if current_contract
+            else Decimal("0")
+        )
+        net_total = (catalog_price - credit).quantize(MONEY)
+        if net_total <= 0:
+            raise ValueError("El nuevo plan debe generar un saldo mayor que cero.")
+
+        role = _role_name()
+        collaborator = current_user.collaborator
+        advisors = _allowed_advisors()
+        allowed_advisor_ids = {row.id for row in advisors}
+        advisor_id = request.form.get("advisor_id", type=int) or client.owner_id
+        if role == "advisor" and collaborator:
+            advisor_id = collaborator.id
+        elif role == "supervisor" and collaborator:
+            if advisor_id not in allowed_advisor_ids:
+                advisor_id = client.owner_id if client.owner_id in allowed_advisor_ids else collaborator.id
+        elif advisor_id and advisor_id not in allowed_advisor_ids:
+            raise ValueError("Selecciona un asesor comercial activo válido.")
+
+        sale_date_raw = (request.form.get("sale_date") or "").strip()
+        sale_date = _parse_date(sale_date_raw) if sale_date_raw else date.today()
+        if sale_date_raw and not sale_date:
+            raise ValueError("La fecha de venta no es válida.")
+
+        sale = Sale(
+            sale_no=next_code("VEN", Sale),
+            client_id=client.id,
+            advisor_id=advisor_id,
+            sale_date=sale_date,
+            status="confirmada",
+            currency="USD",
+            notes=(
+                f"Upgrade de servicio principal desde {current_contract.product.name} a {plan.name}."
+                if current_contract and current_contract.product
+                else f"Servicio principal: {plan.name}."
+            ),
+        )
+        db.session.add(sale)
+        db.session.flush()
+
+        db.session.add(
+            SaleItem(
+                sale_id=sale.id,
+                product_id=plan.id,
+                description=(
+                    f"Upgrade a {plan.name}"
+                    if current_contract
+                    else f"Servicio principal {plan.name}"
+                ),
+                quantity=1,
+                list_price=catalog_price,
+                discount=credit,
+                unit_price=net_total,
+                total=net_total,
+            )
+        )
+        db.session.flush()
+        recalc_sale(sale)
+
+        initial_payment = _parse_money(
+            request.form.get("initial_payment"),
+            "El pago inicial",
+            allow_zero=True,
+        )
+        if initial_payment > D(sale.total):
+            raise ValueError("El pago inicial no puede superar el saldo del nuevo plan.")
+
+        initial_date_raw = (request.form.get("initial_payment_date") or "").strip()
+        initial_payment_date = _parse_date(initial_date_raw) if initial_date_raw else sale_date
+        if initial_date_raw and not initial_payment_date:
+            raise ValueError("La fecha del pago inicial no es válida.")
+
+        payment_method = request.form.get("payment_method", "transferencia")
+        if payment_method not in PAYMENT_METHODS:
+            payment_method = "otro"
+
+        remaining_after_initial = (D(sale.total) - initial_payment).quantize(MONEY)
+        installment_rows = _payment_plan_from_request(remaining_after_initial, sale_date)
+        first_due_date = installment_rows[0]["due_date"] if installment_rows else None
+
+        db.session.add(
+            AccountReceivable(
+                client_id=client.id,
+                sale_id=sale.id,
+                total_amount=sale.total,
+                paid_amount=0,
+                due_date=first_due_date,
+                status="al_dia",
+                notes="Saldo vigente del servicio principal en Impacto Nexora.",
+            )
+        )
+
+        was_followup = client.record_type == "seguimiento"
+        client.record_type = "cliente"
+        client.pipeline_stage = "venta_cerrada"
+        client.client_status = "activo"
+        client.country = "USA"
+        if not client.code:
+            client.code = next_code("CLI", Client)
+
+        if was_followup:
+            audit(
+                "convertir_registro_cliente",
+                "Client",
+                client.id,
+                before={"record_type": "seguimiento"},
+                after={"record_type": "cliente", "pipeline_stage": "venta_cerrada"},
+                reason=f"Servicio principal confirmado {sale.sale_no}",
+            )
+
+        db.session.flush()
+        _create_installments(sale, installment_rows, baseline_paid=initial_payment)
+
+        if initial_payment > 0:
+            add_payment(
+                sale,
+                initial_payment,
+                payment_method,
+                effective_date=initial_payment_date,
+                reference=(request.form.get("initial_payment_reference") or "").strip() or None,
+                notes="Pago inicial del servicio principal.",
+                registered_by_id=current_user.id,
+            )
+
+        contract = generate_principal_operational_work(
+            sale,
+            plan,
+            previous_contract=current_contract,
+            courtesies=request.form.get("courtesies"),
+        )
+        recalc_sale(sale)
+        _refresh_receivable_due_date(sale)
+
+        audit(
+            "servicio_principal_upgrade" if current_contract else "servicio_principal_nuevo",
+            "ClientContract",
+            contract.id,
+            after={
+                "client_id": client.id,
+                "product_id": plan.id,
+                "catalog_price": str(catalog_price),
+                "credit": str(credit),
+                "net_total": str(net_total),
+                "sale_no": sale.sale_no,
+            },
+        )
+        db.session.commit()
+
+        flash(
+            (
+                f"Upgrade aplicado. {plan.name}: USD {catalog_price:,.2f}; "
+                f"crédito reconocido USD {credit:,.2f}; nuevo saldo USD {net_total:,.2f}."
+                if current_contract
+                else f"Servicio principal {plan.name} registrado por USD {catalog_price:,.2f}."
+            ),
+            "success",
+        )
+        return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+
+    except (ValueError, InvalidOperation) as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+        return redirect(url_for("sales.principal_service", client_id=client.id))
+    except HTTPException:
+        db.session.rollback()
+        raise
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Error al registrar servicio principal para cliente %s", client.id)
+        flash("No se pudo registrar el servicio principal. No se guardaron cambios parciales.", "danger")
+        return redirect(url_for("sales.principal_service", client_id=client.id))
+
+
 @bp.route("/<int:sale_id>")
 @login_required
 def detail(sale_id):
@@ -548,6 +782,9 @@ def detail(sale_id):
 @login_required
 def payment(sale_id):
     sale = db.get_or_404(Sale, sale_id)
+    if sale.status == "reemplazada":
+        flash("Esta venta fue sustituida por un upgrade. Registra los pagos en el servicio principal vigente.", "warning")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
     try:
         payment_row = add_payment(
             sale,

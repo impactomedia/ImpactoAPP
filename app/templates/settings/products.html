@@ -1,1 +1,55 @@
-{% extends "app_base.html" %}{% block app_content %}<div class="page-heading"><div><span class="eyebrow">Catálogo</span><h1>Productos, servicios y paquetes</h1></div></div><div class="row g-4"><div class="col-xl-4"><section class="panel-card"><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="name" class="form-control mb-2" placeholder="Nombre"><input name="category" class="form-control mb-2" value="servicio"><input name="base_price" type="number" step="0.01" class="form-control mb-2" placeholder="Precio base"><input name="duration_months" type="number" class="form-control mb-2" placeholder="Duración meses"><select name="modality" class="form-select mb-2"><option value="">No aplica</option><option value="inquilino">Inquilino</option><option value="dueno">Dueño</option></select><select name="maintenance" class="form-select mb-2"><option value="no_aplica">No aplica</option><option value="incluido">Incluido</option><option value="no_incluido">No incluido</option></select><input name="responsible_area" class="form-control mb-2" placeholder="Área responsable"><label class="form-check"><input type="checkbox" name="renewal_required" class="form-check-input"> Requiere renovación</label><label class="form-check"><input type="checkbox" name="is_physical" class="form-check-input"> Producto físico / imprenta</label><textarea name="components" class="form-control my-2" placeholder="Componentes incluidos"></textarea><button class="btn btn-brand w-100">Crear</button></form></section></div><div class="col-xl-8"><section class="panel-card"><table class="table modern-table"><thead><tr><th>Nombre</th><th>Categoría</th><th>Precio</th><th>Duración</th><th>Modalidad</th><th>Físico</th></tr></thead><tbody>{% for p in products %}<tr><td>{{ p.name }}</td><td>{{ p.category }}</td><td>{{ p.base_price|money }}</td><td>{{ p.duration_months or '—' }}</td><td>{{ p.modality or '—' }}</td><td>{{ 'Sí' if p.is_physical else 'No' }}</td></tr>{% endfor %}</tbody></table></section></div></div>{% endblock %}
+{% extends "app_base.html" %}
+{% block title %}Catálogo | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div><span class="eyebrow">Impacto Nexora · Catálogo</span><h1>Productos, servicios y paquetes</h1><p>Los paquetes principales usan precio fijo en USD.</p></div>
+</div>
+<div class="row g-4">
+  <div class="col-xl-4">
+    <section class="panel-card">
+      <h2 class="h5">Nuevo producto o servicio</h2>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input name="name" class="form-control mb-2" placeholder="Nombre" required>
+        <select name="category" class="form-select mb-2">
+          <option value="servicio">Servicio</option>
+          <option value="paquete">Paquete principal</option>
+          <option value="imprenta">Imprenta</option>
+          <option value="accesorios">Accesorios / producto</option>
+        </select>
+        <input name="base_price" type="number" min="0" step="0.01" class="form-control mb-2" placeholder="Precio fijo USD">
+        <input name="duration_months" type="number" min="0" class="form-control mb-2" placeholder="Duración meses">
+        <select name="modality" class="form-select mb-2"><option value="">No aplica</option><option value="inquilino">Inquilino</option><option value="dueno">Dueño</option></select>
+        <select name="maintenance" class="form-select mb-2"><option value="no_aplica">No aplica</option><option value="incluido">Incluido</option><option value="no_incluido">No incluido</option></select>
+        <input name="responsible_area" class="form-control mb-2" placeholder="Área responsable">
+        <label class="form-check"><input type="checkbox" name="renewal_required" class="form-check-input"> Requiere renovación</label>
+        <label class="form-check"><input type="checkbox" name="is_physical" class="form-check-input"> Producto físico / imprenta</label>
+        <textarea name="components" class="form-control my-2" placeholder="Beneficios / componentes incluidos"></textarea>
+        <button class="btn btn-brand w-100">Crear</button>
+      </form>
+    </section>
+  </div>
+  <div class="col-xl-8">
+    <section class="panel-card">
+      <div class="panel-header"><div><h2>Catálogo actual</h2><p>Edita precios y condiciones sin tocar la base de datos.</p></div></div>
+      {% for p in products %}
+      <form method="post" action="{{ url_for('settings.update_product', product_id=p.id) }}" class="border rounded-3 p-3 mb-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-4"><label class="form-label">Nombre</label><input name="name" class="form-control" value="{{ p.name }}" required></div>
+          <div class="col-md-2"><label class="form-label">Categoría</label><select name="category" class="form-select"><option value="servicio" {% if p.category=='servicio' %}selected{% endif %}>Servicio</option><option value="paquete" {% if p.category=='paquete' %}selected{% endif %}>Paquete</option><option value="imprenta" {% if p.category=='imprenta' %}selected{% endif %}>Imprenta</option><option value="accesorios" {% if p.category=='accesorios' %}selected{% endif %}>Accesorios</option></select></div>
+          <div class="col-md-2"><label class="form-label">Precio USD</label><input name="base_price" type="number" min="0" step="0.01" class="form-control" value="{{ p.base_price if p.base_price is not none else '' }}"></div>
+          <div class="col-md-2"><label class="form-label">Meses</label><input name="duration_months" type="number" min="0" class="form-control" value="{{ p.duration_months if p.duration_months is not none else '' }}"></div>
+          <div class="col-md-2"><button class="btn btn-dark w-100">Guardar</button></div>
+          <div class="col-md-3"><label class="form-label">Modalidad</label><select name="modality" class="form-select"><option value="" {% if not p.modality %}selected{% endif %}>No aplica</option><option value="inquilino" {% if p.modality=='inquilino' %}selected{% endif %}>Inquilino</option><option value="dueno" {% if p.modality=='dueno' %}selected{% endif %}>Dueño</option></select></div>
+          <div class="col-md-3"><label class="form-label">Mantenimiento</label><select name="maintenance" class="form-select"><option value="no_aplica" {% if p.maintenance=='no_aplica' %}selected{% endif %}>No aplica</option><option value="incluido" {% if p.maintenance=='incluido' %}selected{% endif %}>Incluido</option><option value="no_incluido" {% if p.maintenance=='no_incluido' %}selected{% endif %}>No incluido</option></select></div>
+          <div class="col-md-3"><label class="form-label">Área responsable</label><input name="responsible_area" class="form-control" value="{{ p.responsible_area or '' }}"></div>
+          <div class="col-md-3 pt-4"><label class="form-check"><input type="checkbox" name="renewal_required" class="form-check-input" {% if p.renewal_required %}checked{% endif %}> Renovación</label><label class="form-check"><input type="checkbox" name="is_physical" class="form-check-input" {% if p.is_physical %}checked{% endif %}> Físico</label></div>
+          <div class="col-12"><label class="form-label">Beneficios / componentes</label><textarea name="components" class="form-control" rows="3">{{ p.components or '' }}</textarea></div>
+        </div>
+      </form>
+      {% endfor %}
+    </section>
+  </div>
+</div>
+{% endblock %}

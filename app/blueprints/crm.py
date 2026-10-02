@@ -407,6 +407,7 @@ def new_quote(client_id):
                 return render_template("crm/quote_form.html", client=client, products=products)
 
             product_id = None
+            product = None
             if index < len(product_ids) and product_ids[index]:
                 try:
                     product_id = int(product_ids[index])
@@ -416,6 +417,13 @@ def new_quote(client_id):
                     db.session.rollback()
                     flash("Uno de los productos seleccionados ya no está disponible.", "danger")
                     return render_template("crm/quote_form.html", client=client, products=products)
+                product = db.session.get(ProductService, product_id)
+                if product and product.category == "paquete":
+                    if product.base_price is None or Decimal(str(product.base_price)) <= 0:
+                        db.session.rollback()
+                        flash(f"El paquete {product.name} todavía no tiene precio fijo configurado.", "danger")
+                        return render_template("crm/quote_form.html", client=client, products=products)
+                    price = Decimal(str(product.base_price))
 
             db.session.add(
                 QuoteItem(
