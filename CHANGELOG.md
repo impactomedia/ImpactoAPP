@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.1 — Hotfix Bloque 2
+
+- Corregido el cierre financiero de un plan sustituido: el monto pagado real se toma de `Sale.amount_paid`, evitando que la cuenta histórica quede en USD 0.00 al hacer upgrade.
+- La cuenta por cobrar del plan anterior queda cerrada/cancelada sin crear pagos ficticios y sin saldo exigible.
+- Actualizada la prueba V2 histórica para usar un servicio complementario; desde v1.9.0 los paquetes principales ya no se crean por el formulario manual de contratos.
+- No hay cambios de esquema ni migración de base de datos.
+
 ## 1.9.0 — Impacto Nexora · Bloque 2: Servicio principal y Upgrades
 
 - Nuevo flujo independiente `Servicio principal / Upgrade` para separar el plan principal de las compras adicionales.

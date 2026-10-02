@@ -183,7 +183,10 @@ def test_platform_upsert_keeps_one_row_per_platform(client, app):
 def test_contract_creation_generates_v2_snapshot(client, app):
     client_id = _make_client(app, "advisor-v2@test.local", "V2-CONTRACT", "Cliente Contrato V2")
     with app.app_context():
-        product = ProductService.query.filter_by(name="Golden").one()
+        # Desde Nexora 1.9.0 los paquetes principales se registran únicamente
+        # por Servicio principal / Upgrade. Este test cubre el formulario
+        # histórico/complementario con un servicio no principal.
+        product = ProductService.query.filter_by(name="Website").one()
         product_id = product.id
 
     _login(client, "advisor-v2@test.local")
@@ -193,10 +196,11 @@ def test_contract_creation_generates_v2_snapshot(client, app):
             "product_id": product_id,
             "status": "activo",
             "starts_on": date.today().isoformat(),
-            "agreed_price": "2000",
+            "agreed_price": "500",
+            "modality_snapshot": "dueno",
+            "maintenance_snapshot": "no_incluido",
             "benefits_snapshot": "Website\nGoogle Business Profile",
             "courtesies_snapshot": "Business Cards",
-            "principal": "on",
         },
         follow_redirects=False,
     )
@@ -213,7 +217,7 @@ def test_contract_creation_generates_v2_snapshot(client, app):
         assert row.maintenance_snapshot == "no_incluido"
         assert "Website" in row.benefits_snapshot
         assert row.courtesies_snapshot == "Business Cards"
-        assert row.contract.principal is True
+        assert row.contract.principal is False
 
 
 def test_production_client_v2_hides_unassigned_projects_and_tasks(client, app):

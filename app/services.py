@@ -377,7 +377,7 @@ def _close_replaced_principal(contract):
             # sin fingir pagos que nunca existieron. El monto exigible queda igual a lo
             # efectivamente pagado y la nota conserva el total anterior.
             original_total = D(sale.receivable.total_amount)
-            actual_paid = D(sale.receivable.paid_amount)
+            actual_paid = D(sale.amount_paid)
             sale.receivable.status = "cancelado"
             sale.receivable.notes = (
                 f"{sale.receivable.notes or ''}\n"
