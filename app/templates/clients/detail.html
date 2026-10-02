@@ -472,12 +472,80 @@
 
     <div class="tab-pane fade" id="historial">
       <div class="row g-4">
-        <div class="col-xl-6">
-          <h2 class="h5">Comentarios internos</h2>
-          {% if can_edit %}<form method="post" action="{{ url_for('clients.add_comment', client_id=client.id) }}" class="mb-4"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="row g-2"><div class="col-md-5"><select name="process_type" class="form-select" required><option>Seguimiento / CRM</option><option>Cotización / Venta</option><option>Pago / Finanzas</option><option>Onboarding</option><option>Diseño</option><option>Desarrollo web</option><option>Google Business</option><option>Redes sociales</option><option>SEO</option><option>Imprenta</option><option>Soporte</option><option>Renovación</option><option>Otro</option></select></div><div class="col-md-7"><input name="process_detail" class="form-control" placeholder="Detalle del proceso"></div><div class="col-12"><textarea name="body" class="form-control" rows="3" required placeholder="Comentario interno"></textarea></div></div><button class="btn btn-brand mt-2">Agregar comentario</button></form>{% endif %}
-          <div class="timeline">{% for comment in comments %}<div class="timeline-item"><div class="d-flex justify-content-between gap-2"><strong>{{ comment.user.name }}</strong><small class="text-secondary">{{ comment.created_at.strftime('%d/%m/%Y %H:%M') }}</small></div><div class="mt-1"><span class="badge-soft info">{{ comment.process_type }}</span>{% if comment.department_snapshot %}<span class="badge-soft muted">{{ comment.department_snapshot }}</span>{% endif %}</div>{% if comment.process_detail %}<small class="d-block text-secondary mt-2">{{ comment.process_detail }}</small>{% endif %}<p class="mb-0 mt-2">{{ comment.body }}</p></div>{% else %}<p class="text-secondary">Sin comentarios internos.</p>{% endfor %}</div>
+        <div class="col-xl-5">
+          <div class="panel-header"><div><h2>Comentarios internos</h2><p>Notas humanas del equipo. No sustituyen los eventos automáticos.</p></div></div>
+          {% if can_edit %}
+          <form method="post" action="{{ url_for('clients.add_comment', client_id=client.id) }}" class="mb-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-2">
+              <div class="col-md-5"><select name="process_type" class="form-select" required><option>Seguimiento / CRM</option><option>Cotización / Venta</option><option>Pago / Finanzas</option><option>Onboarding</option><option>Diseño</option><option>Desarrollo web</option><option>Google Business</option><option>Redes sociales</option><option>SEO</option><option>Imprenta</option><option>Soporte</option><option>Renovación</option><option>Otro</option></select></div>
+              <div class="col-md-7"><input name="process_detail" class="form-control" placeholder="Detalle del proceso"></div>
+              <div class="col-12"><textarea name="body" class="form-control" rows="3" required placeholder="Comentario interno"></textarea></div>
+            </div>
+            <button class="btn btn-brand mt-2">Agregar comentario</button>
+          </form>
+          {% endif %}
+          <div class="timeline">
+            {% for comment in comments %}
+            <div class="timeline-item">
+              <div class="d-flex justify-content-between gap-2">
+                <strong>{{ comment.user.name }}</strong>
+                <small class="text-secondary">{{ comment.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+              </div>
+              <div class="mt-1">
+                <span class="badge-soft info">{{ comment.process_type }}</span>
+                {% if comment.department_snapshot %}<span class="badge-soft muted">{{ comment.department_snapshot }}</span>{% endif %}
+              </div>
+              {% if comment.process_detail %}<small class="d-block text-secondary mt-2">{{ comment.process_detail }}</small>{% endif %}
+              <p class="mb-0 mt-2">{{ comment.body }}</p>
+            </div>
+            {% else %}
+            <p class="text-secondary">Sin comentarios internos.</p>
+            {% endfor %}
+          </div>
         </div>
-        <div class="col-xl-6"><h2 class="h5">Línea de tiempo</h2><div class="timeline">{% for dt,kind,title,body in timeline %}<div class="timeline-item"><strong>{{ kind }} — {{ title }}</strong><small class="d-block text-secondary">{{ dt.strftime('%d/%m/%Y %H:%M') if dt else '' }}</small><p>{{ body or '' }}</p></div>{% else %}<p class="text-secondary">Sin eventos.</p>{% endfor %}</div></div>
+
+        <div class="col-xl-7">
+          <div class="panel-header">
+            <div>
+              <h2>Timeline automático</h2>
+              <p>{{ timeline_count }} evento(s) del expediente, ordenados del más reciente al más antiguo.</p>
+            </div>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2 mb-3" id="timelineFilters">
+            <button type="button" class="btn btn-sm btn-dark" data-timeline-filter="all">Todo</button>
+            {% if current_user.has_permission('crm.view') %}<button type="button" class="btn btn-sm btn-light border" data-timeline-filter="crm">CRM</button>{% endif %}
+            {% if can_financial %}<button type="button" class="btn btn-sm btn-light border" data-timeline-filter="comercial">Comercial</button><button type="button" class="btn btn-sm btn-light border" data-timeline-filter="finanzas">Finanzas</button>{% endif %}
+            {% if current_user.has_permission('projects.view') or current_user.has_permission('tasks.view') %}<button type="button" class="btn btn-sm btn-light border" data-timeline-filter="desarrollo">Desarrollo</button>{% endif %}
+            {% if current_user.has_permission('printing.view') %}<button type="button" class="btn btn-sm btn-light border" data-timeline-filter="imprenta">Imprenta</button>{% endif %}
+            {% if current_user.has_permission('support.view') %}<button type="button" class="btn btn-sm btn-light border" data-timeline-filter="soporte">Soporte</button>{% endif %}
+            <button type="button" class="btn btn-sm btn-light border" data-timeline-filter="archivos">Archivos</button>
+            <button type="button" class="btn btn-sm btn-light border" data-timeline-filter="interno">Interno</button>
+          </div>
+
+          <div class="timeline" id="clientTimeline">
+            {% for event in timeline %}
+            <div class="timeline-item" data-timeline-category="{{ event.category }}">
+              <div class="d-flex justify-content-between gap-3 align-items-start">
+                <div>
+                  <div class="mb-1">
+                    <span class="badge-soft">{{ event.kind }}</span>
+                    <small class="text-secondary ms-1">{{ event.category|label }}</small>
+                  </div>
+                  <strong>{{ event.title }}</strong>
+                </div>
+                <small class="text-secondary text-nowrap">{{ event.dt.strftime('%d/%m/%Y %H:%M') }}</small>
+              </div>
+              {% if event.actor %}<small class="d-block text-secondary mt-1">Por {{ event.actor }}</small>{% endif %}
+              {% if event.body %}<p class="mb-1 mt-2" style="white-space:pre-line">{{ event.body }}</p>{% endif %}
+              {% if event.link %}<a class="small" href="{{ event.link }}">Abrir registro</a>{% endif %}
+            </div>
+            {% else %}
+            <p class="text-secondary">Todavía no hay eventos en el expediente.</p>
+            {% endfor %}
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -486,9 +554,31 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const hash = window.location.hash;
-  if (!hash) return;
-  const trigger = document.querySelector(`[data-bs-target="${hash}"]`);
-  if (trigger && window.bootstrap) bootstrap.Tab.getOrCreateInstance(trigger).show();
+  if (hash) {
+    const trigger = document.querySelector(`[data-bs-target="${hash}"]`);
+    if (trigger && window.bootstrap) bootstrap.Tab.getOrCreateInstance(trigger).show();
+  }
+
+  const filters = document.querySelectorAll('[data-timeline-filter]');
+  const events = document.querySelectorAll('[data-timeline-category]');
+  filters.forEach(button => {
+    button.addEventListener('click', () => {
+      const category = button.dataset.timelineFilter;
+      filters.forEach(item => {
+        item.classList.remove('btn-dark');
+        item.classList.add('btn-light', 'border');
+      });
+      button.classList.remove('btn-light', 'border');
+      button.classList.add('btn-dark');
+
+      events.forEach(item => {
+        item.classList.toggle(
+          'd-none',
+          category !== 'all' && item.dataset.timelineCategory !== category
+        );
+      });
+    });
+  });
 });
 </script>
 {% endblock %}

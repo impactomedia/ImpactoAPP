@@ -1,42 +1,39 @@
-# Impacto Nexora v1.11.0 — Bloque 4
+# Impacto Nexora v1.12.0 — Bloque 5
 
 ## Objetivo
-Convertir la ficha del cliente en el expediente manual central y hacer que la información importada desde el Excel operativo llegue a los mismos campos.
+Convertir la pestaña Historial del expediente del cliente en una línea de tiempo automática que una lo que ya ocurre en CRM, Ventas, Desarrollo, Imprenta, Soporte, Archivos y Renovaciones.
 
-## Datos centralizados
-- Negocio y contacto.
-- Teléfonos y WhatsApp.
-- Email principal, operativo y corporativo.
-- Dirección USA, ciudad, estado, ZIP y zona horaria.
-- Industria, servicios y fuente comercial.
-- Website, Facebook, Instagram y plataformas.
-- Días/horarios de atención.
-- Experiencia y cobertura.
-- Métodos de pago y política de estimados.
-- Idiomas.
-- Servicios a promocionar.
-- Estado del logotipo y colores.
-- Dominio, proveedores, hosting y fechas de renovación.
-- Notas operativas.
+## Fuentes del Timeline
+- Interacciones CRM.
+- Cotizaciones.
+- Servicio principal y contratos.
+- Ventas, upgrades y compras adicionales.
+- Pagos y cobranza.
+- Comentarios internos.
+- Proyectos.
+- Tareas y comentarios de tareas.
+- Solicitudes de cambio.
+- Tickets y comentarios de soporte.
+- Órdenes de imprenta.
+- Versiones de diseño.
+- Envíos y recepciones.
+- Incidencias de imprenta.
+- Archivos.
+- Renovaciones.
+- Transferencias de responsable.
+- Cambios de estado históricos desde AuditLog.
 
-## Información que NO se duplica
-Plan actual, fechas del plan, beneficios, cortesías, inversiones, pagos y balance se leen de Contratos/Ventas/Pagos.
+## Permisos
+El Timeline respeta los permisos ya existentes:
+- información financiera solo para roles con Sales/Finance;
+- CRM solo para roles con CRM;
+- proyectos/tareas solo dentro del alcance permitido;
+- imprenta y soporte según sus permisos.
 
-## Seguridad
-No se agregó ningún campo de contraseña. El importador continúa excluyendo CLAVE, CONTRASEÑA DEL CORREO y la hoja CONTRASEÑAS.
-
-## Migración
-Esta versión SÍ requiere una migración única:
-
-    python -m scripts.upgrade_nexora_1_11_0
-
-La migración es idempotente y únicamente agrega campos al perfil operativo.
+## Base de datos
+NO requiere migración.
 
 ## Railway
-1. Coloca temporalmente en Pre-Deploy:
-   `python -m scripts.upgrade_nexora_1_11_0`
-2. Sube v1.11.0 a GitHub.
-3. Espera el deploy exitoso.
-4. Después elimina el comando y deja Pre-Deploy vacío.
-5. NO cambies Start Command.
-6. NO cambies Dockerfile.
+- Pre-Deploy: vacío.
+- Start Command: no cambiar.
+- Dockerfile: no cambiar.

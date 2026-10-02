@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.12.0 — Impacto Nexora · Bloque 5: Timeline automático del expediente
+
+- La ficha del cliente obtiene un Timeline automático único construido desde los módulos reales, sin tabla paralela ni duplicación manual.
+- Se integran actividades de CRM/interacciones y cotizaciones cuando el usuario tiene permiso comercial.
+- Se integran servicio principal, contratos, upgrades, compras adicionales, pagos y cobranza respetando permisos financieros.
+- Se integran proyectos, tareas, comentarios de tareas y solicitudes de cambio.
+- Se integran tickets de soporte y comentarios de soporte.
+- Se integran órdenes de imprenta, versiones de diseño, envíos, recepciones e incidencias.
+- Se integran archivos adjuntos, renovaciones y cambios de responsable comercial.
+- Los cambios históricos de estado de Proyecto, Tarea, Soporte e Imprenta se leen desde AuditLog existente.
+- Se evitan eventos duplicados de creación/comentarios/evidencias cuando ya existe un registro fuente directo.
+- El Timeline incluye filtros visuales por CRM, Comercial, Finanzas, Desarrollo, Imprenta, Soporte, Archivos e Interno.
+- Los eventos mantienen enlaces al registro fuente cuando corresponde.
+- Producción/Desarrollo no recibe ventas, pagos, cotizaciones ni actividades CRM si no tiene esos permisos.
+- No requiere migración de base de datos.
+- Nueva batería `tests/test_nexora_timeline.py` para integración multi-módulo y protección financiera por rol.
+
 ## 1.11.0 — Impacto Nexora · Bloque 4: Ficha completa del cliente
 
 - “Editar cliente” pasa a ser una ficha completa que guarda en una sola acción datos base + perfil operativo.

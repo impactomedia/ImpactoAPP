@@ -1,0 +1,18 @@
+IMPACTO NEXORA v1.12.0 — BLOQUE 5
+====================================
+
+TIMELINE AUTOMÁTICO DEL EXPEDIENTE
+
+1. Reemplaza los archivos respetando exactamente sus carpetas.
+2. Sube los cambios a GitHub.
+3. Espera GitHub Actions y Railway.
+
+IMPORTANTE:
+- NO requiere migración.
+- Pre-Deploy debe quedar vacío.
+- NO cambies Start Command.
+- NO cambies Dockerfile.
+
+DESPUÉS DEL DEPLOY:
+Abre un cliente > Historial.
+La columna derecha mostrará el Timeline automático y sus filtros por área.

@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import unicodedata
 from pathlib import Path
 from datetime import date, datetime
@@ -35,6 +36,14 @@ from app.models import (
     PrintOrder,
     Renewal,
     SupportTicket,
+    TaskComment,
+    ChangeRequest,
+    TicketComment,
+    PrintItem,
+    DesignVersion,
+    Shipment,
+    PrintIncident,
+    AuditLog,
 )
 
 from app.client_v2_models import (
@@ -307,6 +316,572 @@ def _apply_operational_profile_form(client, profile=None):
     return profile
 
 
+
+def _timeline_datetime(value):
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    return None
+
+
+def _timeline_event(events, when, category, kind, title, body=None, link=None, actor=None):
+    dt = _timeline_datetime(when)
+    if not dt:
+        return
+    events.append({
+        "dt": dt,
+        "category": category,
+        "kind": kind,
+        "title": title,
+        "body": body or "",
+        "link": link,
+        "actor": actor,
+    })
+
+
+def _json_dict(raw):
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+        return value if isinstance(value, dict) else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _audit_change_text(log):
+    before = _json_dict(log.before_json)
+    after = _json_dict(log.after_json)
+    parts = []
+
+    if "status" in before or "status" in after:
+        previous = before.get("status")
+        current = after.get("status")
+        if previous != current:
+            if previous and current:
+                parts.append(
+                    f"Estado: {str(previous).replace('_', ' ').title()} → "
+                    f"{str(current).replace('_', ' ').title()}"
+                )
+            elif current:
+                parts.append(f"Estado: {str(current).replace('_', ' ').title()}")
+
+    if "progress" in before or "progress" in after:
+        previous = before.get("progress")
+        current = after.get("progress")
+        if previous != current and current is not None:
+            parts.append(f"Progreso: {current}%")
+
+    if "decision" in after:
+        parts.append(f"Decisión: {str(after['decision']).replace('_', ' ').title()}")
+    if "tracking" in after and after.get("tracking"):
+        parts.append(f"Tracking: {after['tracking']}")
+    if "incident" in after and after.get("incident"):
+        parts.append(f"Incidencia: {str(after['incident']).replace('_', ' ').title()}")
+    if "resolution" in after and after.get("resolution"):
+        parts.append(f"Resolución: {after['resolution']}")
+
+    if not parts and log.reason:
+        parts.append(log.reason)
+
+    return " · ".join(parts) or "Registro actualizado."
+
+
+def _build_client_timeline(
+    client,
+    *,
+    attachments,
+    visible_projects,
+    visible_tasks,
+    can_financial,
+):
+    """Construye un Timeline único leyendo los módulos reales, sin duplicar datos."""
+    events = []
+
+    can_crm = current_user.has_permission("crm.view")
+    can_sales = current_user.has_permission("sales.view")
+    can_projects = current_user.has_permission("projects.view")
+    can_tasks = current_user.has_permission("tasks.view")
+    can_support = current_user.has_permission("support.view")
+    can_printing = current_user.has_permission("printing.view")
+
+    # CRM / seguimiento preservado.
+    if can_crm:
+        for interaction in client.interactions:
+            _timeline_event(
+                events,
+                interaction.occurred_at or interaction.created_at,
+                "crm",
+                "Interacción",
+                interaction.subject or interaction.interaction_type.replace("_", " ").title(),
+                interaction.notes or interaction.result,
+                actor=interaction.user.name if interaction.user else None,
+            )
+
+        for quote in client.quotes:
+            body = f"Estado: {quote.status.replace('_', ' ').title()}"
+            if can_financial:
+                body += f" · Total USD {quote.total}"
+            _timeline_event(
+                events,
+                quote.created_at,
+                "comercial",
+                "Cotización",
+                quote.quote_no,
+                body,
+            )
+
+    # Servicio principal / contratos: visible como contexto operativo, sin exponer saldo.
+    for contract in client.contracts:
+        product_name = contract.product.name if contract.product else "Servicio"
+        kind = "Servicio principal" if contract.principal else "Servicio"
+        body = f"Estado: {contract.status.replace('_', ' ').title()}"
+        if contract.starts_on:
+            body += f" · Inicio: {contract.starts_on}"
+        if contract.ends_on:
+            body += f" · Fin: {contract.ends_on}"
+        _timeline_event(
+            events,
+            contract.created_at,
+            "comercial",
+            kind,
+            product_name,
+            body,
+        )
+
+    # Ventas, upgrades, compras y pagos solo con permiso comercial/financiero.
+    if can_financial:
+        for sale in client.sales:
+            operation_type = (
+                sale.operation_meta.operation_type
+                if sale.operation_meta
+                else "additional_purchase"
+            )
+            sale_label = {
+                "principal_service": "Servicio principal",
+                "principal_upgrade": "Upgrade",
+                "additional_purchase": "Compra adicional",
+            }.get(operation_type, "Venta")
+            _timeline_event(
+                events,
+                sale.created_at,
+                "comercial",
+                sale_label,
+                sale.sale_no,
+                f"Total USD {sale.total} · Estado: {sale.status.replace('_', ' ').title()}",
+                link=url_for("sales.detail", sale_id=sale.id),
+            )
+
+        for payment in client.payments:
+            _timeline_event(
+                events,
+                payment.created_at,
+                "finanzas",
+                "Pago",
+                f"USD {payment.amount}",
+                (
+                    f"{payment.method or 'Método no indicado'}"
+                    + (f" · Ref. {payment.reference}" if payment.reference else "")
+                    + f" · {payment.status.replace('_', ' ').title()}"
+                ),
+                link=url_for("sales.detail", sale_id=payment.sale_id),
+            )
+
+        for note in client.collection_notes:
+            detail = note.body
+            if note.promise_date:
+                detail = f"{detail} · Compromiso {note.promise_date}"
+            _timeline_event(
+                events,
+                note.created_at,
+                "finanzas",
+                "Cobranza",
+                note.note_type.replace("_", " ").title(),
+                detail,
+            )
+
+    # Comentarios internos forman parte del expediente, no se duplican manualmente.
+    comments = (
+        ClientComment.query
+        .filter_by(client_id=client.id)
+        .order_by(ClientComment.created_at.desc())
+        .all()
+    )
+    for comment in comments:
+        detail = comment.process_detail or comment.department_snapshot or ""
+        _timeline_event(
+            events,
+            comment.created_at,
+            "interno",
+            "Comentario interno",
+            f"{comment.user.name} · {comment.process_type}",
+            f"{detail} — {comment.body}" if detail else comment.body,
+            actor=comment.user.name if comment.user else None,
+        )
+
+    # Desarrollo / proyectos / tareas.
+    project_ids = {row.id for row in visible_projects}
+    task_ids = {row.id for row in visible_tasks}
+
+    if can_projects:
+        for project in visible_projects:
+            body = (
+                f"Estado: {project.status.replace('_', ' ').title()} · "
+                f"Progreso: {project.progress or 0}%"
+            )
+            _timeline_event(
+                events,
+                project.created_at,
+                "desarrollo",
+                "Proyecto",
+                project.name,
+                body,
+                link=url_for("operations.project_detail", project_id=project.id),
+            )
+        if project_ids:
+            for change in (
+                ChangeRequest.query
+                .filter(ChangeRequest.project_id.in_(project_ids))
+                .order_by(ChangeRequest.created_at.desc())
+                .all()
+            ):
+                _timeline_event(
+                    events,
+                    change.created_at,
+                    "desarrollo",
+                    "Solicitud de cambio",
+                    change.title,
+                    (
+                        f"{change.scope_class.replace('_', ' ').title()} · "
+                        f"{change.status.replace('_', ' ').title()}"
+                        + (f" · {change.description}" if change.description else "")
+                    ),
+                    link=url_for("operations.project_detail", project_id=change.project_id),
+                )
+
+    if can_tasks:
+        for task in visible_tasks:
+            _timeline_event(
+                events,
+                task.created_at,
+                "desarrollo",
+                "Tarea",
+                task.title,
+                f"Estado: {task.status.replace('_', ' ').title()} · Prioridad: {task.priority.title()}",
+                link=url_for("operations.task_detail", task_id=task.id),
+            )
+        if task_ids:
+            for comment in (
+                TaskComment.query
+                .filter(TaskComment.task_id.in_(task_ids))
+                .order_by(TaskComment.created_at.desc())
+                .all()
+            ):
+                _timeline_event(
+                    events,
+                    comment.created_at,
+                    "desarrollo",
+                    "Comentario de tarea",
+                    comment.task.title if comment.task else "Tarea",
+                    comment.body,
+                    link=url_for("operations.task_detail", task_id=comment.task_id),
+                    actor=comment.user.name if comment.user else None,
+                )
+
+    # Soporte.
+    tickets = []
+    if can_support:
+        tickets = list(client.tickets)
+        for ticket in tickets:
+            _timeline_event(
+                events,
+                ticket.created_at,
+                "soporte",
+                "Ticket",
+                f"{ticket.ticket_no} · {ticket.subject}",
+                (
+                    f"Estado: {ticket.status.replace('_', ' ').title()} · "
+                    f"Prioridad: {ticket.priority.title()}"
+                ),
+                link=url_for("support.detail", ticket_id=ticket.id),
+            )
+        ticket_ids = {row.id for row in tickets}
+        if ticket_ids:
+            for comment in (
+                TicketComment.query
+                .filter(TicketComment.ticket_id.in_(ticket_ids))
+                .order_by(TicketComment.created_at.desc())
+                .all()
+            ):
+                _timeline_event(
+                    events,
+                    comment.created_at,
+                    "soporte",
+                    "Comentario de soporte",
+                    comment.ticket.subject if comment.ticket else "Ticket",
+                    comment.body,
+                    link=url_for("support.detail", ticket_id=comment.ticket_id),
+                    actor=comment.user.name if comment.user else None,
+                )
+
+    # Imprenta / evidencias / envíos.
+    orders = []
+    print_items = []
+    shipments = []
+    incidents = []
+    if can_printing:
+        orders = list(client.print_orders)
+        order_ids = {row.id for row in orders}
+
+        for order in orders:
+            _timeline_event(
+                events,
+                order.created_at,
+                "imprenta",
+                "Orden de imprenta",
+                order.order_no,
+                f"Estado: {order.status.replace('_', ' ').title()}",
+                link=url_for("printing.detail", order_id=order.id),
+            )
+
+        if order_ids:
+            print_items = (
+                PrintItem.query
+                .filter(PrintItem.order_id.in_(order_ids))
+                .all()
+            )
+            item_ids = {row.id for row in print_items}
+
+            if item_ids:
+                for version in (
+                    DesignVersion.query
+                    .filter(DesignVersion.print_item_id.in_(item_ids))
+                    .order_by(DesignVersion.created_at.desc())
+                    .all()
+                ):
+                    _timeline_event(
+                        events,
+                        version.created_at,
+                        "imprenta",
+                        "Diseño cargado",
+                        f"{version.print_item.name} · v{version.version}",
+                        (
+                            f"Estado: {version.status.replace('_', ' ').title()}"
+                            + (f" · {version.comment}" if version.comment else "")
+                        ),
+                        link=url_for("printing.detail", order_id=version.print_item.order_id),
+                    )
+
+            shipments = (
+                Shipment.query
+                .filter(Shipment.order_id.in_(order_ids))
+                .all()
+            )
+            for shipment in shipments:
+                order = shipment.order
+                title = order.order_no if order else "Envío"
+                if shipment.shipped_at:
+                    _timeline_event(
+                        events,
+                        shipment.shipped_at,
+                        "imprenta",
+                        "Envío",
+                        title,
+                        (
+                            f"{shipment.carrier or 'Entrega local'}"
+                            + (f" · Tracking {shipment.tracking_number}" if shipment.tracking_number else "")
+                            + f" · {shipment.status.replace('_', ' ').title()}"
+                        ),
+                        link=url_for("printing.detail", order_id=shipment.order_id),
+                    )
+                if shipment.received_at:
+                    _timeline_event(
+                        events,
+                        shipment.received_at,
+                        "imprenta",
+                        "Recepción",
+                        title,
+                        "Envío marcado como recibido.",
+                        link=url_for("printing.detail", order_id=shipment.order_id),
+                    )
+
+            incidents = (
+                PrintIncident.query
+                .filter(PrintIncident.order_id.in_(order_ids))
+                .all()
+            )
+            for incident in incidents:
+                _timeline_event(
+                    events,
+                    incident.created_at,
+                    "imprenta",
+                    "Incidencia de imprenta",
+                    incident.incident_type.replace("_", " ").title(),
+                    incident.description,
+                    link=url_for("printing.detail", order_id=incident.order_id),
+                )
+                if incident.status == "resuelta" and incident.updated_at:
+                    _timeline_event(
+                        events,
+                        incident.updated_at,
+                        "imprenta",
+                        "Incidencia resuelta",
+                        incident.incident_type.replace("_", " ").title(),
+                        incident.resolution or "Incidencia resuelta.",
+                        link=url_for("printing.detail", order_id=incident.order_id),
+                    )
+
+    # Archivos del expediente.
+    for attachment in attachments:
+        _timeline_event(
+            events,
+            attachment.created_at,
+            "archivos",
+            "Archivo adjunto",
+            attachment.file_name,
+            "Documento agregado al expediente del cliente.",
+            link=url_for(
+                "clients.download_attachment",
+                client_id=client.id,
+                attachment_id=attachment.id,
+            ),
+        )
+
+    # Renovaciones.
+    if can_sales:
+        for renewal in client.renewals:
+            _timeline_event(
+                events,
+                renewal.created_at,
+                "renovaciones",
+                "Renovación programada",
+                renewal.renewal_type,
+                (
+                    f"Vence: {renewal.due_date} · "
+                    f"Estado: {renewal.status.replace('_', ' ').title()}"
+                ),
+            )
+            if renewal.last_contact_at:
+                _timeline_event(
+                    events,
+                    renewal.last_contact_at,
+                    "renovaciones",
+                    "Contacto de renovación",
+                    renewal.renewal_type,
+                    renewal.notes or "Seguimiento de renovación.",
+                )
+
+    # Cambios de responsable comercial.
+    for row in client.ownership_history:
+        previous = (
+            db.session.get(Collaborator, row.previous_owner_id)
+            if row.previous_owner_id
+            else None
+        )
+        new_owner = (
+            db.session.get(Collaborator, row.new_owner_id)
+            if row.new_owner_id
+            else None
+        )
+        previous_name = previous.user.name if previous and previous.user else "Sin asignar"
+        new_name = new_owner.user.name if new_owner and new_owner.user else "Sin asignar"
+        _timeline_event(
+            events,
+            row.changed_at,
+            "interno",
+            "Cambio de responsable",
+            f"{previous_name} → {new_name}",
+            row.reason or "Transferencia de cartera.",
+        )
+
+    # Cambios de estado históricos tomados de AuditLog.
+    audit_scopes = {
+        "Project": project_ids if can_projects else set(),
+        "Task": task_ids if can_tasks else set(),
+        "SupportTicket": {row.id for row in tickets},
+        "PrintOrder": {row.id for row in orders},
+        "PrintItem": {row.id for row in print_items},
+        "Shipment": {row.id for row in shipments},
+        "PrintIncident": {row.id for row in incidents},
+    }
+    audit_kind = {
+        "Project": ("desarrollo", "Cambio de proyecto"),
+        "Task": ("desarrollo", "Cambio de tarea"),
+        "SupportTicket": ("soporte", "Cambio de ticket"),
+        "PrintOrder": ("imprenta", "Cambio de imprenta"),
+        "PrintItem": ("imprenta", "Cambio de diseño"),
+        "Shipment": ("imprenta", "Cambio de envío"),
+        "PrintIncident": ("imprenta", "Cambio de incidencia"),
+    }
+    skipped_actions = {
+        "crear_proyecto",
+        "crear_tarea",
+        "crear_ticket",
+        "crear_orden_imprenta",
+        "comentario_tarea",
+        "comentario_ticket",
+        "cargar_diseno",
+        "producto_enviado",
+        "producto_recibido",
+        "incidencia_imprenta",
+        "resolver_incidencia_imprenta",
+    }
+
+    for entity, ids in audit_scopes.items():
+        if not ids:
+            continue
+        logs = (
+            AuditLog.query
+            .filter(
+                AuditLog.entity == entity,
+                AuditLog.entity_id.in_([str(value) for value in ids]),
+            )
+            .order_by(AuditLog.created_at.desc())
+            .all()
+        )
+        category, kind = audit_kind[entity]
+        for log in logs:
+            if log.action in skipped_actions:
+                continue
+            _timeline_event(
+                events,
+                log.created_at,
+                category,
+                kind,
+                log.action.replace("_", " ").title(),
+                _audit_change_text(log),
+                actor=log.user.name if log.user else None,
+            )
+
+    # Ediciones importantes de la ficha, sin exponer los valores modificados.
+    for log in (
+        AuditLog.query
+        .filter(
+            AuditLog.entity == "Client",
+            AuditLog.entity_id == str(client.id),
+            AuditLog.action.in_([
+                "editar_cliente",
+                "actualizar_perfil_operativo",
+                "actualizar_plataforma",
+            ]),
+        )
+        .order_by(AuditLog.created_at.desc())
+        .all()
+    ):
+        _timeline_event(
+            events,
+            log.created_at,
+            "interno",
+            "Ficha actualizada",
+            log.action.replace("_", " ").title(),
+            "Información del expediente actualizada.",
+            actor=log.user.name if log.user else None,
+        )
+
+    events.sort(key=lambda item: item["dt"], reverse=True)
+    return events
+
 def _client_has_history(client_id):
     checks = [
         ("interacciones", Interaction.query.filter_by(client_id=client_id).first()),
@@ -392,88 +967,118 @@ def detail(client_id):
     client = db.get_or_404(Client, client_id)
     if client.record_type != "cliente":
         return redirect(url_for("crm.detail", client_id=client.id))
+
     collaborators = []
     if current_user.has_permission("clients.assign"):
-        collaborators = Collaborator.query.filter_by(status="activo").order_by(Collaborator.job_title).all()
+        collaborators = (
+            Collaborator.query
+            .filter_by(status="activo")
+            .order_by(Collaborator.job_title)
+            .all()
+        )
+
     products = []
     if current_user.has_permission("clients.edit"):
-        products = ProductService.query.filter_by(active=True).order_by(ProductService.name).all()
-    timeline = []
+        products = (
+            ProductService.query
+            .filter_by(active=True)
+            .order_by(ProductService.name)
+            .all()
+        )
 
-    for interaction in client.interactions:
-        timeline.append((interaction.occurred_at or interaction.created_at, "Interacción", interaction.subject or interaction.interaction_type, interaction.notes))
+    can_financial = (
+        current_user.has_permission("sales.view")
+        or current_user.has_permission("finance.view")
+    )
 
-    can_financial = current_user.has_permission("sales.view") or current_user.has_permission("finance.view")
-    if can_financial:
-        for payment in client.payments:
-            timeline.append((payment.created_at, "Pago", f"Pago {payment.amount}", payment.reference or payment.method))
-        for sale in client.sales:
-            operation_type = (
-                sale.operation_meta.operation_type
-                if sale.operation_meta
-                else "additional_purchase"
-            )
-            sale_label = {
-                "principal_service": "Servicio principal",
-                "principal_upgrade": "Upgrade",
-                "additional_purchase": "Compra adicional",
-            }.get(operation_type, "Venta")
-            timeline.append((sale.created_at, sale_label, sale.sale_no, f"Total USD {sale.total}"))
+    attachments = (
+        Attachment.query
+        .filter_by(entity_type="Client", entity_id=client.id)
+        .order_by(Attachment.created_at.desc())
+        .all()
+    )
+    comments = (
+        ClientComment.query
+        .filter_by(client_id=client.id)
+        .order_by(ClientComment.created_at.desc())
+        .all()
+    )
+    operational_profile = (
+        ClientOperationalProfile.query
+        .filter_by(client_id=client.id)
+        .first()
+    )
+    platforms = (
+        ClientPlatform.query
+        .filter_by(client_id=client.id)
+        .order_by(ClientPlatform.label)
+        .all()
+    )
 
-    comments = ClientComment.query.filter_by(client_id=client.id).order_by(ClientComment.created_at.desc()).all()
-    for comment in comments:
-        title = f"{comment.user.name} · {comment.process_type}"
-        comment_detail = comment.process_detail or comment.department_snapshot or ""
-        timeline.append((
-            comment.created_at,
-            "Comentario interno",
-            title,
-            f"{comment_detail} — {comment.body}" if comment_detail else comment.body,
-        ))
-
-    if can_financial:
-        for note in client.collection_notes:
-            detail = note.body
-            if note.promise_date:
-                detail = f"{detail} · Compromiso {note.promise_date}"
-            timeline.append((note.created_at, "Cobranza", note.note_type.replace("_", " ").title(), detail))
-
-    timeline.sort(key=lambda x: x[0] or date.min, reverse=True)
-    attachments = Attachment.query.filter_by(entity_type="Client", entity_id=client.id).order_by(Attachment.created_at.desc()).all()
-    operational_profile = ClientOperationalProfile.query.filter_by(client_id=client.id).first()
-    platforms = ClientPlatform.query.filter_by(client_id=client.id).order_by(ClientPlatform.label).all()
     upcoming_renewals = sorted(
-        [row for row in client.renewals if row.status not in {"renovado", "cancelado"}],
+        [
+            row
+            for row in client.renewals
+            if row.status not in {"renovado", "cancelado"}
+        ],
         key=lambda row: row.due_date or date.max,
     )[:8]
 
     visible_projects = []
     if current_user.has_permission("projects.view"):
-        visible_projects = [row for row in client.projects if _project_allowed(row)]
+        visible_projects = [
+            row for row in client.projects
+            if _project_allowed(row)
+        ]
 
     visible_tasks = []
     if current_user.has_permission("tasks.view"):
-        visible_tasks = [row for row in client.tasks if _task_allowed(row)]
+        visible_tasks = [
+            row for row in client.tasks
+            if _task_allowed(row)
+        ]
+
     open_tasks = sorted(
-        [row for row in visible_tasks if row.status not in {"completada", "cancelada"}],
+        [
+            row
+            for row in visible_tasks
+            if row.status not in {"completada", "cancelada"}
+        ],
         key=lambda row: row.due_at or datetime.max,
     )[:10]
 
     open_tickets = (
-        [row for row in client.tickets if row.status not in {"resuelto", "cerrado"}]
+        [
+            row
+            for row in client.tickets
+            if row.status not in {"resuelto", "cerrado"}
+        ]
         if current_user.has_permission("support.view")
         else []
     )
 
+    timeline = _build_client_timeline(
+        client,
+        attachments=attachments,
+        visible_projects=visible_projects,
+        visible_tasks=visible_tasks,
+        can_financial=can_financial,
+    )
+
     principal_contract = active_principal_contract(client)
     total_invested = sum(
-        (Decimal(str(row.amount or 0)) for row in client.payments if row.status == "confirmado"),
+        (
+            Decimal(str(row.amount or 0))
+            for row in client.payments
+            if row.status == "confirmado"
+        ),
         Decimal("0"),
     )
     additional_purchase_count = sum(
         1
         for sale in client.sales
-        if sale.operation_meta and sale.operation_meta.operation_type == "additional_purchase"
+        if sale.operation_meta
+        and sale.operation_meta.operation_type == "additional_purchase"
     )
 
     return render_template(
@@ -481,7 +1086,8 @@ def detail(client_id):
         client=client,
         collaborators=collaborators,
         products=products,
-        timeline=timeline[:60],
+        timeline=timeline,
+        timeline_count=len(timeline),
         attachments=attachments,
         comments=comments,
         operational_profile=operational_profile,
@@ -494,6 +1100,7 @@ def detail(client_id):
         principal_contract=principal_contract,
         total_invested=total_invested,
         additional_purchase_count=additional_purchase_count,
+        can_financial=can_financial,
         today=date.today(),
     )
 
