@@ -18,9 +18,17 @@ class ClientOperationalProfile(db.Model, TimestampMixin):
 
     operational_email = db.Column(db.String(190))
     corporate_email = db.Column(db.String(190))
+    whatsapp_phone = db.Column(db.String(60))
+    postal_code = db.Column(db.String(20))
+
     services_to_promote = db.Column(db.Text)
     logo_status = db.Column(db.Text)
     brand_colors = db.Column(db.String(255))
+
+    domain_name = db.Column(db.String(255))
+    domain_provider = db.Column(db.String(120))
+    hosting_provider = db.Column(db.String(120))
+    hosting_account_email = db.Column(db.String(190))
 
     domain_activated_on = db.Column(db.Date)
     domain_renews_on = db.Column(db.Date)

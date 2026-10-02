@@ -132,6 +132,82 @@ def test_advisor_can_update_operational_profile_for_own_client(client, app):
         assert profile.languages == "Español e inglés"
 
 
+def test_full_client_edit_updates_base_and_operational_data_together(client, app):
+    client_id = _make_client(app, "advisor-v2@test.local", "V2-FULL", "Ficha Completa")
+    _login(client, "advisor-v2@test.local")
+
+    response = client.post(
+        f"/clients/{client_id}/edit",
+        data={
+            "business_name": "Ficha Completa LLC",
+            "contact_name": "Contacto Principal",
+            "phone": "(305) 555-0101",
+            "other_phones": "(305) 555-0102",
+            "email": "CLIENTE@EXAMPLE.COM",
+            "preferred_channel": "WhatsApp",
+            "client_status": "activo",
+            "industry": "Landscaping",
+            "services_offered": "Landscaping\nTree Service",
+            "address": "123 Main St",
+            "city": "Miami",
+            "state": "FL",
+            "country": "Nicaragua",
+            "timezone": "America/New_York",
+            "source": "Referido",
+            "priority": "alta",
+            "main_interest": "Website",
+            "estimated_budget": "1500",
+            "website": "https://example.com",
+            "facebook": "https://facebook.com/example",
+            "instagram": "https://instagram.com/example",
+            "other_social": "YouTube",
+            "notes": "Cliente histórico",
+            "whatsapp_phone": "(305) 555-0101",
+            "postal_code": "33101",
+            "attention_days": "Lunes a sábado",
+            "business_hours": "8am - 5pm",
+            "experience_text": "12 años",
+            "coverage_text": "75 millas",
+            "payment_methods": "Efectivo, Zelle",
+            "estimate_policy": "Estimados gratis",
+            "languages": "Español e inglés",
+            "operational_email": "OPS@EXAMPLE.COM",
+            "corporate_email": "INFO@EXAMPLE.COM",
+            "services_to_promote": "Tree Removal\nPavers",
+            "logo_status": "Logotipo aprobado",
+            "brand_colors": "Verde, negro",
+            "domain_name": "example.com",
+            "domain_provider": "Hostinger",
+            "hosting_provider": "Hostinger",
+            "hosting_account_email": "HOSTING@EXAMPLE.COM",
+            "domain_notes": "Dominio administrado por Impacto",
+            "operational_notes": "No almacenar contraseñas.",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code in {302, 303}
+
+    with app.app_context():
+        customer = db.session.get(Client, client_id)
+        profile = ClientOperationalProfile.query.filter_by(client_id=client_id).one()
+
+        assert customer.business_name == "Ficha Completa LLC"
+        assert customer.email == "cliente@example.com"
+        assert customer.country == "USA"
+        assert customer.city == "Miami"
+        assert customer.state == "FL"
+        assert customer.timezone == "America/New_York"
+
+        assert profile.postal_code == "33101"
+        assert profile.whatsapp_phone == "(305) 555-0101"
+        assert profile.operational_email == "ops@example.com"
+        assert profile.corporate_email == "info@example.com"
+        assert profile.domain_name == "example.com"
+        assert profile.domain_provider == "Hostinger"
+        assert profile.hosting_provider == "Hostinger"
+        assert profile.hosting_account_email == "hosting@example.com"
+
+
 def test_production_cannot_edit_operational_profile(client, app):
     client_id = _make_client(app, "advisor-v2@test.local", "V2-PROD", "Cliente Solo Lectura")
     _login(client, "production-v2@test.local")

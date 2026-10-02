@@ -123,7 +123,7 @@ def _cell(ref, value):
 
 def _xlsx_bytes(
     business="Empresa Demo",
-    address="Dirección importada",
+    address="123 Main St, Miami, FL 33101",
 ):
     cells = {
         "B1": "#1",
@@ -345,6 +345,9 @@ def test_execute_import_creates_client_profile_platform_and_safe_contract(client
         assert profile.attention_days == "Lunes a sábado"
         assert profile.coverage_text == "50 millas"
         assert profile.operational_email == "ops@example.com"
+        assert profile.postal_code == "33101"
+        assert profile.domain_name == "example.com"
+        assert customer.country == "USA"
 
         youtube = ClientPlatform.query.filter_by(
             client_id=customer.id,

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.11.0 — Impacto Nexora · Bloque 4: Ficha completa del cliente
+
+- “Editar cliente” pasa a ser una ficha completa que guarda en una sola acción datos base + perfil operativo.
+- La ficha manual y la importación del Excel operativo escriben sobre las mismas entidades (`Client`, `ClientOperationalProfile`, `ClientPlatform` y contratos).
+- Nuevos campos operativos: WhatsApp, ZIP Code, nombre de dominio, proveedor del dominio, proveedor de hosting y correo de la cuenta de hosting.
+- Los nuevos campos no almacenan contraseñas ni secretos.
+- Ubicación de clientes fijada a USA; la ficha permite ciudad, estado, ZIP y zona horaria.
+- La pestaña Datos se convierte en una vista consolidada de contacto, ubicación, operación, marca, dominio y hosting.
+- Las compras, pagos, saldo, servicio principal, beneficios y cortesías no se duplican manualmente: se muestran desde Ventas/Pagos/Contratos.
+- El importador XLSX extrae ZIP del domicilio cuando está presente y deriva el nombre de dominio desde el website.
+- Los clientes importados quedan con país USA.
+- Se conserva la exclusión total de `CLAVE`, `CONTRASEÑA DEL CORREO` y la hoja `CONTRASEÑAS`.
+- Nueva migración idempotente `python -m scripts.upgrade_nexora_1_11_0`.
+- Pruebas ampliadas para captura manual unificada e importación Excel.
+
 ## 1.10.1 — Hotfix de pruebas Bloque 3
 
 - Actualizada la prueba de carga de Nueva Venta para la terminología definitiva de Nexora: “Nueva compra adicional” y “Forma de pago”.

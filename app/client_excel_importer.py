@@ -325,6 +325,8 @@ def _upsert_profile(
         "estimate_policy",
         "operational_email",
         "corporate_email",
+        "postal_code",
+        "domain_name",
         "services_to_promote",
         "logo_status",
         "brand_colors",
@@ -612,6 +614,8 @@ def execute_batch(
                 value,
                 overwrite=overwrite_existing,
             )
+
+        client.country = "USA"
 
         services_to_promote = (
             source.get("operational") or {}

@@ -254,6 +254,59 @@ def _apply_client_form(client):
     client.pipeline_stage = "venta_cerrada"
 
 
+def _apply_operational_profile_form(client, profile=None):
+    profile = profile or ClientOperationalProfile.query.filter_by(
+        client_id=client.id
+    ).first()
+    if not profile:
+        profile = ClientOperationalProfile(client_id=client.id)
+        db.session.add(profile)
+
+    text_fields = [
+        "attention_days",
+        "business_hours",
+        "experience_text",
+        "coverage_text",
+        "payment_methods",
+        "estimate_policy",
+        "languages",
+        "whatsapp_phone",
+        "postal_code",
+        "services_to_promote",
+        "logo_status",
+        "brand_colors",
+        "domain_name",
+        "domain_provider",
+        "hosting_provider",
+        "domain_notes",
+        "operational_notes",
+    ]
+    for field in text_fields:
+        if field in request.form:
+            value = (request.form.get(field) or "").strip()
+            setattr(profile, field, value or None)
+
+    for field in [
+        "operational_email",
+        "corporate_email",
+        "hosting_account_email",
+    ]:
+        if field in request.form:
+            value = (request.form.get(field) or "").strip().lower()
+            setattr(profile, field, value or None)
+
+    for field in [
+        "domain_activated_on",
+        "domain_renews_on",
+        "hosting_activated_on",
+        "hosting_renews_on",
+    ]:
+        if field in request.form:
+            setattr(profile, field, _date_or_none(request.form.get(field)))
+
+    return profile
+
+
 def _client_has_history(client_id):
     checks = [
         ("interacciones", Interaction.query.filter_by(client_id=client_id).first()),
@@ -453,6 +506,9 @@ def edit(client_id):
     if client.record_type != "cliente":
         return redirect(url_for("crm.detail", client_id=client.id))
     collaborators = _active_collaborators()
+    operational_profile = ClientOperationalProfile.query.filter_by(
+        client_id=client.id
+    ).first()
 
     if request.method == "POST":
         business_name = request.form.get("business_name", "").strip()
@@ -462,12 +518,24 @@ def edit(client_id):
 
         if not business_name or not contact_name:
             flash("Negocio y contacto son obligatorios.", "danger")
-            return render_template("clients/form.html", client=client, collaborators=collaborators, mode="edit")
+            return render_template(
+                "clients/form.html",
+                client=client,
+                collaborators=collaborators,
+                operational_profile=operational_profile,
+                mode="edit",
+            )
 
         duplicate = _find_duplicate(business_name, phone, email, exclude_id=client.id)
         if duplicate:
             flash(f"Existe otro registro parecido: {duplicate.business_name}.", "warning")
-            return render_template("clients/form.html", client=client, collaborators=collaborators, mode="edit")
+            return render_template(
+                "clients/form.html",
+                client=client,
+                collaborators=collaborators,
+                operational_profile=operational_profile,
+                mode="edit",
+            )
 
         before = {
             "business_name": client.business_name,
@@ -476,6 +544,10 @@ def edit(client_id):
             "owner_id": client.owner_id,
         }
         _apply_client_form(client)
+        operational_profile = _apply_operational_profile_form(
+            client,
+            operational_profile,
+        )
         audit(
             "editar_cliente",
             "Client",
@@ -486,13 +558,20 @@ def edit(client_id):
                 "contact_name": client.contact_name,
                 "status": client.client_status,
                 "owner_id": client.owner_id,
+                "operational_profile_updated": True,
             },
         )
         db.session.commit()
         flash("Ficha actualizada.", "success")
         return redirect(url_for("clients.detail", client_id=client.id))
 
-    return render_template("clients/form.html", client=client, collaborators=collaborators, mode="edit")
+    return render_template(
+        "clients/form.html",
+        client=client,
+        collaborators=collaborators,
+        operational_profile=operational_profile,
+        mode="edit",
+    )
 
 
 @bp.route("/<int:client_id>/convert", methods=["POST"])
@@ -906,32 +985,10 @@ def export_csv():
 
 @bp.route("/<int:client_id>/operational-profile", methods=["POST"])
 @login_required
+@permission_required("clients.edit")
 def update_operational_profile(client_id):
     client = db.get_or_404(Client, client_id)
-    profile = ClientOperationalProfile.query.filter_by(client_id=client.id).first()
-    if not profile:
-        profile = ClientOperationalProfile(client_id=client.id)
-        db.session.add(profile)
-
-    profile.attention_days = (request.form.get("attention_days") or "").strip() or None
-    profile.business_hours = (request.form.get("business_hours") or "").strip() or None
-    profile.experience_text = (request.form.get("experience_text") or "").strip() or None
-    profile.coverage_text = (request.form.get("coverage_text") or "").strip() or None
-    profile.payment_methods = (request.form.get("payment_methods") or "").strip() or None
-    profile.estimate_policy = (request.form.get("estimate_policy") or "").strip() or None
-    profile.languages = (request.form.get("languages") or "").strip() or None
-    profile.operational_email = (request.form.get("operational_email") or "").strip().lower() or None
-    profile.corporate_email = (request.form.get("corporate_email") or "").strip().lower() or None
-    profile.services_to_promote = (request.form.get("services_to_promote") or "").strip() or None
-    profile.logo_status = (request.form.get("logo_status") or "").strip() or None
-    profile.brand_colors = (request.form.get("brand_colors") or "").strip() or None
-    profile.domain_activated_on = _date_or_none(request.form.get("domain_activated_on"))
-    profile.domain_renews_on = _date_or_none(request.form.get("domain_renews_on"))
-    profile.hosting_activated_on = _date_or_none(request.form.get("hosting_activated_on"))
-    profile.hosting_renews_on = _date_or_none(request.form.get("hosting_renews_on"))
-    profile.domain_notes = (request.form.get("domain_notes") or "").strip() or None
-    profile.operational_notes = (request.form.get("operational_notes") or "").strip() or None
-
+    _apply_operational_profile_form(client)
     audit("actualizar_perfil_operativo", "Client", client.id)
     db.session.commit()
     flash("Perfil operativo actualizado.", "success")

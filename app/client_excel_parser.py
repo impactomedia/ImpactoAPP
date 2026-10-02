@@ -8,6 +8,7 @@ import re
 import unicodedata
 import xml.etree.ElementTree as ET
 import zipfile
+from urllib.parse import urlparse
 
 
 MAX_WORKBOOK_BYTES = 12 * 1024 * 1024
@@ -273,6 +274,28 @@ def _extract_domain_dates(value):
     return result
 
 
+def _postal_code_from_address(value):
+    raw = _clean_text(value)
+    if not raw:
+        return None
+    match = re.search(r"\b(\d{5}(?:-\d{4})?)\b", raw)
+    return match.group(1) if match else None
+
+
+def _domain_name_from_url(value):
+    raw = _clean_text(value)
+    if not raw:
+        return None
+    candidate = raw if re.match(r"^https?://", raw, re.I) else f"https://{raw}"
+    try:
+        host = (urlparse(candidate).hostname or "").lower()
+    except ValueError:
+        return None
+    if host.startswith("www."):
+        host = host[4:]
+    return host[:255] or None
+
+
 def _clean_url(value):
     raw = _clean_text(value)
     if not raw:
@@ -454,6 +477,8 @@ def _slot_payload(cells, label_col, slot):
         "operational_email": _clean_text(get_value(41)).lower(),
         # Fila 42 omitida intencionalmente: CONTRASEÑA DEL CORREO
         "corporate_email": _clean_text(get_value(43)).lower(),
+        "postal_code": _postal_code_from_address(address),
+        "domain_name": _domain_name_from_url(website),
         "services_to_promote": _scrub_sensitive_text(get_value(44)),
         "logo_status": _scrub_sensitive_text(get_value(45)),
         "brand_colors": _scrub_sensitive_text(get_value(46)),

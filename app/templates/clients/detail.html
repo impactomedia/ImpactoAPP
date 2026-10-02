@@ -20,7 +20,7 @@
     </p>
   </div>
   <div class="d-flex flex-wrap gap-2">
-    {% if can_edit %}<a class="btn btn-light border" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar datos base</a>{% endif %}
+    {% if can_edit %}<a class="btn btn-light border" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar ficha completa</a>{% endif %}
     {% if can_financial %}<a class="btn btn-outline-secondary" href="{{ url_for('clients.statement', client_id=client.id) }}" target="_blank">Estado de cuenta</a>{% endif %}
     {% if current_user.has_permission('sales.create') %}<a class="btn btn-brand" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Nueva compra adicional</a>{% endif %}
   </div>
@@ -84,7 +84,7 @@
           <section class="border rounded-4 p-3">
             <h2 class="h5">Acciones rápidas</h2>
             <div class="d-grid gap-2">
-              {% if current_user.has_permission('sales.create') %}<a class="btn btn-light border" href="{{ url_for('sales.new_sale') }}">Registrar compra</a>{% endif %}
+              {% if current_user.has_permission('sales.create') %}<a class="btn btn-light border" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Registrar compra adicional</a>{% endif %}
               {% if can_financial %}<a class="btn btn-light border" href="{{ url_for('clients.statement', client_id=client.id) }}" target="_blank">Ver estado de cuenta</a>{% endif %}
               {% if current_user.has_permission('tasks.edit') %}<a class="btn btn-light border" href="{{ url_for('operations.new_task') }}">Crear tarea</a>{% endif %}
               {% if current_user.has_permission('support.edit') %}<a class="btn btn-light border" href="{{ url_for('support.index') }}">Abrir ticket</a>{% endif %}
@@ -96,65 +96,83 @@
     </div>
 
     <div class="tab-pane fade" id="datos">
+      <div class="panel-header">
+        <div>
+          <h2>Ficha completa del cliente</h2>
+          <p>Datos comerciales, operativos y digitales centralizados. Las compras, pagos y planes se consultan en sus pestañas correspondientes.</p>
+        </div>
+        {% if can_edit %}<a class="btn btn-brand" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar ficha completa</a>{% endif %}
+      </div>
+
       <div class="row g-4">
-        <div class="col-xl-5">
+        <div class="col-xl-6">
           <section class="border rounded-4 p-3 h-100">
-            <div class="panel-header"><div><h2>Datos del negocio</h2><p>Información general ya existente en la ficha.</p></div></div>
-            <p><strong>Estado:</strong> {{ client.client_status|label }}</p>
-            <p><strong>Industria:</strong> {{ client.industry or '—' }}</p>
-            <p><strong>Dirección:</strong> {{ client.address or '—' }}</p>
-            <p><strong>Ciudad / Estado:</strong> {{ client.city or '—' }}{% if client.state %} / {{ client.state }}{% endif %}</p>
-            <p><strong>Website:</strong> {% if client.website %}<a href="{{ client.website }}" target="_blank" rel="noopener">{{ client.website }}</a>{% else %}—{% endif %}</p>
-            <p><strong>Fuente:</strong> {{ client.source or '—' }}</p>
-            <p><strong>Servicios que ofrece:</strong><br>{{ client.services_offered or '—' }}</p>
-            {% if can_edit %}<a class="btn btn-light border" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar datos base</a>{% endif %}
+            <h3 class="h5">Contacto y ubicación</h3>
+            <div class="row g-3">
+              <div class="col-md-6"><small class="text-secondary">Contacto principal</small><div>{{ client.contact_name or '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Canal preferido</small><div>{{ client.preferred_channel or '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Teléfono</small><div>{{ client.phone or '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">WhatsApp</small><div>{{ operational_profile.whatsapp_phone if operational_profile and operational_profile.whatsapp_phone else (client.phone or '—') }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Otros teléfonos</small><div>{{ client.other_phones or '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Correo</small><div>{{ client.email or '—' }}</div></div>
+              <div class="col-12"><small class="text-secondary">Dirección</small><div>{{ client.address or '—' }}</div></div>
+              <div class="col-md-4"><small class="text-secondary">Ciudad</small><div>{{ client.city or '—' }}</div></div>
+              <div class="col-md-3"><small class="text-secondary">Estado</small><div>{{ client.state or '—' }}</div></div>
+              <div class="col-md-2"><small class="text-secondary">ZIP</small><div>{{ operational_profile.postal_code if operational_profile and operational_profile.postal_code else '—' }}</div></div>
+              <div class="col-md-3"><small class="text-secondary">Zona horaria</small><div>{{ client.timezone or '—' }}</div></div>
+              <div class="col-md-4"><small class="text-secondary">País</small><div>USA</div></div>
+              <div class="col-md-4"><small class="text-secondary">Industria</small><div>{{ client.industry or '—' }}</div></div>
+              <div class="col-md-4"><small class="text-secondary">Fuente</small><div>{{ client.source or '—' }}</div></div>
+            </div>
           </section>
         </div>
-        <div class="col-xl-7">
-          <section class="border rounded-4 p-3">
-            <div class="panel-header"><div><h2>Perfil operativo</h2><p>Datos que antes se llevaban en la ficha operativa del Excel.</p></div></div>
-            {% if can_edit %}
-            <form method="post" action="{{ url_for('clients.update_operational_profile', client_id=client.id) }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <div class="row g-3">
-                <div class="col-md-6"><label class="form-label">Días de atención</label><input name="attention_days" class="form-control" value="{{ operational_profile.attention_days if operational_profile else '' }}" placeholder="Ej. Lunes a sábado"></div>
-                <div class="col-md-6"><label class="form-label">Horarios</label><input name="business_hours" class="form-control" value="{{ operational_profile.business_hours if operational_profile else '' }}" placeholder="Ej. 8:00 a. m. - 5:00 p. m."></div>
-                <div class="col-md-6"><label class="form-label">Tiempo de experiencia</label><input name="experience_text" class="form-control" value="{{ operational_profile.experience_text if operational_profile else '' }}" placeholder="Ej. 10 años"></div>
-                <div class="col-md-6"><label class="form-label">Cobertura / millaje</label><input name="coverage_text" class="form-control" value="{{ operational_profile.coverage_text if operational_profile else '' }}" placeholder="Ej. 50 millas"></div>
-                <div class="col-md-6"><label class="form-label">Correo operativo</label><input type="email" name="operational_email" class="form-control" value="{{ operational_profile.operational_email if operational_profile else '' }}"></div>
-                <div class="col-md-6"><label class="form-label">Correo corporativo</label><input type="email" name="corporate_email" class="form-control" value="{{ operational_profile.corporate_email if operational_profile else '' }}"></div>
-                <div class="col-md-6"><label class="form-label">Métodos de pago aceptados</label><textarea name="payment_methods" class="form-control" rows="3">{{ operational_profile.payment_methods if operational_profile else '' }}</textarea></div>
-                <div class="col-md-6"><label class="form-label">Política de estimados</label><textarea name="estimate_policy" class="form-control" rows="3" placeholder="Ej. Estimados gratis / diagnóstico gratis, estimado con costo">{{ operational_profile.estimate_policy if operational_profile else '' }}</textarea></div>
-                <div class="col-md-6"><label class="form-label">Idiomas de atención</label><input name="languages" class="form-control" value="{{ operational_profile.languages if operational_profile else '' }}" placeholder="Ej. Español e inglés"></div>
-                <div class="col-12"><label class="form-label">Servicios a promocionar</label><textarea name="services_to_promote" class="form-control" rows="5">{{ operational_profile.services_to_promote if operational_profile else '' }}</textarea></div>
-                <div class="col-md-6"><label class="form-label">Estado / instrucciones del logotipo</label><textarea name="logo_status" class="form-control" rows="3">{{ operational_profile.logo_status if operational_profile else '' }}</textarea></div>
-                <div class="col-md-6"><label class="form-label">Colores de marca</label><input name="brand_colors" class="form-control" value="{{ operational_profile.brand_colors if operational_profile else '' }}"></div>
-              </div>
-              <h3 class="h6 mt-4">Dominio y hosting</h3>
-              <div class="row g-3">
-                <div class="col-md-3"><label class="form-label">Dominio activado</label><input type="date" name="domain_activated_on" class="form-control" value="{{ operational_profile.domain_activated_on.isoformat() if operational_profile and operational_profile.domain_activated_on else '' }}"></div>
-                <div class="col-md-3"><label class="form-label">Renovación dominio</label><input type="date" name="domain_renews_on" class="form-control" value="{{ operational_profile.domain_renews_on.isoformat() if operational_profile and operational_profile.domain_renews_on else '' }}"></div>
-                <div class="col-md-3"><label class="form-label">Hosting activado</label><input type="date" name="hosting_activated_on" class="form-control" value="{{ operational_profile.hosting_activated_on.isoformat() if operational_profile and operational_profile.hosting_activated_on else '' }}"></div>
-                <div class="col-md-3"><label class="form-label">Renovación hosting</label><input type="date" name="hosting_renews_on" class="form-control" value="{{ operational_profile.hosting_renews_on.isoformat() if operational_profile and operational_profile.hosting_renews_on else '' }}"></div>
-                <div class="col-12"><label class="form-label">Notas de dominio / hosting</label><textarea name="domain_notes" class="form-control" rows="2">{{ operational_profile.domain_notes if operational_profile else '' }}</textarea></div>
-                <div class="col-12"><label class="form-label">Notas operativas internas</label><textarea name="operational_notes" class="form-control" rows="3">{{ operational_profile.operational_notes if operational_profile else '' }}</textarea></div>
-              </div>
-              <button class="btn btn-brand mt-3">Guardar perfil operativo</button>
-            </form>
-            {% else %}
+
+        <div class="col-xl-6">
+          <section class="border rounded-4 p-3 h-100">
+            <h3 class="h5">Operación del negocio</h3>
             <div class="row g-3">
-              <div class="col-md-6"><strong>Días:</strong> {{ operational_profile.attention_days if operational_profile and operational_profile.attention_days else '—' }}</div>
-              <div class="col-md-6"><strong>Horario:</strong> {{ operational_profile.business_hours if operational_profile and operational_profile.business_hours else '—' }}</div>
-              <div class="col-md-6"><strong>Experiencia:</strong> {{ operational_profile.experience_text if operational_profile and operational_profile.experience_text else '—' }}</div>
-              <div class="col-md-6"><strong>Cobertura:</strong> {{ operational_profile.coverage_text if operational_profile and operational_profile.coverage_text else '—' }}</div>
-              <div class="col-md-6"><strong>Correo operativo:</strong> {{ operational_profile.operational_email if operational_profile and operational_profile.operational_email else '—' }}</div>
-              <div class="col-md-6"><strong>Correo corporativo:</strong> {{ operational_profile.corporate_email if operational_profile and operational_profile.corporate_email else '—' }}</div>
-              <div class="col-12"><strong>Métodos de pago:</strong><br>{{ operational_profile.payment_methods if operational_profile and operational_profile.payment_methods else '—' }}</div>
-              <div class="col-md-6"><strong>Estimados:</strong> {{ operational_profile.estimate_policy if operational_profile and operational_profile.estimate_policy else '—' }}</div>
-              <div class="col-md-6"><strong>Idiomas:</strong> {{ operational_profile.languages if operational_profile and operational_profile.languages else '—' }}</div>
-              <div class="col-12"><strong>Servicios a promocionar:</strong><br>{{ operational_profile.services_to_promote if operational_profile and operational_profile.services_to_promote else '—' }}</div>
+              <div class="col-md-6"><small class="text-secondary">Días de atención</small><div>{{ operational_profile.attention_days if operational_profile and operational_profile.attention_days else '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Horario</small><div>{{ operational_profile.business_hours if operational_profile and operational_profile.business_hours else '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Experiencia</small><div>{{ operational_profile.experience_text if operational_profile and operational_profile.experience_text else '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Cobertura</small><div>{{ operational_profile.coverage_text if operational_profile and operational_profile.coverage_text else '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Métodos de pago</small><div style="white-space:pre-line">{{ operational_profile.payment_methods if operational_profile and operational_profile.payment_methods else '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Estimados</small><div>{{ operational_profile.estimate_policy if operational_profile and operational_profile.estimate_policy else '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Idiomas</small><div>{{ operational_profile.languages if operational_profile and operational_profile.languages else '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Correo operativo</small><div>{{ operational_profile.operational_email if operational_profile and operational_profile.operational_email else '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Correo corporativo</small><div>{{ operational_profile.corporate_email if operational_profile and operational_profile.corporate_email else '—' }}</div></div>
+              <div class="col-12"><small class="text-secondary">Servicios que ofrece</small><div style="white-space:pre-line">{{ client.services_offered or '—' }}</div></div>
+              <div class="col-12"><small class="text-secondary">Servicios a promocionar</small><div style="white-space:pre-line">{{ operational_profile.services_to_promote if operational_profile and operational_profile.services_to_promote else '—' }}</div></div>
             </div>
-            {% endif %}
+          </section>
+        </div>
+
+        <div class="col-xl-6">
+          <section class="border rounded-4 p-3 h-100">
+            <h3 class="h5">Marca y presencia digital</h3>
+            <div class="mb-2"><small class="text-secondary">Website</small><div>{% if client.website %}<a href="{{ client.website }}" target="_blank" rel="noopener">{{ client.website }}</a>{% else %}—{% endif %}</div></div>
+            <div class="mb-2"><small class="text-secondary">Facebook</small><div>{% if client.facebook %}<a href="{{ client.facebook }}" target="_blank" rel="noopener">{{ client.facebook }}</a>{% else %}—{% endif %}</div></div>
+            <div class="mb-2"><small class="text-secondary">Instagram</small><div>{% if client.instagram %}<a href="{{ client.instagram }}" target="_blank" rel="noopener">{{ client.instagram }}</a>{% else %}—{% endif %}</div></div>
+            <div class="mb-2"><small class="text-secondary">Otros enlaces</small><div>{{ client.other_social or '—' }}</div></div>
+            <div class="mb-2"><small class="text-secondary">Estado / instrucciones del logotipo</small><div style="white-space:pre-line">{{ operational_profile.logo_status if operational_profile and operational_profile.logo_status else '—' }}</div></div>
+            <div><small class="text-secondary">Colores de marca</small><div>{{ operational_profile.brand_colors if operational_profile and operational_profile.brand_colors else '—' }}</div></div>
+          </section>
+        </div>
+
+        <div class="col-xl-6">
+          <section class="border rounded-4 p-3 h-100">
+            <h3 class="h5">Dominio y hosting</h3>
+            <div class="row g-3">
+              <div class="col-md-6"><small class="text-secondary">Dominio</small><div>{{ operational_profile.domain_name if operational_profile and operational_profile.domain_name else '—' }}</div></div>
+              <div class="col-md-3"><small class="text-secondary">Proveedor dominio</small><div>{{ operational_profile.domain_provider if operational_profile and operational_profile.domain_provider else '—' }}</div></div>
+              <div class="col-md-3"><small class="text-secondary">Proveedor hosting</small><div>{{ operational_profile.hosting_provider if operational_profile and operational_profile.hosting_provider else '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Correo cuenta hosting</small><div>{{ operational_profile.hosting_account_email if operational_profile and operational_profile.hosting_account_email else '—' }}</div></div>
+              <div class="col-md-3"><small class="text-secondary">Dominio activado</small><div>{{ operational_profile.domain_activated_on if operational_profile and operational_profile.domain_activated_on else '—' }}</div></div>
+              <div class="col-md-3"><small class="text-secondary">Renueva dominio</small><div>{{ operational_profile.domain_renews_on if operational_profile and operational_profile.domain_renews_on else '—' }}</div></div>
+              <div class="col-md-3"><small class="text-secondary">Hosting activado</small><div>{{ operational_profile.hosting_activated_on if operational_profile and operational_profile.hosting_activated_on else '—' }}</div></div>
+              <div class="col-md-3"><small class="text-secondary">Renueva hosting</small><div>{{ operational_profile.hosting_renews_on if operational_profile and operational_profile.hosting_renews_on else '—' }}</div></div>
+              <div class="col-12"><small class="text-secondary">Notas dominio/hosting</small><div style="white-space:pre-line">{{ operational_profile.domain_notes if operational_profile and operational_profile.domain_notes else '—' }}</div></div>
+              <div class="col-12"><small class="text-secondary">Notas operativas</small><div style="white-space:pre-line">{{ operational_profile.operational_notes if operational_profile and operational_profile.operational_notes else '—' }}</div></div>
+            </div>
           </section>
         </div>
       </div>
