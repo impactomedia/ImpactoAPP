@@ -24,6 +24,7 @@ from app.models import (
     User,
 )
 from app.client_v2_models import ClientInstallment
+from app.nexora_models import SaleOperationMeta
 from app.services import D, add_payment, create_sale_from_quote, generate_operational_work, recalc_sale, active_principal_contract, principal_paid_credit, generate_principal_operational_work
 
 bp = Blueprint("sales", __name__, url_prefix="/sales")
@@ -167,30 +168,49 @@ def _render_sale_form():
     return render_template("sales/form.html", **_sale_form_context())
 
 
-def _payment_plan_from_request(remaining_balance, sale_date):
-    """Valida y devuelve las cuotas del saldo posterior al pago inicial."""
+
+def _payment_mode_from_request():
+    mode = (request.form.get("payment_mode") or "").strip().lower()
+    if mode in {"contado", "entrega", "cuotas", "financiamiento"}:
+        return mode
+
+    # Compatibilidad con formularios y pruebas anteriores a Nexora 1.10.
+    legacy = (request.form.get("payment_plan_mode") or "").strip().lower()
+    if legacy == "custom":
+        return "cuotas"
+    if legacy == "single":
+        return "entrega"
+    return "entrega"
+
+
+def _payment_plan_from_request(remaining_balance, sale_date, payment_mode=None):
+    """Valida el calendario del saldo según la modalidad comercial."""
     remaining_balance = D(remaining_balance).quantize(MONEY)
+    mode = payment_mode or _payment_mode_from_request()
+
     if remaining_balance <= 0:
         return []
 
-    mode = (request.form.get("payment_plan_mode") or "single").strip().lower()
-    if mode not in {"single", "custom"}:
-        mode = "single"
+    if mode == "contado":
+        raise ValueError(
+            "Una operación al contado debe quedar pagada completamente al registrarla."
+        )
 
-    if mode == "single":
+    if mode == "entrega":
         raw_due = (request.form.get("due_date") or "").strip()
         due_date = _parse_date(raw_due)
         if not due_date:
-            raise ValueError("Indica la fecha de vencimiento del saldo.")
+            raise ValueError("Indica la fecha de entrega o vencimiento del saldo.")
         if due_date < sale_date:
-            raise ValueError("El vencimiento del saldo no puede ser anterior a la fecha de venta.")
-        return [
-            {
-                "amount": remaining_balance,
-                "due_date": due_date,
-                "notes": "Saldo único",
-            }
-        ]
+            raise ValueError("La fecha de entrega no puede ser anterior a la fecha de compra.")
+        return [{
+            "amount": remaining_balance,
+            "due_date": due_date,
+            "notes": "Saldo contra entrega",
+        }]
+
+    if mode not in {"cuotas", "financiamiento"}:
+        raise ValueError("Selecciona una modalidad de pago válida.")
 
     amounts = request.form.getlist("installment_amount[]")
     dates = request.form.getlist("installment_due_date[]")
@@ -206,32 +226,36 @@ def _payment_plan_from_request(remaining_balance, sale_date):
         if not raw_amount and not raw_date and not note:
             continue
         if not raw_amount or not raw_date:
-            raise ValueError("Cada cuota debe tener monto y fecha de vencimiento.")
+            raise ValueError("Cada pago programado debe tener monto y fecha.")
 
-        amount = _parse_money(raw_amount, f"Monto de cuota #{len(rows) + 1}", allow_zero=False)
+        amount = _parse_money(
+            raw_amount,
+            f"Monto de pago #{len(rows) + 1}",
+            allow_zero=False,
+        )
         due_date = _parse_date(raw_date)
         if not due_date:
-            raise ValueError(f"La fecha de la cuota #{len(rows) + 1} no es válida.")
+            raise ValueError(f"La fecha del pago #{len(rows) + 1} no es válida.")
         if due_date < sale_date:
             raise ValueError(
-                f"La fecha de la cuota #{len(rows) + 1} no puede ser anterior a la venta."
+                f"La fecha del pago #{len(rows) + 1} no puede ser anterior a la compra."
             )
 
-        rows.append(
-            {
-                "amount": amount,
-                "due_date": due_date,
-                "notes": note or None,
-            }
-        )
+        rows.append({
+            "amount": amount,
+            "due_date": due_date,
+            "notes": note or None,
+        })
 
     if not rows:
-        raise ValueError("Agrega al menos una cuota para el saldo pendiente.")
+        raise ValueError(
+            "Agrega al menos un pago programado para el saldo pendiente."
+        )
 
     scheduled = sum((D(row["amount"]) for row in rows), Decimal("0")).quantize(MONEY)
     if scheduled != remaining_balance:
         raise ValueError(
-            "La suma de las cuotas debe ser igual al saldo pendiente "
+            "La suma de los pagos programados debe ser igual al saldo pendiente "
             f"({remaining_balance:,.2f}). Actualmente suma {scheduled:,.2f}."
         )
 
@@ -349,6 +373,8 @@ def new_sale():
         db.session.add(sale)
         db.session.flush()
 
+        payment_mode = _payment_mode_from_request()
+
         product_ids = request.form.getlist("product_id[]")
         descriptions = request.form.getlist("description[]")
         quantities = request.form.getlist("quantity[]")
@@ -422,6 +448,8 @@ def new_sale():
         )
         if initial_payment > D(sale.total):
             raise ValueError("El pago inicial no puede superar el total de la venta.")
+        if initial_payment >= D(sale.total):
+            payment_mode = "contado"
 
         initial_date_raw = (request.form.get("initial_payment_date") or "").strip()
         initial_payment_date = (
@@ -440,6 +468,7 @@ def new_sale():
         installment_rows = _payment_plan_from_request(
             remaining_after_initial,
             sale_date,
+            payment_mode=payment_mode,
         )
         first_due_date = installment_rows[0]["due_date"] if installment_rows else None
 
@@ -450,9 +479,20 @@ def new_sale():
             paid_amount=0,
             due_date=first_due_date,
             status="al_dia",
-            notes="Plan de pago generado al crear la venta.",
+            notes="Plan de pago generado para compra adicional en Impacto Nexora.",
         )
         db.session.add(receivable)
+        db.session.add(
+            SaleOperationMeta(
+                sale_id=sale.id,
+                operation_type="additional_purchase",
+                payment_mode=payment_mode,
+                payment_terms=(request.form.get("payment_terms") or "").strip() or None,
+                catalog_total=sale.total,
+                credit_applied=0,
+                created_by_id=current_user.id,
+            )
+        )
 
         client.record_type = "cliente"
         client.pipeline_stage = "venta_cerrada"
@@ -491,7 +531,7 @@ def new_sale():
         _refresh_receivable_due_date(sale)
 
         audit(
-            "crear_venta",
+            "crear_compra_adicional",
             "Sale",
             sale.id,
             after={
@@ -502,7 +542,7 @@ def new_sale():
             },
         )
         db.session.commit()
-        flash("Venta registrada, plan de pago creado y flujo operativo generado.", "success")
+        flash("Compra adicional registrada, plan de pago creado y trabajo operativo generado.", "success")
         return redirect(url_for("sales.detail", sale_id=sale.id))
 
     except (ValueError, InvalidOperation) as exc:
@@ -622,6 +662,8 @@ def principal_service(client_id):
         if sale_date_raw and not sale_date:
             raise ValueError("La fecha de venta no es válida.")
 
+        payment_mode = _payment_mode_from_request()
+
         sale = Sale(
             sale_no=next_code("VEN", Sale),
             client_id=client.id,
@@ -664,6 +706,8 @@ def principal_service(client_id):
         )
         if initial_payment > D(sale.total):
             raise ValueError("El pago inicial no puede superar el saldo del nuevo plan.")
+        if initial_payment >= D(sale.total):
+            payment_mode = "contado"
 
         initial_date_raw = (request.form.get("initial_payment_date") or "").strip()
         initial_payment_date = _parse_date(initial_date_raw) if initial_date_raw else sale_date
@@ -675,7 +719,11 @@ def principal_service(client_id):
             payment_method = "otro"
 
         remaining_after_initial = (D(sale.total) - initial_payment).quantize(MONEY)
-        installment_rows = _payment_plan_from_request(remaining_after_initial, sale_date)
+        installment_rows = _payment_plan_from_request(
+            remaining_after_initial,
+            sale_date,
+            payment_mode=payment_mode,
+        )
         first_due_date = installment_rows[0]["due_date"] if installment_rows else None
 
         db.session.add(
@@ -687,6 +735,17 @@ def principal_service(client_id):
                 due_date=first_due_date,
                 status="al_dia",
                 notes="Saldo vigente del servicio principal en Impacto Nexora.",
+            )
+        )
+        db.session.add(
+            SaleOperationMeta(
+                sale_id=sale.id,
+                operation_type="principal_upgrade" if current_contract else "principal_service",
+                payment_mode=payment_mode,
+                payment_terms=(request.form.get("payment_terms") or "").strip() or None,
+                catalog_total=catalog_price,
+                credit_applied=credit,
+                created_by_id=current_user.id,
             )
         )
 

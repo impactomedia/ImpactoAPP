@@ -22,17 +22,17 @@
   <div class="d-flex flex-wrap gap-2">
     {% if can_edit %}<a class="btn btn-light border" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar datos base</a>{% endif %}
     {% if can_financial %}<a class="btn btn-outline-secondary" href="{{ url_for('clients.statement', client_id=client.id) }}" target="_blank">Estado de cuenta</a>{% endif %}
-    {% if current_user.has_permission('sales.create') %}<a class="btn btn-brand" href="{{ url_for('sales.new_sale') }}">Nueva compra</a>{% endif %}
+    {% if current_user.has_permission('sales.create') %}<a class="btn btn-brand" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Nueva compra adicional</a>{% endif %}
   </div>
 </div>
 
 <div class="metric-grid mb-4">
   {% if can_financial %}
-  <div class="metric-card"><span>Total contratado</span><strong>{{ client.sales|sum(attribute='total')|money }}</strong><small>Histórico de ventas</small></div>
-  <div class="metric-card"><span>Total cobrado</span><strong>{{ client.payments|selectattr('status','equalto','confirmado')|sum(attribute='amount')|money }}</strong><small>Pagos confirmados</small></div>
-  <div class="metric-card"><span>Saldo pendiente</span><strong>{{ client.outstanding_balance|money }}</strong><small>{{ client.receivables|selectattr('status','equalto','vencido')|list|length }} cuenta(s) vencida(s)</small></div>
+  <div class="metric-card"><span>Total invertido</span><strong>USD {{ total_invested|money }}</strong><small>Dinero realmente pagado</small></div>
+  <div class="metric-card"><span>Saldo pendiente</span><strong>USD {{ client.outstanding_balance|money }}</strong><small>{{ client.receivables|selectattr('status','equalto','vencido')|list|length }} cuenta(s) vencida(s)</small></div>
   {% endif %}
-  <div class="metric-card"><span>Servicios activos</span><strong>{{ active_contracts|length }}</strong><small>Estado general: {{ client.client_status|label }}</small></div>
+  <div class="metric-card"><span>Servicio actual</span><strong>{{ principal_contract.product.name if principal_contract and principal_contract.product else 'Sin plan' }}</strong><small>{{ client.client_status|label }}</small></div>
+  {% if can_financial %}<div class="metric-card"><span>Compras adicionales</span><strong>{{ additional_purchase_count }}</strong><small>Histórico registrado</small></div>{% endif %}
   {% if current_user.has_permission('tasks.view') %}<div class="metric-card"><span>Tareas abiertas</span><strong>{{ open_tasks|length }}</strong><small>Pendientes visibles</small></div>{% endif %}
   {% if current_user.has_permission('support.view') %}<div class="metric-card"><span>Tickets abiertos</span><strong>{{ open_tickets|length }}</strong><small>Soporte y solicitudes</small></div>{% endif %}
 </div>
@@ -64,7 +64,7 @@
               <div class="col-md-6"><small class="text-secondary">Contacto principal</small><div class="fw-semibold">{{ client.contact_name }}</div><div>{{ client.phone or '—' }}</div><div>{{ client.email or '—' }}</div></div>
               <div class="col-md-6"><small class="text-secondary">Responsable comercial</small><div class="fw-semibold">{{ client.owner.user.name if client.owner else 'Sin asignar' }}</div><div>{{ client.owner.advisor_project.name if client.owner and client.owner.advisor_project else 'Sin proyecto comercial' }}</div></div>
               <div class="col-md-6"><small class="text-secondary">Ubicación</small><div>{{ client.city or '—' }}{% if client.state %}, {{ client.state }}{% endif %}{% if client.country %}, {{ client.country }}{% endif %}</div><div>{{ client.timezone or 'Zona horaria sin definir' }}</div></div>
-              <div class="col-md-6"><small class="text-secondary">Plan / paquete activo</small><div>{% for c in active_contracts %}<span class="badge-soft success me-1 mb-1">{{ c.product.name }}</span>{% else %}<span class="text-secondary">Sin paquete activo</span>{% endfor %}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Servicio principal actual</small><div>{% if principal_contract %}<span class="badge-soft success me-1 mb-1">{{ principal_contract.product.name }}</span><small class="d-block text-secondary">{{ principal_contract.starts_on }} → {{ principal_contract.ends_on or 'Sin vencimiento' }}</small>{% else %}<span class="text-secondary">Sin servicio principal</span>{% endif %}</div></div>
             </div>
             <hr>
             <div class="row g-3">
@@ -162,21 +162,23 @@
 
     {% if can_financial %}
     <div class="tab-pane fade" id="compras">
-      <div class="panel-header"><div><h2>Compras / ventas históricas</h2><p>Cada nueva inversión permanece dentro de la misma ficha del cliente.</p></div>{% if current_user.has_permission('sales.create') %}<a class="btn btn-brand btn-sm" href="{{ url_for('sales.new_sale') }}">Nueva venta</a>{% endif %}</div>
+      <div class="panel-header"><div><h2>Historial comercial</h2><p>Planes, upgrades y compras adicionales permanecen dentro del mismo expediente.</p></div>{% if current_user.has_permission('sales.create') %}<a class="btn btn-brand btn-sm" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Nueva compra adicional</a>{% endif %}</div>
       <div class="table-responsive">
         <table class="table modern-table">
-          <thead><tr><th>Venta</th><th>Fecha</th><th>Productos / servicios</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Asesor</th><th></th></tr></thead>
+          <thead><tr><th>Operación</th><th>Tipo</th><th>Forma de pago</th><th>Fecha</th><th>Productos / servicios</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Asesor</th><th></th></tr></thead>
           <tbody>
           {% for s in client.sales|sort(attribute='sale_date', reverse=true) %}
           <tr>
             <td><strong>{{ s.sale_no }}</strong><small class="d-block text-secondary">{{ s.status|label }}</small></td>
+            <td>{% if s.operation_meta %}{{ {'principal_service':'Servicio principal','principal_upgrade':'Upgrade','additional_purchase':'Compra adicional'}.get(s.operation_meta.operation_type, s.operation_meta.operation_type|label) }}{% else %}Histórico{% endif %}</td>
+            <td>{{ s.operation_meta.payment_mode|label if s.operation_meta else '—' }}</td>
             <td>{{ s.sale_date }}</td>
             <td>{% for i in s.items %}<div>{{ i.description }}{% if i.quantity and i.quantity != 1 %} × {{ i.quantity }}{% endif %}</div>{% else %}—{% endfor %}</td>
             <td>{{ s.currency }} {{ s.total|money }}</td><td>{{ s.amount_paid|money }}</td><td>{{ s.balance|money }}</td>
             <td>{{ s.advisor.user.name if s.advisor else '—' }}</td>
-            <td><a class="btn btn-sm btn-light border" href="{{ url_for('sales.detail', sale_id=s.id) }}">Ver venta</a></td>
+            <td><a class="btn btn-sm btn-light border" href="{{ url_for('sales.detail', sale_id=s.id) }}">Ver</a></td>
           </tr>
-          {% else %}<tr><td colspan="8" class="text-center py-4">No hay compras registradas.</td></tr>{% endfor %}
+          {% else %}<tr><td colspan="10" class="text-center py-4">No hay operaciones registradas.</td></tr>{% endfor %}
           </tbody>
         </table>
       </div>

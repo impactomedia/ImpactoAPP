@@ -45,23 +45,29 @@
   </div>
 
   <hr class="my-4">
-  <h2 class="h5">Plan de pago del saldo</h2>
+  <h2 class="h5">Forma de pago</h2>
   <div class="row g-3">
     <div class="col-md-4">
-      <label class="form-label">Modalidad</label>
-      <select name="payment_plan_mode" id="paymentPlanMode" class="form-select">
-        <option value="single">Un solo vencimiento</option>
-        <option value="custom">Cuotas personalizadas</option>
+      <label class="form-label">Modalidad *</label>
+      <select name="payment_mode" id="paymentMode" class="form-select">
+        <option value="contado">Contado</option>
+        <option value="entrega" selected>Pago inicial + saldo en entrega</option>
+        <option value="cuotas">Cuotas</option>
+        <option value="financiamiento">Financiamiento personalizado</option>
       </select>
     </div>
     <div class="col-md-4" id="singleDueWrap">
-      <label class="form-label">Vencimiento del saldo</label>
+      <label class="form-label">Fecha de entrega / pago del saldo</label>
       <input name="due_date" type="date" class="form-control">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Condiciones acordadas</label>
+      <input name="payment_terms" class="form-control" placeholder="Ej. cada 15 días">
     </div>
   </div>
 
   <div id="customPlan" class="mt-3 d-none">
-    <div class="d-flex justify-content-between align-items-center mb-2"><strong>Cuotas</strong><button type="button" class="btn btn-sm btn-light border" id="addInstallment">+ Agregar cuota</button></div>
+    <div class="d-flex justify-content-between align-items-center mb-2"><strong>Pagos programados</strong><button type="button" class="btn btn-sm btn-light border" id="addInstallment">+ Agregar cuota</button></div>
     <div id="installmentRows">
       <div class="row g-2 mb-2 installment-row">
         <div class="col-md-3"><input name="installment_amount[]" type="number" min="0.01" step="0.01" class="form-control installment-amount" placeholder="Monto"></div>
@@ -90,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const plan = document.getElementById('planSelect');
   const initial = document.getElementById('initialPayment');
   const credit = parseFloat('{{ recognized_credit or 0 }}') || 0;
-  const mode = document.getElementById('paymentPlanMode');
+  const mode = document.getElementById('paymentMode');
   const single = document.getElementById('singleDueWrap');
   const custom = document.getElementById('customPlan');
   const rows = document.getElementById('installmentRows');
@@ -101,6 +107,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const opt=plan.options[plan.selectedIndex];
     const catalog=parseFloat(opt?.dataset.price||'0')||0;
     const net=Math.max(0,catalog-credit);
+    if(mode.value==='contado'){
+      initial.value=net.toFixed(2);
+      initial.readOnly=true;
+    }else{
+      initial.readOnly=false;
+    }
     const init=parseFloat(initial.value||'0')||0;
     document.getElementById('catalogDisplay').value=money(catalog);
     document.getElementById('summaryCatalog').textContent=money(catalog);
@@ -112,10 +124,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   document.querySelectorAll('.installment-row').forEach(bind);
   document.getElementById('addInstallment').addEventListener('click',()=>{ const f=tpl.content.cloneNode(true); bind(f.querySelector('.installment-row')); rows.appendChild(f); });
-  mode.addEventListener('change',()=>{ const c=mode.value==='custom'; custom.classList.toggle('d-none',!c); single.classList.toggle('d-none',c); });
+  function togglePayment(){
+    const c=['cuotas','financiamiento'].includes(mode.value);
+    const delivery=mode.value==='entrega';
+    custom.classList.toggle('d-none',!c);
+    single.classList.toggle('d-none',!delivery);
+    refresh();
+  }
+  mode.addEventListener('change',togglePayment);
   plan.addEventListener('change',refresh);
   initial.addEventListener('input',refresh);
-  refresh();
+  togglePayment();
 });
 </script>
 {% endblock %}

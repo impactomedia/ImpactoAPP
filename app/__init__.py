@@ -26,6 +26,7 @@ def create_app(config_object=Config):
     login_manager.login_message_category = "warning"
 
     from app.models import User
+    from app.nexora_models import SaleOperationMeta  # noqa: F401
 
     @login_manager.user_loader
     def load_user(user_id):

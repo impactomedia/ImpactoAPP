@@ -21,6 +21,7 @@ from app.models import (
     TaskTemplate,
 )
 from app.client_v2_models import ClientCollectionNote, ClientContractDetail, ClientInstallment
+from app.nexora_models import SaleOperationMeta
 
 
 def D(value):
@@ -306,6 +307,23 @@ def create_sale_from_quote(quote, initial_payment=0, payment_method="transferenc
     quote.status = "aceptada"
     db.session.flush()
 
+    payment_mode = (
+        "contado"
+        if D(initial_payment) >= D(sale.total)
+        else ("entrega" if due_date else "financiamiento")
+    )
+    db.session.add(
+        SaleOperationMeta(
+            sale_id=sale.id,
+            operation_type="additional_purchase",
+            payment_mode=payment_mode,
+            payment_terms="Compra adicional originada desde cotización.",
+            catalog_total=sale.total,
+            credit_applied=0,
+            created_by_id=user_id,
+        )
+    )
+
     if D(initial_payment) > 0:
         add_payment(sale, initial_payment, payment_method, registered_by_id=user_id)
 
@@ -499,47 +517,18 @@ def generate_principal_operational_work(sale, product, previous_contract=None, c
     return contract
 
 
+
 def generate_operational_work(sale):
+    """Genera producción para compras adicionales sin convertirlas en contratos.
+
+    El servicio principal usa `generate_principal_operational_work()`.
+    Una compra adicional puede generar imprenta o un proyecto/tarea, pero no
+    sustituye ni modifica el plan principal del cliente.
+    """
     for item in sale.items:
         product = item.product
-        if not product:
-            continue
 
-        duration = product.duration_months or 0
-        end_date = date.today() + timedelta(days=duration * 30) if duration else None
-        contract = ClientContract(
-            client_id=sale.client_id,
-            product_id=product.id,
-            sale_id=sale.id,
-            status="activo",
-            starts_on=date.today(),
-            ends_on=end_date,
-            agreed_price=item.total,
-            principal=False,
-        )
-        db.session.add(contract)
-        db.session.flush()
-        db.session.add(
-            ClientContractDetail(
-                contract_id=contract.id,
-                modality_snapshot=product.modality,
-                maintenance_snapshot=product.maintenance,
-                benefits_snapshot=product.components,
-            )
-        )
-
-        if product.renewal_required or end_date:
-            renewal_due = end_date or (date.today() + timedelta(days=365))
-            db.session.add(
-                Renewal(
-                    client_id=sale.client_id,
-                    contract=contract,
-                    renewal_type=product.name,
-                    due_date=renewal_due,
-                )
-            )
-
-        if product.is_physical:
+        if product and product.is_physical:
             order = PrintOrder(
                 order_no=next_code("IMP", PrintOrder),
                 client_id=sale.client_id,
@@ -557,50 +546,70 @@ def generate_operational_work(sale):
                     design_status="pendiente",
                 )
             )
-        else:
-            project = Project(
-                project_no=next_code("PRJ", Project),
-                client_id=sale.client_id,
-                sale_id=sale.id,
-                product_id=product.id,
-                name=f"{product.name} - {sale.client.business_name}",
-                department=product.responsible_area,
-                status="pendiente_onboarding",
-                progress=0,
-                starts_on=date.today(),
-                due_on=date.today() + timedelta(days=30),
-            )
-            db.session.add(project)
-            db.session.flush()
-            template = TaskTemplate.query.filter_by(product_id=product.id, active=True).first()
-            if template and template.items:
-                for template_item in template.items:
-                    db.session.add(
-                        Task(
-                            title=template_item.title,
-                            description=template_item.description,
-                            task_type=template_item.task_type,
-                            client_id=sale.client_id,
-                            project_id=project.id,
-                            priority=template_item.priority,
-                            status="pendiente",
-                            due_at=datetime.utcnow() + timedelta(days=template_item.due_days or 3),
-                            checklist="[ ] Requisito obligatorio" if template_item.required else None,
-                        )
-                    )
-            else:
+            continue
+
+        project_name = (
+            f"{product.name} - {sale.client.business_name}"
+            if product
+            else f"Compra adicional: {item.description} - {sale.client.business_name}"
+        )
+        department = (
+            product.responsible_area
+            if product and product.responsible_area
+            else "Operaciones"
+        )
+
+        project = Project(
+            project_no=next_code("PRJ", Project),
+            client_id=sale.client_id,
+            sale_id=sale.id,
+            product_id=product.id if product else None,
+            name=project_name,
+            department=department,
+            status="pendiente_onboarding",
+            progress=0,
+            starts_on=sale.sale_date or date.today(),
+            due_on=(sale.sale_date or date.today()) + timedelta(days=30),
+        )
+        db.session.add(project)
+        db.session.flush()
+
+        template = (
+            TaskTemplate.query.filter_by(product_id=product.id, active=True).first()
+            if product
+            else None
+        )
+        if template and template.items:
+            for template_item in template.items:
                 db.session.add(
                     Task(
-                        title=f"Onboarding: {product.name}",
-                        description="Recopilar información, accesos, materiales y aprobación inicial del cliente.",
-                        task_type="cliente",
+                        title=template_item.title,
+                        description=template_item.description,
+                        task_type=template_item.task_type,
                         client_id=sale.client_id,
                         project_id=project.id,
-                        priority="alta",
+                        priority=template_item.priority,
                         status="pendiente",
-                        due_at=datetime.utcnow() + timedelta(days=3),
+                        due_at=datetime.utcnow() + timedelta(days=template_item.due_days or 3),
+                        checklist="[ ] Requisito obligatorio" if template_item.required else None,
                     )
                 )
+        else:
+            db.session.add(
+                Task(
+                    title=f"Procesar compra adicional: {item.description}",
+                    description=(
+                        "Revisar requisitos, materiales, responsable y fecha de entrega "
+                        "de esta compra adicional."
+                    ),
+                    task_type="cliente",
+                    client_id=sale.client_id,
+                    project_id=project.id,
+                    priority="alta",
+                    status="pendiente",
+                    due_at=datetime.utcnow() + timedelta(days=3),
+                )
+            )
 
 
 def update_print_order_status(order):

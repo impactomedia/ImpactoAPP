@@ -1,18 +1,18 @@
 {% extends "app_base.html" %}
-{% block title %}Nueva venta | Impacto Nexora{% endblock %}
+{% block title %}Nueva compra adicional | Impacto Nexora{% endblock %}
 {% block app_content %}
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Ventas · Sales V2</span>
-    <h1>Nueva venta</h1>
-    <p>Registra la compra, pago inicial, plan de cuotas y genera el trabajo operativo.</p>
+    <span class="eyebrow">Impacto Nexora · Comercial</span>
+    <h1>Nueva compra adicional</h1>
+    <p>Imprenta, publicidad, video, diseño u otra compra independiente del servicio principal.</p>
   </div>
   <div><a class="btn btn-light border" href="{{ url_for('sales.index') }}">Volver a ventas</a></div>
 </div>
 
 {% if not clients %}
 <div class="alert alert-warning">
-  <strong>No hay seguimientos o clientes disponibles para vender.</strong>
+  <strong>No hay seguimientos o clientes disponibles para registrar una compra.</strong>
   Primero registra un seguimiento en CRM.
   {% if current_user.has_permission('crm.create') %}
     <a class="alert-link" href="{{ url_for('crm.new_prospect') }}">Crear seguimiento</a>
@@ -64,8 +64,8 @@
 
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div>
-        <h2 class="h5 mb-1">2. Productos y servicios</h2>
-        <p class="text-secondary small mb-0">El descuento se registra por unidad.</p>
+        <h2 class="h5 mb-1">2. Compra adicional</h2>
+        <p class="text-secondary small mb-0">Puedes seleccionar un producto del catálogo o registrar uno personalizado. Los planes principales se gestionan aparte.</p>
       </div>
       <button type="button" class="btn btn-light border" id="addSaleRow">+ Agregar ítem</button>
     </div>
@@ -128,13 +128,22 @@
     <div class="row g-4 mt-1">
       <div class="col-xl-7">
         <hr class="my-4">
-        <h2 class="h5">3. Pago inicial</h2>
+        <h2 class="h5">3. Forma de pago</h2>
         <div class="row g-3">
-          <div class="col-md-3">
-            <label class="form-label">Monto</label>
+          <div class="col-md-4">
+            <label class="form-label">Modalidad *</label>
+            <select name="payment_mode" id="paymentMode" class="form-select">
+              <option value="contado" {% if request.form.get('payment_mode')=='contado' %}selected{% endif %}>Contado</option>
+              <option value="entrega" {% if request.form.get('payment_mode','entrega')=='entrega' %}selected{% endif %}>Pago inicial + saldo en entrega</option>
+              <option value="cuotas" {% if request.form.get('payment_mode')=='cuotas' %}selected{% endif %}>Cuotas</option>
+              <option value="financiamiento" {% if request.form.get('payment_mode')=='financiamiento' %}selected{% endif %}>Financiamiento personalizado</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Pago al registrar / inicial</label>
             <input name="initial_payment" id="initialPayment" type="number" step="0.01" min="0" class="form-control" value="{{ request.form.get('initial_payment','0') }}">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label class="form-label">Método</label>
             <select name="payment_method" class="form-select">
               {% for method in ['transferencia','efectivo','Zelle','ACH','Wise','tarjeta','otro'] %}
@@ -142,31 +151,29 @@
               {% endfor %}
             </select>
           </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label class="form-label">Fecha del pago</label>
             <input name="initial_payment_date" type="date" class="form-control" value="{{ request.form.get('initial_payment_date') or today }}">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label class="form-label">Referencia</label>
-            <input name="initial_payment_reference" class="form-control" value="{{ request.form.get('initial_payment_reference','') }}" placeholder="Zelle, transferencia...">
+            <input name="initial_payment_reference" class="form-control" value="{{ request.form.get('initial_payment_reference','') }}" placeholder="Zelle, ACH, transferencia...">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Condiciones acordadas</label>
+            <input name="payment_terms" class="form-control" value="{{ request.form.get('payment_terms','') }}" placeholder="Ej. cada 15 días">
+          </div>
+        </div>
+
+        <div class="row g-3 mt-1" id="singleDueWrap">
+          <div class="col-md-4">
+            <label class="form-label">Fecha de entrega / pago del saldo</label>
+            <input name="due_date" type="date" class="form-control" value="{{ request.form.get('due_date','') }}">
           </div>
         </div>
 
         <hr class="my-4">
-        <h2 class="h5">4. Plan de pago del saldo</h2>
-        <div class="row g-3">
-          <div class="col-md-4">
-            <label class="form-label">Modalidad</label>
-            <select name="payment_plan_mode" id="paymentPlanMode" class="form-select">
-              <option value="single" {% if request.form.get('payment_plan_mode','single')=='single' %}selected{% endif %}>Un solo vencimiento</option>
-              <option value="custom" {% if request.form.get('payment_plan_mode')=='custom' %}selected{% endif %}>Cuotas personalizadas</option>
-            </select>
-          </div>
-          <div class="col-md-4" id="singleDueWrap">
-            <label class="form-label">Vencimiento del saldo</label>
-            <input name="due_date" type="date" class="form-control" value="{{ request.form.get('due_date','') }}">
-          </div>
-        </div>
+        <h2 class="h5">4. Pagos programados</h2>
 
         <div id="customPlan" class="mt-3 d-none">
           <div class="d-flex justify-content-between align-items-center mb-2">
@@ -189,17 +196,17 @@
               <div class="col-md-1"><button type="button" class="btn btn-outline-danger remove-installment">×</button></div>
             </div>
           </template>
-          <small class="text-secondary">La suma de las cuotas debe coincidir exactamente con el saldo después del pago inicial.</small>
+          <small class="text-secondary">La suma de los pagos programados debe coincidir exactamente con el saldo después del pago inicial.</small>
         </div>
 
         <hr class="my-4">
-        <h2 class="h5">5. Notas</h2>
+        <h2 class="h5">5. Notas de la compra</h2>
         <textarea name="notes" class="form-control" rows="4" placeholder="Condiciones especiales, acuerdos, observaciones...">{{ request.form.get('notes','') }}</textarea>
       </div>
 
       <div class="col-xl-5">
         <div class="border rounded-4 p-4 position-sticky" style="top:1rem">
-          <span class="eyebrow">Resumen de venta</span>
+          <span class="eyebrow">Resumen de compra</span>
           <div class="d-flex justify-content-between mt-3"><span>Subtotal lista</span><strong id="summaryList">0.00</strong></div>
           <div class="d-flex justify-content-between mt-2"><span>Descuentos</span><strong id="summaryDiscount">0.00</strong></div>
           <div class="d-flex justify-content-between mt-2 fs-5"><span>Total</span><strong id="summaryTotal">0.00</strong></div>
@@ -207,8 +214,8 @@
           <div class="d-flex justify-content-between"><span>Pago inicial</span><strong id="summaryInitial">0.00</strong></div>
           <div class="d-flex justify-content-between mt-2"><span>Saldo</span><strong id="summaryBalance">0.00</strong></div>
           <div class="d-flex justify-content-between mt-2"><span>Cuotas programadas</span><strong id="summaryInstallments">0.00</strong></div>
-          <button class="btn btn-brand w-100 mt-4" {% if not clients %}disabled{% endif %}>Registrar venta</button>
-          <small class="d-block text-secondary mt-2">Al confirmar, un Seguimiento pasa automáticamente a Cliente Activo y se genera el trabajo operativo correspondiente.</small>
+          <button class="btn btn-brand w-100 mt-4" {% if not clients %}disabled{% endif %}>Registrar compra adicional</button>
+          <small class="d-block text-secondary mt-2">Al confirmar, un Seguimiento pasa automáticamente a Cliente Activo. La compra no modifica su servicio principal.</small>
         </div>
       </div>
     </div>
@@ -220,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const rows = document.getElementById('saleRows');
   const template = document.getElementById('saleRowTemplate');
   const addRow = document.getElementById('addSaleRow');
-  const mode = document.getElementById('paymentPlanMode');
+  const mode = document.getElementById('paymentMode');
   const singleWrap = document.getElementById('singleDueWrap');
   const customPlan = document.getElementById('customPlan');
   const installmentRows = document.getElementById('installmentRows');
@@ -258,11 +265,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('summaryInitial').textContent = initial.toFixed(2);
     document.getElementById('summaryBalance').textContent = balance.toFixed(2);
     document.getElementById('summaryInstallments').textContent =
-      mode.value === 'custom' ? scheduled.toFixed(2) : balance.toFixed(2);
+      ['cuotas','financiamiento'].includes(mode.value) ? scheduled.toFixed(2) : balance.toFixed(2);
   }
 
   function bindSaleRow(row) {
-    row.querySelectorAll('input').forEach(el => el.addEventListener('input', refreshSummary));
+    row.querySelectorAll('input').forEach(el => el.addEventListener('input', () => mode.value === 'contado' ? togglePlan() : refreshSummary()));
     const select = row.querySelector('.product-select');
     select.addEventListener('change', () => {
       const option = select.options[select.selectedIndex];
@@ -272,7 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!description.value.trim()) description.value = option.dataset.name || option.textContent.trim();
         if (!price.value && option.dataset.price) price.value = option.dataset.price;
       }
-      refreshSummary();
+      if (mode.value === 'contado') togglePlan(); else refreshSummary();
     });
     row.querySelector('.remove-sale-row').addEventListener('click', () => {
       if (rows.querySelectorAll('.sale-row').length > 1) row.remove();
@@ -289,9 +296,24 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function togglePlan() {
-    const custom = mode.value === 'custom';
+    const custom = ['cuotas','financiamiento'].includes(mode.value);
+    const delivery = mode.value === 'entrega';
+    const cash = mode.value === 'contado';
+
     customPlan.classList.toggle('d-none', !custom);
-    singleWrap.classList.toggle('d-none', custom);
+    singleWrap.classList.toggle('d-none', !delivery);
+    initialPayment.readOnly = cash;
+
+    if (cash) {
+      let total = 0;
+      rows.querySelectorAll('.sale-row').forEach(row => {
+        const qty = number(row.querySelector('.quantity-input'));
+        const price = number(row.querySelector('.price-input'));
+        const discount = number(row.querySelector('.discount-input'));
+        total += qty * Math.max(0, price - discount);
+      });
+      initialPayment.value = total.toFixed(2);
+    }
     refreshSummary();
   }
 

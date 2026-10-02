@@ -13,7 +13,7 @@ from app.extensions import db
 from app.decorators import permission_required, roles_required
 from app.access_control import _commercial_client_allowed, _project_allowed, _task_allowed
 from app.helpers import audit, next_code, save_upload
-from app.services import recalc_sale
+from app.services import recalc_sale, active_principal_contract
 from app.models import (
     Client,
     Collaborator,
@@ -355,7 +355,17 @@ def detail(client_id):
         for payment in client.payments:
             timeline.append((payment.created_at, "Pago", f"Pago {payment.amount}", payment.reference or payment.method))
         for sale in client.sales:
-            timeline.append((sale.created_at, "Venta", sale.sale_no, f"Total {sale.total}"))
+            operation_type = (
+                sale.operation_meta.operation_type
+                if sale.operation_meta
+                else "additional_purchase"
+            )
+            sale_label = {
+                "principal_service": "Servicio principal",
+                "principal_upgrade": "Upgrade",
+                "additional_purchase": "Compra adicional",
+            }.get(operation_type, "Venta")
+            timeline.append((sale.created_at, sale_label, sale.sale_no, f"Total USD {sale.total}"))
 
     comments = ClientComment.query.filter_by(client_id=client.id).order_by(ClientComment.created_at.desc()).all()
     for comment in comments:
@@ -402,6 +412,17 @@ def detail(client_id):
         else []
     )
 
+    principal_contract = active_principal_contract(client)
+    total_invested = sum(
+        (Decimal(str(row.amount or 0)) for row in client.payments if row.status == "confirmado"),
+        Decimal("0"),
+    )
+    additional_purchase_count = sum(
+        1
+        for sale in client.sales
+        if sale.operation_meta and sale.operation_meta.operation_type == "additional_purchase"
+    )
+
     return render_template(
         "clients/detail.html",
         client=client,
@@ -417,6 +438,9 @@ def detail(client_id):
         visible_projects=visible_projects,
         open_tasks=open_tasks,
         open_tickets=open_tickets,
+        principal_contract=principal_contract,
+        total_invested=total_invested,
+        additional_purchase_count=additional_purchase_count,
         today=date.today(),
     )
 

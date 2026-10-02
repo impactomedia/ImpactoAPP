@@ -1,14 +1,32 @@
 {% extends "app_base.html" %}
-{% block title %}{{ sale.sale_no }} | Impacto Manager{% endblock %}
+{% block title %}{{ sale.sale_no }} | Impacto Nexora{% endblock %}
 {% block app_content %}
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Venta</span>
+    <span class="eyebrow">Impacto Nexora · Operación comercial</span>
     <h1>{{ sale.sale_no }}</h1>
     <p>{{ sale.client.business_name }} · {{ sale.sale_date }}{% if sale.advisor and sale.advisor.user %} · {{ sale.advisor.user.name }}{% endif %}</p>
   </div>
   <div><a class="btn btn-light border" href="{{ url_for('sales.index') }}">Volver a ventas</a></div>
 </div>
+
+{% if sale.operation_meta %}
+<div class="alert alert-light border mb-4">
+  <div class="d-flex flex-wrap justify-content-between gap-3">
+    <div>
+      <strong>{{ {'principal_service':'Servicio principal','principal_upgrade':'Upgrade de servicio principal','additional_purchase':'Compra adicional'}.get(sale.operation_meta.operation_type, sale.operation_meta.operation_type|label) }}</strong>
+      <small class="d-block text-secondary">Modalidad: {{ sale.operation_meta.payment_mode|label }}{% if sale.operation_meta.payment_terms %} · {{ sale.operation_meta.payment_terms }}{% endif %}</small>
+    </div>
+    {% if sale.operation_meta.operation_type in ['principal_service','principal_upgrade'] %}
+    <div class="text-end">
+      <small class="d-block text-secondary">Precio oficial del plan</small>
+      <strong>USD {{ sale.operation_meta.catalog_total|money }}</strong>
+      {% if sale.operation_meta.credit_applied %}<small class="d-block text-secondary">Crédito reconocido: USD {{ sale.operation_meta.credit_applied|money }}</small>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
 
 <div class="metric-grid mb-4">
   <div class="metric-card"><span>Total</span><strong>{{ sale.total|money }}</strong><small>{{ sale.currency }}</small></div>
@@ -20,7 +38,7 @@
 <div class="row g-4">
   <div class="col-xl-8">
     <section class="panel-card mb-4">
-      <div class="panel-header"><div><h2>Detalle de la venta</h2><p>Productos y servicios confirmados.</p></div></div>
+      <div class="panel-header"><div><h2>Detalle de la operación</h2><p>Productos y servicios confirmados.</p></div></div>
       <div class="table-responsive">
         <table class="table modern-table">
           <thead><tr><th>Ítem</th><th>Cantidad</th><th>Precio lista</th><th>Descuento/u.</th><th>Precio final</th><th>Total</th></tr></thead>

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.10.0 — Impacto Nexora · Bloque 3: Compras adicionales y formas de pago
+
+- Nueva metadata comercial `sale_operation_meta` para clasificar cada operación como servicio principal, upgrade o compra adicional.
+- Cada operación guarda modalidad de pago: contado, saldo en entrega, cuotas o financiamiento personalizado.
+- Se guardan también condiciones acordadas, valor oficial y crédito aplicado cuando corresponde.
+- La venta genérica pasa a ser formalmente **Compra adicional** y excluye paquetes principales.
+- Un Seguimiento puede convertirse en Cliente únicamente por comprar un producto o servicio adicional, aun sin plan principal.
+- Las compras adicionales ya no crean `ClientContract`; generan únicamente el trabajo operativo correspondiente.
+- Productos físicos generan órdenes de imprenta; servicios y compras personalizadas generan proyecto y tarea.
+- Pago al contado exige que la operación quede completamente pagada al registrarla.
+- Inicial + entrega genera un único saldo con fecha de entrega/vencimiento.
+- Cuotas y financiamiento permiten calendarios personalizados con montos y fechas exactas.
+- El servicio principal y los upgrades usan las mismas modalidades de pago.
+- La ficha del cliente muestra Total invertido, Saldo pendiente, Servicio actual y cantidad de Compras adicionales.
+- El historial comercial distingue Servicio principal, Upgrade y Compra adicional.
+- Ventas/Operaciones muestran tipo de operación y modalidad de pago.
+- Migración idempotente `python -m scripts.upgrade_nexora_1_10_0` crea la tabla y clasifica ventas históricas.
+- Nueva batería `tests/test_nexora_additional_purchases.py`.
+
 ## 1.9.2 — Hotfix final Bloque 2
 
 - Sincronizado `AccountReceivable.paid_amount` con el pago real del plan sustituido al cerrar una cuenta por upgrade.
