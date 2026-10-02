@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
+{% set role_name = current_user.role.name if current_user.role else '' %}
+{% set is_development_coordinator = role_name == 'development_coordinator' %}
+{% set home_url = url_for('operations.development_dashboard') if is_development_coordinator else url_for('dashboard.index') %}
 <div class="app-shell">
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
@@ -8,12 +11,12 @@
     </div>
 
     <nav class="sidebar-nav">
-      {% set role_name = current_user.role.name if current_user.role else '' %}
-      <a class="nav-item {% if request.blueprint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard.index') }}"><i class="bi bi-grid"></i> Inicio</a>
+      <a class="nav-item {% if (is_development_coordinator and request.endpoint == 'operations.development_dashboard') or (not is_development_coordinator and request.blueprint == 'dashboard') %}active{% endif %}" href="{{ home_url }}"><i class="bi bi-grid"></i> {{ 'Control de Desarrollo' if is_development_coordinator else 'Inicio' }}</a>
 
       {% if current_user.has_permission('crm.view') or current_user.has_permission('clients.view') or current_user.has_permission('sales.view') %}
-      <div class="nav-section">Comercial</div>
+      <div class="nav-section">{{ 'Desarrollo' if is_development_coordinator else 'Comercial' }}</div>
       {% endif %}
+
 
       {% if current_user.has_permission('crm.view') %}
       <a class="nav-item {% if request.blueprint == 'crm' and request.endpoint != 'crm.pipeline' %}active{% endif %}" href="{{ url_for('crm.prospects') }}"><i class="bi bi-funnel"></i> CRM / Prospectos</a>
@@ -21,8 +24,8 @@
       {% endif %}
 
       {% if current_user.has_permission('clients.view') %}
-        {% if role_name == 'production' %}
-        <a class="nav-item {% if request.blueprint == 'clients_v3' %}active{% endif %}" href="{{ url_for('clients_v3.mine') }}"><i class="bi bi-buildings"></i> Mis clientes</a>
+        {% if role_name in ['production','development_coordinator'] %}
+        <a class="nav-item {% if request.blueprint == 'clients_v3' %}active{% endif %}" href="{{ url_for('clients_v3.mine') }}"><i class="bi bi-buildings"></i> {{ 'Clientes de Desarrollo' if is_development_coordinator else 'Mis clientes' }}</a>
         {% else %}
         <a class="nav-item {% if request.blueprint in ['clients','clients_v3'] %}active{% endif %}" href="{{ url_for('clients.index') }}"><i class="bi bi-buildings"></i> Clientes</a>
         {% endif %}
@@ -96,7 +99,7 @@
         <input class="border-0 bg-transparent" name="q" placeholder="Buscar información disponible..." style="min-width:320px;outline:none">
       </form>
       <div class="top-actions ms-auto">
-        <a class="btn btn-light border position-relative" href="{{ url_for('dashboard.index') }}#notifications"><i class="bi bi-bell"></i>{% if unread_notifications %}<span class="notif-badge">{{ unread_notifications }}</span>{% endif %}</a>
+        <a class="btn btn-light border position-relative" href="{{ home_url }}#notifications"><i class="bi bi-bell"></i>{% if unread_notifications %}<span class="notif-badge">{{ unread_notifications }}</span>{% endif %}</a>
         <a class="btn btn-light border" href="{{ url_for('auth.profile') }}"><i class="bi bi-person-circle"></i></a>
         <form method="post" action="{{ url_for('auth.logout') }}" class="d-inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

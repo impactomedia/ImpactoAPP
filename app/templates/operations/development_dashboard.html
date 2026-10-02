@@ -1,0 +1,119 @@
+{% extends "app_base.html" %}
+{% block title %}Control de Desarrollo | Impacto Manager{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Bloque 6 · Coordinación</span>
+    <h1>Control de Desarrollo</h1>
+    <p>Asignaciones, carga de trabajo, vencimientos y progreso del equipo de Desarrollo.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-light border" href="{{ url_for('operations.task_kanban') }}">Kanban</a>
+    <a class="btn btn-light border" href="{{ url_for('operations.new_task') }}">Nueva tarea</a>
+    <a class="btn btn-brand" href="{{ url_for('operations.new_project') }}">Nuevo proyecto</a>
+  </div>
+</div>
+
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Proyectos activos</span><strong>{{ active_projects|length }}</strong><small>Área Desarrollo</small></div>
+  <div class="metric-card"><span>Tareas abiertas</span><strong>{{ open_tasks|length }}</strong><small>Pendientes de cierre</small></div>
+  <div class="metric-card"><span>Sin asignar</span><strong>{{ unassigned_tasks|length }}</strong><small>Requieren responsable</small></div>
+  <div class="metric-card"><span>Vencidas</span><strong>{{ overdue_tasks|length }}</strong><small>Requieren atención</small></div>
+  <div class="metric-card"><span>Bloqueadas</span><strong>{{ blocked_tasks|length }}</strong><small>Con impedimentos</small></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-7">
+    <section class="panel-card h-100">
+      <div class="panel-header">
+        <div><h2>Carga del equipo</h2><p>Trabajo abierto por colaborador de Desarrollo.</p></div>
+      </div>
+      <div class="table-responsive">
+        <table class="table modern-table align-middle">
+          <thead><tr><th>Colaborador</th><th>Proyectos</th><th>Tareas</th><th>Urgentes</th><th>Vencidas</th></tr></thead>
+          <tbody>
+          {% for row in workloads %}
+            <tr>
+              <td><strong>{{ row.collaborator.user.name if row.collaborator.user else '—' }}</strong><small class="d-block text-secondary">{{ row.collaborator.job_title }} · {{ row.collaborator.department or 'Desarrollo' }}</small></td>
+              <td>{{ row.active_projects }}</td>
+              <td>{{ row.open_tasks }}</td>
+              <td>{% if row.urgent_tasks %}<span class="badge-soft warning">{{ row.urgent_tasks }}</span>{% else %}0{% endif %}</td>
+              <td>{% if row.overdue_tasks %}<span class="badge-soft danger">{{ row.overdue_tasks }}</span>{% else %}0{% endif %}</td>
+            </tr>
+          {% else %}<tr><td colspan="5" class="text-center text-secondary py-4">No hay colaboradores de Desarrollo activos.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-xl-5">
+    <section class="panel-card h-100" id="notifications">
+      <div class="panel-header"><div><h2>Notificaciones</h2><p>Alertas recientes de tu cuenta.</p></div></div>
+      {% for n in recent_notifications %}
+      <form method="post" action="{{ url_for('dashboard.read_notification', notification_id=n.id) }}" class="border-bottom py-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-link text-start p-0"><strong>{{ n.title }}</strong><small class="d-block text-secondary">{{ n.message }}</small></button>
+      </form>
+      {% else %}<p class="text-secondary mb-0">No tienes alertas recientes.</p>{% endfor %}
+    </section>
+  </div>
+</div>
+
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div><h2>Proyectos que requieren seguimiento</h2><p>Prioriza proyectos sin coordinador o con entrega próxima.</p></div>
+    <a class="btn btn-sm btn-light border" href="{{ url_for('operations.projects') }}">Ver todos</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Proyecto</th><th>Cliente</th><th>Estado</th><th>Progreso</th><th>Coordinador</th><th>Entrega</th><th></th></tr></thead>
+      <tbody>
+      {% for p in priority_projects %}
+        <tr>
+          <td><strong>{{ p.project_no }}</strong><small class="d-block text-secondary">{{ p.name }}</small></td>
+          <td>{{ p.client.business_name }}</td>
+          <td><span class="badge-soft">{{ p.status|label }}</span></td>
+          <td><div class="progress"><div class="progress-bar" style="width:{{ p.progress }}%">{{ p.progress }}%</div></div></td>
+          <td>{% if p.coordinator %}{{ p.coordinator.user.name }}{% else %}<span class="badge-soft warning">Sin asignar</span>{% endif %}</td>
+          <td>{{ p.due_on or '—' }}</td>
+          <td><a class="btn btn-sm btn-light border" href="{{ url_for('operations.project_detail', project_id=p.id) }}">Coordinar</a></td>
+        </tr>
+      {% else %}<tr><td colspan="7" class="text-center text-secondary py-4">No hay proyectos activos de Desarrollo.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-card">
+  <div class="panel-header">
+    <div><h2>Tareas que requieren atención</h2><p>Asigna responsable, prioridad y fecha sin salir del panel.</p></div>
+    <a class="btn btn-sm btn-light border" href="{{ url_for('operations.tasks') }}">Ver todas</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Tarea</th><th>Proyecto</th><th>Estado</th><th>Responsable</th><th>Prioridad</th><th>Vence</th><th></th></tr></thead>
+      <tbody>
+      {% for t in attention_tasks %}
+        <tr>
+          <td><strong>{{ t.title }}</strong>{% if not t.assignee_id %}<span class="badge-soft warning ms-1">Sin asignar</span>{% endif %}</td>
+          <td>{{ t.project.name if t.project else '—' }}</td>
+          <td><span class="badge-soft {{ 'danger' if t.status=='bloqueada' else '' }}">{{ t.status|label }}</span></td>
+          <td><select name="assignee_id" form="task-quick-{{ t.id }}" class="form-select form-select-sm"><option value="">Sin responsable</option>{% for c in team %}<option value="{{ c.id }}" {% if t.assignee_id==c.id %}selected{% endif %}>{{ c.user.name }}</option>{% endfor %}</select></td>
+          <td><select name="priority" form="task-quick-{{ t.id }}" class="form-select form-select-sm">{% for p in priorities %}<option value="{{ p }}" {% if t.priority==p %}selected{% endif %}>{{ p|label }}</option>{% endfor %}</select></td>
+          <td><input name="due_at" form="task-quick-{{ t.id }}" type="datetime-local" class="form-control form-control-sm" value="{{ t.due_at.strftime('%Y-%m-%dT%H:%M') if t.due_at else '' }}"></td>
+          <td>
+            <form id="task-quick-{{ t.id }}" method="post" action="{{ url_for('operations.update_task', task_id=t.id) }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="status" value="{{ t.status }}">
+              <button class="btn btn-sm btn-dark">Guardar</button>
+            </form>
+            <a class="btn btn-sm btn-light border" href="{{ url_for('operations.task_detail', task_id=t.id) }}">Abrir</a>
+          </td>
+        </tr>
+      {% else %}<tr><td colspan="7" class="text-center text-secondary py-4">No hay tareas pendientes.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

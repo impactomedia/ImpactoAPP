@@ -5,14 +5,50 @@ from sqlalchemy import or_
 
 from app.extensions import db
 from app.helpers import notify
-from app.models import Attachment, Client, ClientCollaborator, Collaborator, Notification
+from app.models import (
+    Attachment,
+    Client,
+    ClientCollaborator,
+    Collaborator,
+    Notification,
+    Project,
+    Task,
+)
 from app.access_control import _project_allowed, _task_allowed
 from app.client_v2_models import ClientTeamAssignment
+from app.development_scope import (
+    DEVELOPMENT_COORDINATOR_ROLE,
+    development_projects_query,
+    development_team_query,
+    is_development_collaborator,
+    is_development_project,
+)
 
 
 ACTIVE_TEAM_STATUS = "activa"
 FINAL_TEAM_STATUS = "finalizada"
 SUSPENDED_TEAM_STATUS = "suspendida"
+
+OPERATIONAL_COMMENT_TYPES = {
+    "Onboarding",
+    "Diseño",
+    "Desarrollo web",
+    "Google Business",
+    "Redes sociales",
+    "SEO",
+    "Imprenta",
+    "Soporte",
+    "Renovación",
+    "Otro",
+}
+OPERATIONAL_DOCUMENT_CATEGORIES = {
+    "branding",
+    "website",
+    "redes_sociales",
+    "seo",
+    "imprenta",
+    "otros",
+}
 
 
 def _as_datetime(value):
@@ -51,6 +87,53 @@ def _assignment_client_ids(collaborator_ids):
     return [row[0] for row in rows]
 
 
+def _development_client_ids():
+    rows = (
+        development_projects_query()
+        .with_entities(Project.client_id)
+        .filter(Project.client_id.isnot(None))
+        .distinct()
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+def _production_project_client_ids(collaborator):
+    if not collaborator:
+        return []
+    rows = (
+        db.session.query(Project.client_id)
+        .filter(
+            Project.client_id.isnot(None),
+            or_(
+                Project.coordinator_id == collaborator.id,
+                Project.members.any(id=collaborator.id),
+            ),
+        )
+        .distinct()
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+def _production_task_client_ids(collaborator):
+    if not collaborator:
+        return []
+    rows = (
+        db.session.query(Task.client_id)
+        .filter(
+            Task.client_id.isnot(None),
+            or_(
+                Task.assignee_id == collaborator.id,
+                Task.collaborators.any(id=collaborator.id),
+            ),
+        )
+        .distinct()
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
 def my_clients_query():
     query = Client.query.filter(
         Client.record_type == "cliente",
@@ -73,12 +156,35 @@ def my_clients_query():
             conditions.append(Client.id.in_(assigned))
         return query.filter(or_(*conditions))
 
+    if role == DEVELOPMENT_COORDINATOR_ROLE:
+        development_ids = _development_client_ids()
+        team_ids = [row.id for row in development_team_query().all()]
+        assigned = _assignment_client_ids(team_ids)
+        conditions = []
+        if development_ids:
+            conditions.append(Client.id.in_(development_ids))
+        if assigned:
+            conditions.append(Client.id.in_(assigned))
+        if not conditions:
+            return query.filter(Client.id == -1)
+        return query.filter(or_(*conditions))
+
     assigned = _assignment_client_ids([collaborator.id])
     conditions = []
+
     if role == "advisor":
         conditions.append(Client.owner_id == collaborator.id)
+
     if assigned:
         conditions.append(Client.id.in_(assigned))
+
+    if role == "production":
+        project_ids = _production_project_client_ids(collaborator)
+        task_ids = _production_task_client_ids(collaborator)
+        if project_ids:
+            conditions.append(Client.id.in_(project_ids))
+        if task_ids:
+            conditions.append(Client.id.in_(task_ids))
 
     if not conditions:
         return query.filter(Client.id == -1)
@@ -117,6 +223,21 @@ def client_coordination_allowed(client):
             is not None
         )
 
+    if role == DEVELOPMENT_COORDINATOR_ROLE:
+        if any(is_development_project(project) for project in client.projects):
+            return True
+        team_ids = [row.id for row in development_team_query().all()]
+        if not team_ids:
+            return False
+        return (
+            ClientTeamAssignment.query.filter(
+                ClientTeamAssignment.client_id == client.id,
+                ClientTeamAssignment.collaborator_id.in_(team_ids),
+                ClientTeamAssignment.status == ACTIVE_TEAM_STATUS,
+            ).first()
+            is not None
+        )
+
     if role == "production":
         assigned = ClientTeamAssignment.query.filter_by(
             client_id=client.id,
@@ -125,7 +246,9 @@ def client_coordination_allowed(client):
         ).first()
         if assigned:
             return True
-        return any(_project_allowed(project) for project in client.projects)
+        if any(_project_allowed(project) for project in client.projects):
+            return True
+        return any(_task_allowed(task) for task in client.tasks)
 
     return current_user.has_permission("clients.view")
 
@@ -309,6 +432,8 @@ def build_client_alerts(client, can_financial=False, visible_tasks=None, visible
 
 def build_client_timeline(client, can_financial=False):
     events = []
+    role = _user_role()
+    operational_only = role in {"production", DEVELOPMENT_COORDINATOR_ROLE}
 
     def add(when, kind, title, body=""):
         dt = _as_datetime(when)
@@ -321,15 +446,18 @@ def build_client_timeline(client, can_financial=False):
             "body": body or "",
         })
 
-    for interaction in client.interactions:
-        add(
-            interaction.occurred_at or interaction.created_at,
-            "Interacción",
-            interaction.subject or interaction.interaction_type,
-            interaction.notes or interaction.result or "",
-        )
+    if current_user.has_permission("crm.view"):
+        for interaction in client.interactions:
+            add(
+                interaction.occurred_at or interaction.created_at,
+                "Interacción",
+                interaction.subject or interaction.interaction_type,
+                interaction.notes or interaction.result or "",
+            )
 
     for comment in client.comments:
+        if operational_only and comment.process_type not in OPERATIONAL_COMMENT_TYPES:
+            continue
         add(
             comment.created_at,
             "Comentario interno",
@@ -347,6 +475,15 @@ def build_client_timeline(client, can_financial=False):
         )
 
     for assignment in client.team_assignments_v3:
+        if role == "production" and (
+            not current_user.collaborator
+            or assignment.collaborator_id != current_user.collaborator.id
+        ):
+            continue
+        if role == DEVELOPMENT_COORDINATOR_ROLE:
+            relevant_project = assignment.project and is_development_project(assignment.project)
+            if not relevant_project and not is_development_collaborator(assignment.collaborator):
+                continue
         label = assignment.service_label or assignment.role_in_client
         add(
             assignment.created_at,
@@ -362,12 +499,13 @@ def build_client_timeline(client, can_financial=False):
                 assignment.end_reason or assignment.role_in_client,
             )
 
-    for history in client.ownership_history:
-        previous = db.session.get(Collaborator, history.previous_owner_id) if history.previous_owner_id else None
-        new = db.session.get(Collaborator, history.new_owner_id) if history.new_owner_id else None
-        prev_name = previous.user.name if previous and previous.user else "Sin responsable"
-        new_name = new.user.name if new and new.user else "Sin responsable"
-        add(history.changed_at, "Responsable comercial", f"{prev_name} → {new_name}", history.reason or "")
+    if current_user.has_permission("crm.view"):
+        for history in client.ownership_history:
+            previous = db.session.get(Collaborator, history.previous_owner_id) if history.previous_owner_id else None
+            new = db.session.get(Collaborator, history.new_owner_id) if history.new_owner_id else None
+            prev_name = previous.user.name if previous and previous.user else "Sin responsable"
+            new_name = new.user.name if new and new.user else "Sin responsable"
+            add(history.changed_at, "Responsable comercial", f"{prev_name} → {new_name}", history.reason or "")
 
     if current_user.has_permission("projects.view"):
         for project in client.projects:
@@ -395,6 +533,8 @@ def build_client_timeline(client, can_financial=False):
     for attachment in attachments:
         meta = getattr(attachment, "client_document_meta", None)
         category = meta.category if meta else "otros"
+        if operational_only and category not in OPERATIONAL_DOCUMENT_CATEGORIES:
+            continue
         add(attachment.created_at, "Archivo", attachment.file_name, category)
 
     if can_financial:

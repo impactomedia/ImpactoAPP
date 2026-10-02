@@ -1,11 +1,11 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models import Client, Collaborator, Role, Sale, User
+from app.models import Client, Collaborator, Project, Role, Sale, Task, User
 from scripts.seed import seed_all
 
 
@@ -44,7 +44,18 @@ def client(app):
 
 
 def _create_test_users():
-    role_names = ["superadmin", "admin", "manager", "hr", "supervisor", "advisor", "production", "finance", "audit"]
+    role_names = [
+        "superadmin",
+        "admin",
+        "manager",
+        "hr",
+        "supervisor",
+        "advisor",
+        "development_coordinator",
+        "production",
+        "finance",
+        "audit",
+    ]
     for index, role_name in enumerate(role_names, start=1):
         role = Role.query.filter_by(name=role_name).one()
         email = f"{role_name}@test.local"
@@ -54,12 +65,13 @@ def _create_test_users():
         db.session.flush()
 
         if role_name != "audit":
+            department = "Desarrollo" if role_name in {"development_coordinator", "production"} else "Pruebas"
             db.session.add(
                 Collaborator(
                     user_id=user.id,
                     code=f"TEST-{index:03d}",
                     job_title=role.label,
-                    department="Pruebas",
+                    department=department,
                     status="activo",
                     join_date=date.today(),
                 )
@@ -100,6 +112,7 @@ ALLOWED_MODULES = {
     "hr": {"tasks", "hr", "reports"},
     "supervisor": {"crm", "clients", "sales", "projects", "tasks", "printing", "hr", "support", "reports"},
     "advisor": {"crm", "clients", "sales", "projects", "tasks", "printing", "support", "reports"},
+    "development_coordinator": {"projects", "tasks"},
     "production": {"clients", "projects", "tasks", "printing", "support", "reports"},
     "finance": {"clients", "sales", "finance", "reports"},
     "audit": {"reports"},
@@ -119,7 +132,20 @@ def test_module_access_matrix(client, role_name):
     _logout(client)
 
 
-@pytest.mark.parametrize("role_name", ["superadmin", "admin", "manager", "hr", "supervisor", "advisor", "production", "finance"])
+@pytest.mark.parametrize(
+    "role_name",
+    [
+        "superadmin",
+        "admin",
+        "manager",
+        "hr",
+        "supervisor",
+        "advisor",
+        "development_coordinator",
+        "production",
+        "finance",
+    ],
+)
 def test_employee_self_service_is_available(client, role_name):
     _login(client, role_name)
     assert client.get("/hr/my-day", follow_redirects=False).status_code == 200
@@ -143,6 +169,12 @@ def test_hr_can_open_payroll_but_not_finance_dashboard(client):
 def test_restricted_write_actions_are_denied(client):
     _login(client, "production")
     assert client.post("/sales/new", data={}, follow_redirects=False).status_code == 403
+    assert client.post("/operations/projects/new", data={}, follow_redirects=False).status_code == 403
+    assert client.post("/operations/tasks/new", data={}, follow_redirects=False).status_code == 403
+    _logout(client)
+
+    _login(client, "advisor")
+    assert client.post("/operations/tasks/new", data={}, follow_redirects=False).status_code == 403
     _logout(client)
 
     _login(client, "finance")
@@ -167,14 +199,34 @@ def test_finance_and_production_client_permissions_are_limited(app):
     with app.app_context():
         finance = User.query.filter_by(email="finance@test.local").one()
         production = User.query.filter_by(email="production@test.local").one()
+        coordinator = User.query.filter_by(email="development_coordinator@test.local").one()
 
         assert finance.has_permission("clients.view")
         assert not finance.has_permission("clients.create")
         assert not finance.has_permission("clients.edit")
 
         assert production.has_permission("clients.view")
+        assert production.has_permission("clients.comment")
+        assert production.has_permission("clients.files")
         assert not production.has_permission("clients.create")
         assert not production.has_permission("clients.edit")
+        assert production.has_permission("projects.progress")
+        assert production.has_permission("tasks.update")
+        assert not production.has_permission("projects.edit")
+        assert not production.has_permission("tasks.edit")
+
+        assert coordinator.has_permission("clients.view")
+        assert coordinator.has_permission("clients.assign")
+        assert coordinator.has_permission("clients.comment")
+        assert coordinator.has_permission("clients.files")
+        assert coordinator.has_permission("projects.edit")
+        assert coordinator.has_permission("tasks.edit")
+        assert coordinator.has_permission("development.manage")
+        assert not coordinator.has_permission("crm.view")
+        assert not coordinator.has_permission("sales.view")
+        assert not coordinator.has_permission("finance.view")
+        assert not coordinator.has_permission("finance.payroll")
+        assert not coordinator.has_permission("reports.view")
 
 
 def test_advisor_cannot_open_another_advisors_crm_or_sale(client, app):
@@ -222,6 +274,11 @@ def test_advisor_cannot_use_unscoped_global_task_kanban(client):
     assert client.get("/operations/tasks/kanban", follow_redirects=False).status_code == 403
 
 
+def test_production_cannot_use_coordination_kanban(client):
+    _login(client, "production")
+    assert client.get("/operations/tasks/kanban", follow_redirects=False).status_code == 403
+
+
 def test_advisor_client_list_is_scoped_to_own_portfolio(client, app):
     with app.app_context():
         advisor = User.query.filter_by(email="advisor@test.local").one().collaborator
@@ -258,3 +315,185 @@ def test_production_client_page_does_not_offer_write_controls(client, app):
     assert b"Asignar servicio" not in response.data
     assert b"Adjuntar archivo" not in response.data
     assert b"Total pagado" not in response.data
+
+
+def test_development_coordinator_panel_scope_and_reassignment(client, app):
+    with app.app_context():
+        coordinator = User.query.filter_by(email="development_coordinator@test.local").one().collaborator
+        developer = User.query.filter_by(email="production@test.local").one().collaborator
+
+        dev_client = Client(
+            code="CLI-DEV-COORD",
+            business_name="Cliente Desarrollo Visible",
+            contact_name="Contacto",
+            record_type="cliente",
+            client_status="activo",
+        )
+        seo_client = Client(
+            code="CLI-SEO-HIDDEN",
+            business_name="Cliente SEO Oculto",
+            contact_name="Contacto",
+            record_type="cliente",
+            client_status="activo",
+        )
+        db.session.add_all([dev_client, seo_client])
+        db.session.flush()
+
+        dev_project = Project(
+            project_no="PRJ-DEV-COORD",
+            client_id=dev_client.id,
+            name="Website Desarrollo Visible",
+            department="Desarrollo",
+            status="en_produccion",
+            progress=35,
+            starts_on=date.today(),
+            due_on=date.today() + timedelta(days=7),
+            coordinator_id=coordinator.id,
+        )
+        seo_project = Project(
+            project_no="PRJ-SEO-HIDDEN",
+            client_id=seo_client.id,
+            name="SEO Oculto Coordinador Desarrollo",
+            department="SEO",
+            status="en_produccion",
+            progress=20,
+            starts_on=date.today(),
+            due_on=date.today() + timedelta(days=7),
+        )
+        db.session.add_all([dev_project, seo_project])
+        db.session.flush()
+
+        task = Task(
+            title="Home Website sin asignar",
+            client_id=dev_client.id,
+            project_id=dev_project.id,
+            priority="media",
+            status="pendiente",
+            due_at=datetime.utcnow() + timedelta(days=2),
+        )
+        hidden_task = Task(
+            title="SEO fuera de Desarrollo",
+            client_id=seo_client.id,
+            project_id=seo_project.id,
+            priority="alta",
+            status="pendiente",
+        )
+        db.session.add_all([task, hidden_task])
+        db.session.commit()
+        task_id = task.id
+        dev_client_id = dev_client.id
+        developer_id = developer.id
+
+    _login(client, "development_coordinator")
+
+    panel = client.get("/operations/development")
+    assert panel.status_code == 200
+    assert b"Website Desarrollo Visible" in panel.data
+    assert b"SEO Oculto Coordinador Desarrollo" not in panel.data
+    assert b"Home Website sin asignar" in panel.data
+    assert b"SEO fuera de Desarrollo" not in panel.data
+
+    projects = client.get("/operations/projects")
+    assert projects.status_code == 200
+    assert b"Website Desarrollo Visible" in projects.data
+    assert b"SEO Oculto Coordinador Desarrollo" not in projects.data
+
+    mine = client.get("/clients/mine")
+    assert mine.status_code == 200
+    assert b"Cliente Desarrollo Visible" in mine.data
+    assert b"Cliente SEO Oculto" not in mine.data
+
+    assert client.get("/clients/", follow_redirects=False).status_code == 403
+    assert client.get("/sales/", follow_redirects=False).status_code == 403
+    assert client.get("/finance/", follow_redirects=False).status_code == 403
+    assert client.get("/reports/", follow_redirects=False).status_code == 403
+
+    due_value = (datetime.utcnow() + timedelta(days=5)).strftime("%Y-%m-%dT%H:%M")
+    update = client.post(
+        f"/operations/tasks/{task_id}/update",
+        data={
+            "status": "en_proceso",
+            "assignee_id": developer_id,
+            "priority": "urgente",
+            "due_at": due_value,
+        },
+        follow_redirects=False,
+    )
+    assert update.status_code in {302, 303}
+
+    with app.app_context():
+        row = db.session.get(Task, task_id)
+        assert row.assignee_id == developer_id
+        assert row.priority == "urgente"
+        assert row.status == "en_proceso"
+
+    coordination = client.get(f"/clients/{dev_client_id}/coordination")
+    assert coordination.status_code == 200
+    assert b"Total pagado" not in coordination.data
+    assert b"Ventas y pagos" not in coordination.data
+
+
+def test_production_only_opens_directly_assigned_tasks(client, app):
+    with app.app_context():
+        production = User.query.filter_by(email="production@test.local").one().collaborator
+        production_role = Role.query.filter_by(name="production").one()
+        other_user = User(
+            name="Otro desarrollador",
+            email="other-production@test.local",
+            role=production_role,
+            active=True,
+        )
+        other_user.set_password("Test123!")
+        db.session.add(other_user)
+        db.session.flush()
+        other = Collaborator(
+            user_id=other_user.id,
+            code="DEV-OTHER",
+            job_title="Desarrollador",
+            department="Desarrollo",
+            status="activo",
+        )
+        db.session.add(other)
+        db.session.flush()
+
+        customer = Client(
+            code="CLI-DEV-TASKS",
+            business_name="Cliente Tareas Desarrollo",
+            contact_name="Contacto",
+            record_type="cliente",
+            client_status="activo",
+        )
+        db.session.add(customer)
+        db.session.flush()
+        project = Project(
+            project_no="PRJ-DEV-TASKS",
+            client_id=customer.id,
+            name="Proyecto con varias tareas",
+            department="Desarrollo",
+            coordinator_id=production.id,
+            status="en_produccion",
+        )
+        db.session.add(project)
+        db.session.flush()
+        own_task = Task(
+            title="Tarea directa del desarrollador",
+            client_id=customer.id,
+            project_id=project.id,
+            assignee_id=production.id,
+            status="pendiente",
+        )
+        other_task = Task(
+            title="Tarea de otro desarrollador",
+            client_id=customer.id,
+            project_id=project.id,
+            assignee_id=other.id,
+            status="pendiente",
+        )
+        db.session.add_all([own_task, other_task])
+        db.session.commit()
+        own_id = own_task.id
+        other_id = other_task.id
+
+    _login(client, "production")
+    assert client.get(f"/operations/tasks/{own_id}", follow_redirects=False).status_code == 200
+    assert client.get(f"/operations/tasks/{other_id}", follow_redirects=False).status_code == 403

@@ -5,10 +5,10 @@
 <div class="page-heading">
   <div>
     <span class="eyebrow">Clientes V2 · Fase 3</span>
-    <h1>Mis clientes</h1>
-    <p>Clientes vinculados a tu cartera comercial o a tu equipo operativo activo.</p>
+    <h1>{{ 'Clientes de Desarrollo' if role_name == 'development_coordinator' else 'Mis clientes' }}</h1>
+    <p>{{ 'Clientes vinculados a proyectos y asignaciones del equipo de Desarrollo.' if role_name == 'development_coordinator' else 'Clientes vinculados a tu cartera comercial o a tu equipo operativo activo.' }}</p>
   </div>
-  {% if role_name != 'production' %}
+  {% if role_name not in ['production','development_coordinator'] %}
   <div class="d-flex gap-2"><a class="btn btn-light border" href="{{ url_for('clients.index') }}">Todos los clientes</a></div>
   {% endif %}
 </div>
@@ -19,7 +19,7 @@
 </div>
 
 <section class="panel-card">
-  <div class="panel-header"><div><h2>Cartera y equipo asignado</h2><p>Acceso rápido a la ficha y al centro de coordinación.</p></div></div>
+  <div class="panel-header"><div><h2>Cartera y equipo asignado</h2><p>Acceso rápido al centro operativo del cliente.</p></div></div>
   <div class="table-responsive">
     <table class="table modern-table align-middle">
       <thead><tr><th>Cliente</th><th>Responsable comercial</th><th>Mi función / equipo</th><th>Servicios activos</th><th>Alertas</th><th></th></tr></thead>
@@ -32,7 +32,7 @@
             {% for a in assignment_map.get(c.id, []) %}
               <span class="badge-soft info me-1 mb-1">{{ a.role_in_client }}{% if a.service_label %} · {{ a.service_label }}{% endif %}</span>
             {% else %}
-              {% if c.owner and current_user.collaborator and c.owner.id == current_user.collaborator.id %}<span class="badge-soft success">Responsable comercial</span>{% else %}<span class="text-secondary">Supervisión / acceso administrativo</span>{% endif %}
+              {% if role_name == 'development_coordinator' %}<span class="text-secondary">Proyecto de Desarrollo</span>{% elif c.owner and current_user.collaborator and c.owner.id == current_user.collaborator.id %}<span class="badge-soft success">Responsable comercial</span>{% else %}<span class="text-secondary">Supervisión / acceso operativo</span>{% endif %}
             {% endfor %}
           </td>
           <td>{{ c.contracts|selectattr('status','equalto','activo')|list|length }}</td>

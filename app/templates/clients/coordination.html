@@ -3,7 +3,7 @@
 {% block app_content %}
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Clientes V2 · Centro de coordinación</span>
+    <span class="eyebrow">Centro de coordinación</span>
     <h1>{{ client.business_name }}</h1>
     <p>{{ client.code or 'Sin código' }} · {{ client.contact_name }} · Responsable comercial: {{ client.owner.user.name if client.owner and client.owner.user else 'Sin asignar' }}</p>
   </div>
@@ -14,23 +14,47 @@
 </div>
 
 <div class="metric-grid mb-4">
-  <div class="metric-card"><span>Equipo activo</span><strong>{{ active_assignments|length }}</strong><small>Asignaciones vigentes</small></div>
+  <div class="metric-card"><span>Equipo activo</span><strong>{{ active_assignments|length }}</strong><small>Asignaciones visibles</small></div>
+  <div class="metric-card"><span>Proyectos</span><strong>{{ projects|length }}</strong><small>Dentro de tu alcance</small></div>
+  <div class="metric-card"><span>Tareas visibles</span><strong>{{ visible_tasks|length }}</strong><small>Trabajo operativo</small></div>
   <div class="metric-card"><span>Alertas</span><strong>{{ alerts|length }}</strong><small>Próximos 60 días + vencidos</small></div>
-  <div class="metric-card"><span>Servicios activos</span><strong>{{ client.contracts|selectattr('status','equalto','activo')|list|length }}</strong><small>Planes y servicios vigentes</small></div>
-  <div class="metric-card"><span>Eventos</span><strong>{{ timeline|length }}</strong><small>Línea de tiempo consolidada</small></div>
 </div>
 
 <section class="panel-card mb-4 p-0 overflow-hidden">
   <div class="px-3 pt-3">
     <ul class="nav nav-tabs flex-nowrap overflow-auto" role="tablist">
-      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#equipo" type="button">Equipo</button></li>
-      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#alertas" type="button">Alertas y renovaciones</button></li>
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#trabajo" type="button">Trabajo</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#equipo" type="button">Equipo</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#alertas" type="button">Alertas</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#notas" type="button">Notas</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#archivos" type="button">Evidencias</button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#timeline" type="button">Línea de tiempo</button></li>
     </ul>
   </div>
 
   <div class="tab-content p-3 p-lg-4">
-    <div class="tab-pane fade show active" id="equipo">
+    <div class="tab-pane fade show active" id="trabajo">
+      <div class="row g-4">
+        <div class="col-xl-6">
+          <div class="panel-header"><div><h2>Proyectos</h2><p>Proyectos visibles para tu rol.</p></div></div>
+          {% for p in projects %}
+          <div class="border rounded-3 p-3 mb-2">
+            <div class="d-flex justify-content-between gap-2"><div><strong>{{ p.name }}</strong><small class="d-block text-secondary">{{ p.project_no }} · {{ p.status|label }}</small></div><strong>{{ p.progress }}%</strong></div>
+            <div class="progress my-2"><div class="progress-bar" style="width:{{ p.progress }}%"></div></div>
+            <div class="d-flex justify-content-between"><small class="text-secondary">{{ p.coordinator.user.name if p.coordinator else 'Sin coordinador' }} · Entrega {{ p.due_on or 'sin fecha' }}</small><a href="{{ url_for('operations.project_detail', project_id=p.id) }}">Abrir</a></div>
+          </div>
+          {% else %}<p class="text-secondary">Sin proyectos visibles.</p>{% endfor %}
+        </div>
+        <div class="col-xl-6">
+          <div class="panel-header"><div><h2>Tareas</h2><p>Tareas visibles dentro del alcance actual.</p></div></div>
+          {% for t in visible_tasks %}
+          <div class="border-bottom py-2 d-flex justify-content-between gap-3 align-items-start"><div><strong>{{ t.title }}</strong><small class="d-block text-secondary">{{ t.status|label }} · {{ t.priority|label }} · {{ t.assignee.user.name if t.assignee else 'Sin responsable' }}</small></div><a href="{{ url_for('operations.task_detail', task_id=t.id) }}">Abrir</a></div>
+          {% else %}<p class="text-secondary">Sin tareas visibles.</p>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="equipo">
       <div class="row g-4">
         <div class="col-xl-8">
           <div class="panel-header"><div><h2>Equipo operativo activo</h2><p>Cada asignación conserva rol, servicio, proyecto y fechas de responsabilidad.</p></div></div>
@@ -48,26 +72,14 @@
                   <td>
                     {% if can_assign %}
                     <div class="d-flex flex-wrap gap-1">
-                      <form method="post" action="{{ url_for('clients_v3.team_assignment_action', client_id=client.id, assignment_id=a.id, action='suspend') }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button class="btn btn-sm btn-outline-warning">Suspender</button>
-                      </form>
+                      <form method="post" action="{{ url_for('clients_v3.team_assignment_action', client_id=client.id, assignment_id=a.id, action='suspend') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-warning">Suspender</button></form>
                       <button class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#end-{{ a.id }}">Finalizar</button>
                     </div>
                     {% endif %}
                   </td>
                 </tr>
                 {% if can_assign %}
-                <tr class="collapse" id="end-{{ a.id }}">
-                  <td colspan="6">
-                    <form method="post" action="{{ url_for('clients_v3.team_assignment_action', client_id=client.id, assignment_id=a.id, action='end') }}" class="row g-2">
-                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                      <div class="col-md-3"><input type="date" name="ends_on" class="form-control"></div>
-                      <div class="col-md-7"><input name="end_reason" class="form-control" placeholder="Motivo de finalización"></div>
-                      <div class="col-md-2"><button class="btn btn-danger w-100">Finalizar</button></div>
-                    </form>
-                  </td>
-                </tr>
+                <tr class="collapse" id="end-{{ a.id }}"><td colspan="6"><form method="post" action="{{ url_for('clients_v3.team_assignment_action', client_id=client.id, assignment_id=a.id, action='end') }}" class="row g-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="col-md-3"><input type="date" name="ends_on" class="form-control"></div><div class="col-md-7"><input name="end_reason" class="form-control" placeholder="Motivo de finalización"></div><div class="col-md-2"><button class="btn btn-danger w-100">Finalizar</button></div></form></td></tr>
                 {% endif %}
               {% else %}<tr><td colspan="6" class="text-secondary text-center py-4">Sin equipo operativo activo.</td></tr>{% endfor %}
               </tbody>
@@ -75,30 +87,9 @@
           </div>
 
           <h3 class="h6 mt-4">Historial de asignaciones</h3>
-          <div class="table-responsive">
-            <table class="table modern-table align-middle">
-              <thead><tr><th>Colaborador</th><th>Función</th><th>Período</th><th>Estado</th><th>Motivo</th><th></th></tr></thead>
-              <tbody>
-              {% for a in assignment_history %}
-                <tr>
-                  <td>{{ a.collaborator.user.name if a.collaborator and a.collaborator.user else '—' }}</td>
-                  <td>{{ a.role_in_client }}{% if a.service_label %}<small class="d-block text-secondary">{{ a.service_label }}</small>{% endif %}</td>
-                  <td>{{ a.starts_on }} → {{ a.ends_on or '—' }}</td>
-                  <td><span class="badge-soft {{ 'warning' if a.status=='suspendida' else 'muted' }}">{{ a.status|label }}</span></td>
-                  <td>{{ a.end_reason or '—' }}</td>
-                  <td>
-                    {% if can_assign and a.status=='suspendida' %}
-                    <form method="post" action="{{ url_for('clients_v3.team_assignment_action', client_id=client.id, assignment_id=a.id, action='resume') }}">
-                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                      <button class="btn btn-sm btn-outline-success">Reactivar</button>
-                    </form>
-                    {% endif %}
-                  </td>
-                </tr>
-              {% else %}<tr><td colspan="6" class="text-secondary">Sin historial anterior.</td></tr>{% endfor %}
-              </tbody>
-            </table>
-          </div>
+          <div class="table-responsive"><table class="table modern-table align-middle"><thead><tr><th>Colaborador</th><th>Función</th><th>Período</th><th>Estado</th><th>Motivo</th><th></th></tr></thead><tbody>
+          {% for a in assignment_history %}<tr><td>{{ a.collaborator.user.name if a.collaborator and a.collaborator.user else '—' }}</td><td>{{ a.role_in_client }}{% if a.service_label %}<small class="d-block text-secondary">{{ a.service_label }}</small>{% endif %}</td><td>{{ a.starts_on }} → {{ a.ends_on or '—' }}</td><td><span class="badge-soft {{ 'warning' if a.status=='suspendida' else 'muted' }}">{{ a.status|label }}</span></td><td>{{ a.end_reason or '—' }}</td><td>{% if can_assign and a.status=='suspendida' %}<form method="post" action="{{ url_for('clients_v3.team_assignment_action', client_id=client.id, assignment_id=a.id, action='resume') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-success">Reactivar</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="6" class="text-secondary">Sin historial anterior.</td></tr>{% endfor %}
+          </tbody></table></div>
         </div>
 
         {% if can_assign %}
@@ -108,21 +99,14 @@
             <p class="text-secondary small">Asigna al colaborador a un servicio o proyecto específico y conserva el historial.</p>
             <form method="post" action="{{ url_for('clients_v3.add_team_assignment', client_id=client.id) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <label class="form-label">Colaborador</label>
-              <select name="collaborator_id" class="form-select mb-2" required><option value="">Seleccionar</option>{% for c in collaborators %}<option value="{{ c.id }}">{{ c.user.name }} — {{ c.job_title }}</option>{% endfor %}</select>
-              <label class="form-label">Rol en el cliente</label>
-              <input name="role_in_client" class="form-control mb-2" required placeholder="Ej. Diseño, Website, SEO, Community Manager">
-              <label class="form-label">Servicio / descripción</label>
-              <input name="service_label" class="form-control mb-2" placeholder="Ej. Website, Google Business Profile">
-              <label class="form-label">Plan / contrato relacionado</label>
-              <select name="contract_id" class="form-select mb-2"><option value="">Sin contrato específico</option>{% for c in contracts %}<option value="{{ c.id }}">{{ c.product.name if c.product else 'Servicio' }} · {{ c.status|label }}</option>{% endfor %}</select>
-              <label class="form-label">Proyecto relacionado</label>
-              <select name="project_id" class="form-select mb-2"><option value="">Sin proyecto específico</option>{% for p in projects %}<option value="{{ p.id }}">{{ p.name }} · {{ p.status|label }}</option>{% endfor %}</select>
-              <label class="form-label">Fecha de inicio</label>
-              <input type="date" name="starts_on" class="form-control mb-2">
+              <label class="form-label">Colaborador</label><select name="collaborator_id" class="form-select mb-2" required><option value="">Seleccionar</option>{% for c in collaborators %}<option value="{{ c.id }}">{{ c.user.name }} — {{ c.job_title }}</option>{% endfor %}</select>
+              <label class="form-label">Rol en el cliente</label><input name="role_in_client" class="form-control mb-2" required placeholder="Ej. Website, Diseño, Desarrollo">
+              <label class="form-label">Servicio / descripción</label><input name="service_label" class="form-control mb-2" placeholder="Ej. Desarrollo web">
+              <label class="form-label">Plan / servicio relacionado</label><select name="contract_id" class="form-select mb-2"><option value="">Sin servicio específico</option>{% for c in contracts %}<option value="{{ c.id }}">{{ c.product.name if c.product else 'Servicio' }} · {{ c.status|label }}</option>{% endfor %}</select>
+              <label class="form-label">Proyecto relacionado</label><select name="project_id" class="form-select mb-2"><option value="">Sin proyecto específico</option>{% for p in projects %}<option value="{{ p.id }}">{{ p.name }} · {{ p.status|label }}</option>{% endfor %}</select>
+              <label class="form-label">Fecha de inicio</label><input type="date" name="starts_on" class="form-control mb-2">
               <label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="primary"> Responsable principal de esta atención</label>
-              <label class="form-label">Notas</label>
-              <textarea name="notes" class="form-control mb-3" rows="3"></textarea>
+              <label class="form-label">Notas</label><textarea name="notes" class="form-control mb-3" rows="3"></textarea>
               <button class="btn btn-brand w-100">Asignar colaborador</button>
             </form>
           </section>
@@ -134,44 +118,30 @@
     <div class="tab-pane fade" id="alertas">
       <div class="row g-4">
         <div class="col-xl-7">
-          <div class="panel-header"><div><h2>Alertas del cliente</h2><p>Renovaciones, vencimientos, promesas, tareas y tickets según tus permisos.</p></div></div>
-          {% for a in alerts %}
-          <div class="border rounded-3 p-3 mb-2 {% if a.severity=='danger' %}overdue{% endif %}">
-            <div class="d-flex flex-wrap justify-content-between gap-2">
-              <div><span class="badge-soft {{ a.severity }}">{{ a.kind }}</span> <strong>{{ a.title }}</strong></div>
-              <div class="text-end"><strong>{{ a.due_date }}</strong><small class="d-block text-secondary">{{ a.timing }}</small></div>
-            </div>
-            {% if a.detail %}<small class="d-block text-secondary mt-2">{{ a.detail|label if a.kind in ['Servicio','Renovación','Tarea','Ticket'] else a.detail }}</small>{% endif %}
-          </div>
-          {% else %}<div class="alert alert-success">No hay alertas pendientes dentro del horizonte de 60 días.</div>{% endfor %}
+          <div class="panel-header"><div><h2>Alertas del cliente</h2><p>Vencimientos y trabajo pendiente según tus permisos.</p></div></div>
+          {% for a in alerts %}<div class="border rounded-3 p-3 mb-2 {% if a.severity=='danger' %}overdue{% endif %}"><div class="d-flex flex-wrap justify-content-between gap-2"><div><span class="badge-soft {{ a.severity }}">{{ a.kind }}</span> <strong>{{ a.title }}</strong></div><div class="text-end"><strong>{{ a.due_date }}</strong><small class="d-block text-secondary">{{ a.timing }}</small></div></div>{% if a.detail %}<small class="d-block text-secondary mt-2">{{ a.detail|label if a.kind in ['Servicio','Renovación','Tarea','Ticket'] else a.detail }}</small>{% endif %}</div>{% else %}<div class="alert alert-success">No hay alertas pendientes dentro del horizonte de 60 días.</div>{% endfor %}
         </div>
-        <div class="col-xl-5">
-          <section class="border rounded-4 p-3 mb-3">
-            <h2 class="h5">Renovaciones registradas</h2>
-            {% for r in client.renewals|sort(attribute='due_date') %}<div class="d-flex justify-content-between border-bottom py-2"><div><strong>{{ r.renewal_type }}</strong><small class="d-block text-secondary">{{ r.status|label }}</small></div><span>{{ r.due_date }}</span></div>{% else %}<p class="text-secondary mb-0">Sin renovaciones registradas.</p>{% endfor %}
-          </section>
-          <section class="border rounded-4 p-3">
-            <h2 class="h5">Dominio y hosting</h2>
-            {% if client.operational_profile %}
-              <p><strong>Dominio:</strong> {{ client.operational_profile.domain_renews_on or 'Sin fecha' }}</p>
-              <p><strong>Hosting:</strong> {{ client.operational_profile.hosting_renews_on or 'Sin fecha' }}</p>
-              <p class="text-secondary mb-0">{{ client.operational_profile.domain_notes or 'Sin notas adicionales.' }}</p>
-            {% else %}<p class="text-secondary mb-0">Sin perfil operativo.</p>{% endif %}
-          </section>
-        </div>
+        <div class="col-xl-5"><section class="border rounded-4 p-3 mb-3"><h2 class="h5">Renovaciones registradas</h2>{% for r in client.renewals|sort(attribute='due_date') %}<div class="d-flex justify-content-between border-bottom py-2"><div><strong>{{ r.renewal_type }}</strong><small class="d-block text-secondary">{{ r.status|label }}</small></div><span>{{ r.due_date }}</span></div>{% else %}<p class="text-secondary mb-0">Sin renovaciones registradas.</p>{% endfor %}</section><section class="border rounded-4 p-3"><h2 class="h5">Dominio y hosting</h2>{% if client.operational_profile %}<p><strong>Dominio:</strong> {{ client.operational_profile.domain_renews_on or 'Sin fecha' }}</p><p><strong>Hosting:</strong> {{ client.operational_profile.hosting_renews_on or 'Sin fecha' }}</p><p class="text-secondary mb-0">{{ client.operational_profile.domain_notes or 'Sin notas adicionales.' }}</p>{% else %}<p class="text-secondary mb-0">Sin perfil operativo.</p>{% endif %}</section></div>
       </div>
     </div>
 
-    <div class="tab-pane fade" id="timeline">
-      <div class="panel-header"><div><h2>Línea de tiempo unificada</h2><p>Interacciones, servicios, equipo, proyectos, tareas, tickets, archivos, renovaciones y eventos financieros autorizados.</p></div></div>
-      <div class="timeline">
-        {% for e in timeline %}
-        <div class="timeline-item">
-          <div class="d-flex justify-content-between gap-2"><strong>{{ e.kind }} — {{ e.title }}</strong><small class="text-secondary">{{ e.when.strftime('%d/%m/%Y %H:%M') }}</small></div>
-          {% if e.body %}<p class="mb-0 mt-2">{{ e.body }}</p>{% endif %}
+    <div class="tab-pane fade" id="notas">
+      <div class="row g-4">
+        <div class="col-xl-5">
+          {% if can_comment %}<section class="border rounded-4 p-3"><h2 class="h5">Nueva nota operativa</h2><p class="text-secondary small">No permite registrar cobros, pagos ni cotizaciones.</p><form method="post" action="{{ url_for('clients_v3.add_operational_comment', client_id=client.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="process_type" class="form-select mb-2" required>{% for t in operational_comment_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select><input name="process_detail" class="form-control mb-2" placeholder="Detalle del proceso"><textarea name="body" class="form-control mb-2" rows="4" required placeholder="Nota operativa"></textarea><button class="btn btn-brand w-100">Guardar nota</button></form></section>{% endif %}
         </div>
-        {% else %}<p class="text-secondary">Todavía no hay eventos para mostrar.</p>{% endfor %}
+        <div class="col-xl-7"><div class="panel-header"><div><h2>Notas del equipo</h2><p>Solo información operativa autorizada.</p></div></div><div class="timeline">{% for c in operational_comments %}<div class="timeline-item"><div class="d-flex justify-content-between"><strong>{{ c.user.name if c.user else 'Usuario' }}</strong><small class="text-secondary">{{ c.created_at.strftime('%d/%m/%Y %H:%M') }}</small></div><span class="badge-soft info">{{ c.process_type }}</span>{% if c.process_detail %}<small class="d-block text-secondary mt-2">{{ c.process_detail }}</small>{% endif %}<p class="mb-0 mt-2">{{ c.body }}</p></div>{% else %}<p class="text-secondary">Sin notas operativas.</p>{% endfor %}</div></div>
       </div>
+    </div>
+
+    <div class="tab-pane fade" id="archivos">
+      {% if can_files %}<section class="border rounded-4 p-3 mb-4"><h2 class="h5">Agregar evidencia</h2><p class="text-secondary small">Solo documentos operativos; contratos y comprobantes financieros quedan fuera de esta vista.</p><form method="post" enctype="multipart/form-data" action="{{ url_for('clients_v3.upload_operational_attachment', client_id=client.id) }}" class="row g-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="col-md-4"><input name="file" type="file" class="form-control" required></div><div class="col-md-3"><select name="category" class="form-select">{% for value,label in operational_document_categories.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div><div class="col-md-3"><input name="description" class="form-control" placeholder="Descripción opcional"></div><div class="col-md-2"><button class="btn btn-brand w-100">Adjuntar</button></div></form></section>{% endif %}
+      <div class="row g-3">{% for a in operational_attachments %}{% set meta = a.client_document_meta %}<div class="col-lg-6"><section class="border rounded-4 p-3 h-100"><div class="d-flex justify-content-between gap-2"><div><strong>{{ a.file_name }}</strong><small class="d-block text-secondary">{{ operational_document_categories.get(meta.category if meta else 'otros', 'Otros / evidencia') }}</small></div>{% if can_files %}<a class="btn btn-sm btn-light border" href="{{ url_for('clients_v3.download_operational_attachment', client_id=client.id, attachment_id=a.id) }}" target="_blank">Abrir</a>{% endif %}</div>{% if meta and meta.description %}<p class="mb-0 mt-2">{{ meta.description }}</p>{% endif %}</section></div>{% else %}<div class="col-12"><p class="text-secondary">Sin evidencias operativas.</p></div>{% endfor %}</div>
+    </div>
+
+    <div class="tab-pane fade" id="timeline">
+      <div class="panel-header"><div><h2>Línea de tiempo unificada</h2><p>Eventos visibles según el rol actual; no muestra datos financieros sin permiso.</p></div></div>
+      <div class="timeline">{% for e in timeline %}<div class="timeline-item"><div class="d-flex justify-content-between gap-2"><strong>{{ e.kind }} — {{ e.title }}</strong><small class="text-secondary">{{ e.when.strftime('%d/%m/%Y %H:%M') }}</small></div>{% if e.body %}<p class="mb-0 mt-2">{{ e.body }}</p>{% endif %}</div>{% else %}<p class="text-secondary">Todavía no hay eventos para mostrar.</p>{% endfor %}</div>
     </div>
   </div>
 </section>

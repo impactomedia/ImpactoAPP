@@ -86,7 +86,13 @@ def create_app(config_object=Config):
     def restrict_kanban_to_coordination_roles():
         if request.endpoint == "operations.task_kanban" and current_user.is_authenticated:
             role_name = current_user.role.name if current_user.role else ""
-            if role_name not in {"superadmin", "admin", "manager", "supervisor"}:
+            if role_name not in {
+                "superadmin",
+                "admin",
+                "manager",
+                "supervisor",
+                "development_coordinator",
+            }:
                 abort(403)
         return None
 

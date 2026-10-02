@@ -1,9 +1,10 @@
 {% extends "app_base.html" %}
 {% block app_content %}
+{% set role_name = current_user.role.name if current_user.role else '' %}
 <div class="page-heading">
   <div><span class="eyebrow">Coordinación</span><h1>Tareas</h1><p>Trabajo interno, comercial y operativo.</p></div>
   <div>
-    {% if current_user.has_permission('tasks.view') %}<a class="btn btn-light border" href="{{ url_for('operations.task_kanban') }}">Kanban</a>{% endif %}
+    {% if role_name in ['superadmin','admin','manager','supervisor','development_coordinator'] %}<a class="btn btn-light border" href="{{ url_for('operations.task_kanban') }}">Kanban</a>{% endif %}
     {% if current_user.has_permission('tasks.edit') %}<a class="btn btn-brand" href="{{ url_for('operations.new_task') }}">Nueva tarea</a>{% endif %}
   </div>
 </div>

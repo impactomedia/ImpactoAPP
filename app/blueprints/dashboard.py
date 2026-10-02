@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models import Client, Collaborator, Payment, Task, Project, Notification, Quote, Sale, SupportTicket
 from app.services import refresh_overdue_receivables, refresh_expired_contracts, ensure_renewal_notifications
 from app.client_v3_services import ensure_client_v3_notifications, my_clients_query, sync_legacy_team_assignments
+from app.development_scope import DEVELOPMENT_COORDINATOR_ROLE, development_project_condition
 
 bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
 
@@ -21,7 +22,7 @@ def _client_scope(query):
         allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
         return query.filter(Client.owner_id.in_(allowed_ids))
 
-    if role == "production":
+    if role in {"production", DEVELOPMENT_COORDINATOR_ROLE}:
         allowed_ids = [row[0] for row in my_clients_query().with_entities(Client.id).all()]
         return query.filter(Client.id.in_(allowed_ids or [-1]))
 
@@ -31,6 +32,9 @@ def _client_scope(query):
 def _task_scope(query):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
+
+    if role == DEVELOPMENT_COORDINATOR_ROLE:
+        return query.filter(Task.project.has(development_project_condition()))
 
     if role == "supervisor" and collaborator:
         allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
@@ -51,6 +55,9 @@ def _project_scope(query):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
+    if role == DEVELOPMENT_COORDINATOR_ROLE:
+        return query.filter(development_project_condition())
+
     if role == "advisor" and collaborator:
         return query.filter(Project.client.has(owner_id=collaborator.id))
 
@@ -69,6 +76,9 @@ def _project_scope(query):
 @bp.route("/")
 @login_required
 def index():
+    if current_user.role and current_user.role.name == DEVELOPMENT_COORDINATOR_ROLE:
+        return redirect(url_for("operations.development_dashboard"))
+
     refresh_overdue_receivables()
     refresh_expired_contracts()
     ensure_renewal_notifications()

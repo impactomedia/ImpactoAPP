@@ -1,6 +1,11 @@
 from flask import abort, request
 from flask_login import current_user
 
+from app.development_scope import (
+    DEVELOPMENT_COORDINATOR_ROLE,
+    is_development_project,
+)
+
 
 DEFAULT_VIEW_PERMISSIONS = {
     "crm": "crm.view",
@@ -129,11 +134,13 @@ METHOD_PERMISSIONS = {
 }
 
 OPERATIONS_ENDPOINT_PERMISSIONS = {
+    "operations.development_dashboard": "development.manage",
     "operations.projects": "projects.view",
     "operations.project_detail": "projects.view",
     "operations.new_project": "projects.edit",
     "operations.update_project": "projects.progress",
     "operations.add_project_member": "projects.edit",
+    "operations.remove_project_member": "projects.edit",
     "operations.change_request": "projects.progress",
     "operations.tasks": "tasks.view",
     "operations.task_kanban": "tasks.view",
@@ -220,6 +227,10 @@ def _project_allowed(project):
 
     if role in {"superadmin", "admin", "manager"}:
         return True
+
+    if role == DEVELOPMENT_COORDINATOR_ROLE:
+        return bool(collaborator and is_development_project(project))
+
     if not collaborator:
         return role not in {"advisor", "supervisor", "production"}
 
@@ -241,6 +252,9 @@ def _task_allowed(task):
     if not collaborator:
         return False
 
+    if role == DEVELOPMENT_COORDINATOR_ROLE:
+        return bool(task.project and is_development_project(task.project))
+
     if task.assignee_id == collaborator.id or collaborator in task.collaborators:
         return True
 
@@ -255,14 +269,16 @@ def _task_allowed(task):
     if role == "advisor":
         return bool(task.project and _commercial_client_allowed(task.project.client))
 
+    # Un colaborador de Producción ve únicamente tareas que están asignadas
+    # directamente a él o donde participa como colaborador.
     if role == "production":
-        return bool(task.project and _project_allowed(task.project))
+        return False
 
     return False
 
 
 def _task_write_allowed(task):
-    """Permite a Producción actualizar únicamente tareas realmente asignadas."""
+    """Define quién puede modificar una tarea visible."""
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
@@ -270,6 +286,9 @@ def _task_write_allowed(task):
         return True
     if not collaborator:
         return False
+
+    if role == DEVELOPMENT_COORDINATOR_ROLE:
+        return _task_allowed(task)
 
     if role in {"production", "hr"}:
         return task.assignee_id == collaborator.id or collaborator in task.collaborators
@@ -298,6 +317,11 @@ def _enforce_record_scope(endpoint):
 
         if client is not None and not _commercial_client_allowed(client):
             abort(403)
+
+    # El Coordinador de Desarrollo trabaja desde el Centro de coordinación,
+    # nunca desde la ficha comercial completa.
+    if request.blueprint == "clients" and role == DEVELOPMENT_COORDINATOR_ROLE:
+        abort(403)
 
     # Clientes: las rutas por ID respetan la misma cartera comercial.
     if request.blueprint == "clients" and "client_id" in args:
