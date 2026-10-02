@@ -59,6 +59,17 @@ def app():
             client_status="activo",
         )
         db.session.add(customer)
+
+        followup = Client(
+            code="SALES-V2-SEG",
+            business_name="Seguimiento Sales V2",
+            contact_name="Contacto Seguimiento",
+            owner_id=advisor.id,
+            record_type="seguimiento",
+            pipeline_stage="interesado",
+            client_status="activo",
+        )
+        db.session.add(followup)
         db.session.commit()
     yield app
 
@@ -112,6 +123,8 @@ def test_new_sale_page_loads_for_admin(client, app):
     assert b"Nueva venta" in response.data
     assert b"Plan de pago" in response.data
     assert b"Cliente Sales V2" in response.data
+    assert b"Seguimiento Sales V2" in response.data
+    assert b"NIO" not in response.data
 
 
 def test_production_cannot_open_new_sale(client):
@@ -303,3 +316,75 @@ def test_single_balance_requires_due_date(client, app):
     assert response.status_code == 200
     with app.app_context():
         assert Sale.query.count() == 0
+
+
+def test_sale_converts_followup_to_client_and_forces_usd(client, app):
+    with app.app_context():
+        followup = Client.query.filter_by(code="SALES-V2-SEG").one()
+        advisor = User.query.filter_by(email="advisor-sales@test.local").one().collaborator
+        product = ProductService.query.filter_by(name="Website").one()
+        followup_id = followup.id
+        advisor_id = advisor.id
+        product_id = product.id
+
+    _login(client, "admin-sales@test.local")
+    response = client.post(
+        "/sales/new",
+        data={
+            "client_id": followup_id,
+            "advisor_id": advisor_id,
+            "sale_date": date.today().isoformat(),
+            "currency": "NIO",  # intento manipulado: Nexora debe forzar USD
+            "product_id[]": [str(product_id)],
+            "description[]": ["Website profesional"],
+            "quantity[]": ["1"],
+            "unit_price[]": ["750"],
+            "discount[]": ["0"],
+            "initial_payment": "750",
+            "payment_method": "Zelle",
+            "initial_payment_date": date.today().isoformat(),
+            "payment_plan_mode": "single",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code in {302, 303}
+
+    with app.app_context():
+        followup = db.session.get(Client, followup_id)
+        sale = Sale.query.filter_by(client_id=followup_id).one()
+        assert followup.record_type == "cliente"
+        assert followup.pipeline_stage == "venta_cerrada"
+        assert followup.client_status == "activo"
+        assert followup.country == "USA"
+        assert sale.currency == "USD"
+
+
+def test_direct_client_creation_redirects_to_followup(client):
+    _login(client, "admin-sales@test.local")
+    response = client.get("/clients/new", follow_redirects=False)
+    assert response.status_code in {302, 303}
+    assert "/crm/new" in response.headers["Location"]
+
+
+def test_new_followup_is_forced_to_usa(client, app):
+    _login(client, "admin-sales@test.local")
+    response = client.post(
+        "/crm/new",
+        data={
+            "business_name": "USA Followup LLC",
+            "contact_name": "John Doe",
+            "phone": "5551234567",
+            "email": "john@example.com",
+            "preferred_channel": "Llamada",
+            "industry": "Construction",
+            "source": "Referido",
+            "priority": "media",
+            "country": "Nicaragua",  # intento manipulado
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code in {302, 303}
+    with app.app_context():
+        row = Client.query.filter_by(business_name="USA Followup LLC").one()
+        assert row.record_type == "seguimiento"
+        assert row.country == "USA"

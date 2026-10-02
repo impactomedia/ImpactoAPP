@@ -37,7 +37,7 @@ STAGES = [
 ]
 PRIORITIES = {"baja", "media", "alta", "urgente"}
 INTERACTION_TYPES = {"llamada", "whatsapp", "email", "reunion", "nota"}
-CURRENCIES = {"USD", "NIO"}
+CURRENCIES = {"USD"}
 
 
 def _role_name():
@@ -230,7 +230,7 @@ def new_prospect():
             address=(request.form.get("address") or "").strip() or None,
             city=(request.form.get("city") or "").strip() or None,
             state=(request.form.get("state") or "").strip() or None,
-            country=(request.form.get("country") or "").strip() or None,
+            country="USA",
             timezone=(request.form.get("timezone") or "").strip() or None,
             source=(request.form.get("source") or "").strip() or None,
             owner_id=owner_id,
@@ -245,7 +245,7 @@ def new_prospect():
         db.session.flush()
         audit("crear_prospecto", "Client", client.id, after={"business_name": client.business_name})
         db.session.commit()
-        flash("Prospecto creado.", "success")
+        flash("Seguimiento creado.", "success")
         return redirect(url_for("crm.detail", client_id=client.id))
 
     return render_template("crm/prospect_form.html", collaborators=collaborators)
@@ -353,9 +353,7 @@ def new_quote(client_id):
     active_product_ids = {product.id for product in products}
 
     if request.method == "POST":
-        currency = request.form.get("currency", "USD")
-        if currency not in CURRENCIES:
-            currency = "USD"
+        currency = "USD"
 
         try:
             discount = Decimal(str(request.form.get("discount") or 0))

@@ -1,7 +1,7 @@
 {% extends "app_base.html" %}
 {% block app_content %}
 <div class="page-heading">
-  <div><span class="eyebrow">CRM</span><h1>Nuevo prospecto</h1><p>Registra la oportunidad comercial y evita duplicados.</p></div>
+  <div><span class="eyebrow">CRM</span><h1>Nuevo seguimiento</h1><p>Registra el contacto comercial. Seguirá como Seguimiento hasta que confirme una compra.</p></div>
 </div>
 <section class="panel-card form-card">
   <form method="post">
@@ -23,7 +23,7 @@
       <div class="col-12"><label class="form-label">Servicios del negocio</label><textarea name="services_offered" class="form-control">{{ request.form.get('services_offered','') }}</textarea></div>
       <div class="col-12"><label class="form-label">Notas</label><textarea name="notes" class="form-control">{{ request.form.get('notes','') }}</textarea></div>
     </div>
-    <button class="btn btn-brand mt-4">Guardar prospecto</button>
+    <input type="hidden" name="country" value="USA"><button class="btn btn-brand mt-4">Guardar seguimiento</button>
   </form>
 </section>
 {% endblock %}

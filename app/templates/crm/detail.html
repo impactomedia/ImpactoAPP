@@ -2,16 +2,13 @@
 {% block app_content %}
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Prospecto</span>
+    <span class="eyebrow">Seguimiento</span>
     <h1>{{ client.business_name }}</h1>
     <p>{{ client.contact_name }} · {{ client.phone or '' }} · {{ client.email or '' }}</p>
   </div>
   <div class="d-flex flex-wrap gap-2">
     {% if current_user.has_permission('clients.edit') %}
-    <form method="post" action="{{ url_for('clients.convert_to_client', client_id=client.id) }}" onsubmit="return confirm('¿Convertir este seguimiento en cliente?');">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="btn btn-outline-success">Convertir a cliente</button>
-    </form>
+    {% if current_user.has_permission('sales.create') %}<a class="btn btn-outline-success" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Registrar compra</a>{% endif %}
     {% endif %}
     {% if current_user.has_permission('crm.edit') %}<a class="btn btn-brand" href="{{ url_for('crm.new_quote', client_id=client.id) }}">Nueva cotización</a>{% endif %}
   </div>

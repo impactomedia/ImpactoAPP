@@ -1,0 +1,33 @@
+IMPACTO NEXORA 1.8.1 — BLOQUE 1
+================================
+
+QUÉ CAMBIA
+1. Todo registro nuevo inicia como SEGUIMIENTO.
+2. Cuando confirma su primera compra pasa automáticamente a CLIENTE ACTIVO.
+3. Se conserva todo su historial anterior.
+4. Impacto trabaja únicamente con clientes de USA.
+5. Ventas y cotizaciones trabajan únicamente en USD.
+
+CÓMO APLICAR
+1. Haz una copia de seguridad de tu carpeta local del proyecto.
+2. Abre este parche.
+3. Copia cada archivo respetando exactamente su misma ruta dentro de ImpactoAPP.
+4. Reemplaza los archivos existentes cuando Windows lo solicite.
+5. Sube los cambios a GitHub en la rama main.
+6. Railway desplegará automáticamente.
+
+IMPORTANTE
+- NO hay migración de base de datos.
+- Pre-Deploy debe quedar vacío.
+- NO cambies el Start Command.
+
+PRUEBA RÁPIDA DESPUÉS DEL DEPLOY
+A. CRM > Nuevo seguimiento: crea un registro de prueba.
+B. Verifica que siga apareciendo en Seguimientos y NO en Clientes.
+C. Desde ese seguimiento pulsa Registrar compra.
+D. Confirma una venta de prueba.
+E. Verifica que el registro desaparezca de Seguimientos y aparezca en Clientes como Activo.
+F. Verifica que la venta esté en USD.
+
+SIGUIENTE BLOQUE
+Servicio principal + Upgrade + precio fijo de catálogo.

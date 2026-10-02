@@ -240,6 +240,7 @@ def create_sale_from_quote(quote, initial_payment=0, payment_method="transferenc
         raise ValueError("La cotización no contiene ítems para convertir en venta.")
 
     client = quote.client
+    was_followup = client.record_type == "seguimiento"
     sale = Sale(
         sale_no=next_code("VEN", Sale),
         client_id=client.id,
@@ -286,6 +287,16 @@ def create_sale_from_quote(quote, initial_payment=0, payment_method="transferenc
     client.record_type = "cliente"
     client.pipeline_stage = "venta_cerrada"
     client.client_status = "activo"
+    client.country = "USA"
+    if was_followup:
+        audit(
+            "convertir_registro_cliente",
+            "Client",
+            client.id,
+            before={"record_type": "seguimiento"},
+            after={"record_type": "cliente", "pipeline_stage": "venta_cerrada"},
+            reason=f"Cotización convertida en venta {sale.sale_no}",
+        )
     quote.status = "aceptada"
     db.session.flush()
 

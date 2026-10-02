@@ -1,35 +1,25 @@
-# Impacto APP 1.8.0 — Sales V2
+# Impacto Nexora 1.8.1 — Bloque 1
 
-## Qué se corrige
-La pantalla Nueva venta existía, pero no cubría completamente el flujo definido para Impacto APP.
+## Objetivo
+Alinear el sistema con la regla comercial real de Impacto Media:
 
-## Nuevo flujo
-Cliente
-→ asesor
-→ productos/servicios
-→ descuentos
-→ total
-→ pago inicial
-→ saldo
-→ vencimiento único o cuotas personalizadas
-→ cuenta por cobrar
-→ generación de contrato/proyecto/tareas/imprenta según producto
+**Seguimiento → compra confirmada → Cliente Activo**
 
-## Validaciones
-- Cliente debe estar dentro del alcance del usuario.
-- Asesor debe ser comercial y estar activo.
-- Producto debe estar activo.
-- Cantidad > 0.
-- Precio >= 0.
-- Descuento >= 0 y no puede superar precio lista.
-- Pago inicial no puede superar total.
-- Si queda saldo con vencimiento único, la fecha es obligatoria.
-- Si se usan cuotas, su suma debe coincidir exactamente con el saldo.
-- Ninguna cuota puede vencer antes de la fecha de venta.
+## Cambios principales
+- Alta manual únicamente como Seguimiento.
+- La venta es el evento que convierte el registro en Cliente.
+- La conversión conserva el mismo `Client.id` y todo el historial de CRM.
+- Ventas y cotizaciones nuevas usan únicamente USD.
+- Los registros manuales se fijan a USA.
+- Los botones de “Convertir a cliente” del CRM se reemplazan por “Registrar compra”.
+- Nueva Venta lista Seguimientos y Clientes y puede abrirse preseleccionando un seguimiento desde CRM.
 
-## Base de datos
-No hay nuevas tablas.
-No hay migración.
+## Compatibilidad
+- No borra ni migra clientes existentes.
+- No modifica ventas ni pagos históricos.
+- No cambia el esquema de la base de datos.
+- Los clientes importados previamente continúan funcionando.
 
 ## Railway
-No agregues ningún Pre-Deploy Command para esta versión.
+No agregues ningún comando a **Pre-Deploy** ni a **Start Command** para esta versión.
+El Dockerfile actual debe seguir iniciando Gunicorn normalmente.

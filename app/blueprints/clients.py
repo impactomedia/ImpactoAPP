@@ -237,6 +237,8 @@ def _apply_client_form(client):
                 value = (value or "").strip().lower()
             setattr(client, field, value.strip() if isinstance(value, str) else value)
 
+    client.country = "USA"
+
     # Cambiar el responsable comercial es una acción separada de editar la ficha.
     # Solo quien tenga crm.transfer puede escoger otro responsable.
     if current_user.has_permission("crm.transfer"):
@@ -324,75 +326,19 @@ def index():
 @login_required
 @permission_required("clients.create")
 def new_client():
-    collaborators = _active_collaborators()
-
-    if request.method == "POST":
-        business_name = request.form.get("business_name", "").strip()
-        contact_name = request.form.get("contact_name", "").strip()
-        phone = request.form.get("phone", "").strip()
-        email = request.form.get("email", "").strip().lower()
-
-        if not business_name:
-            flash("El nombre del negocio es obligatorio.", "danger")
-            return render_template("clients/form.html", client=None, collaborators=collaborators, mode="new")
-        if not contact_name:
-            flash("El nombre del contacto es obligatorio.", "danger")
-            return render_template("clients/form.html", client=None, collaborators=collaborators, mode="new")
-
-        duplicate = _find_duplicate(business_name, phone, email)
-        if duplicate:
-            role = current_user.role.name if current_user.role else ""
-            allowed_owner_ids = {c.id for c in _active_collaborators()}
-            if role in {"advisor", "supervisor"} and duplicate.owner_id not in allowed_owner_ids:
-                flash("Ya existe un registro parecido fuera de tu cartera. No se realizaron cambios.", "warning")
-                return redirect(url_for("clients.index"))
-
-            if duplicate.record_type == "seguimiento":
-                before = {
-                    "record_type": duplicate.record_type,
-                    "pipeline_stage": duplicate.pipeline_stage,
-                    "business_name": duplicate.business_name,
-                }
-                _apply_client_form(duplicate)
-                if not duplicate.code:
-                    duplicate.code = next_code("CLI", Client)
-                audit(
-                    "convertir_registro_cliente",
-                    "Client",
-                    duplicate.id,
-                    before=before,
-                    after={"record_type": "cliente", "business_name": duplicate.business_name},
-                )
-                db.session.commit()
-                flash("El registro ya existía como seguimiento y fue convertido en cliente.", "success")
-                return redirect(url_for("clients.detail", client_id=duplicate.id))
-
-            flash("Ya existe un cliente parecido en tu cartera.", "warning")
-            return redirect(url_for("clients.detail", client_id=duplicate.id))
-
-        client = Client(
-            code=next_code("CLI", Client),
-            business_name=business_name,
-            contact_name=contact_name,
-            record_type="cliente",
-            pipeline_stage="venta_cerrada",
-            client_status="activo",
-        )
-        _apply_client_form(client)
-        db.session.add(client)
-        db.session.flush()
-        audit("crear_cliente", "Client", client.id, after={"business_name": client.business_name})
-        db.session.commit()
-        flash("Cliente creado correctamente.", "success")
-        return redirect(url_for("clients.detail", client_id=client.id))
-
-    return render_template("clients/form.html", client=None, collaborators=collaborators, mode="new")
-
+    flash(
+        "En Impacto Nexora todo registro nuevo inicia como Seguimiento. "
+        "Pasará a Cliente automáticamente cuando confirme su primera compra.",
+        "info",
+    )
+    return redirect(url_for("crm.new_prospect"))
 
 @bp.route("/<int:client_id>")
 @login_required
 def detail(client_id):
     client = db.get_or_404(Client, client_id)
+    if client.record_type != "cliente":
+        return redirect(url_for("crm.detail", client_id=client.id))
     collaborators = []
     if current_user.has_permission("clients.assign"):
         collaborators = Collaborator.query.filter_by(status="activo").order_by(Collaborator.job_title).all()
@@ -480,6 +426,8 @@ def detail(client_id):
 @permission_required("clients.edit")
 def edit(client_id):
     client = db.get_or_404(Client, client_id)
+    if client.record_type != "cliente":
+        return redirect(url_for("crm.detail", client_id=client.id))
     collaborators = _active_collaborators()
 
     if request.method == "POST":
@@ -532,10 +480,25 @@ def convert_to_client(client_id):
         flash("Este registro ya es un cliente.", "info")
         return redirect(url_for("clients.detail", client_id=client.id))
 
+    confirmed_sale = (
+        Sale.query
+        .filter_by(client_id=client.id)
+        .filter(Sale.status == "confirmada")
+        .first()
+    )
+    if not confirmed_sale:
+        flash(
+            "Un Seguimiento pasa a Cliente únicamente cuando confirma una compra. "
+            "Registra la compra para continuar.",
+            "info",
+        )
+        return redirect(url_for("sales.new_sale", client_id=client.id))
+
     before = {"record_type": client.record_type, "pipeline_stage": client.pipeline_stage}
     client.record_type = "cliente"
     client.pipeline_stage = "venta_cerrada"
     client.client_status = "activo"
+    client.country = "USA"
     if not client.code:
         client.code = next_code("CLI", Client)
     audit(
@@ -546,9 +509,8 @@ def convert_to_client(client_id):
         after={"record_type": client.record_type, "pipeline_stage": client.pipeline_stage},
     )
     db.session.commit()
-    flash("Registro convertido en cliente.", "success")
+    flash("Seguimiento convertido en cliente por compra confirmada.", "success")
     return redirect(url_for("clients.detail", client_id=client.id))
-
 
 @bp.route("/<int:client_id>/archive", methods=["POST"])
 @login_required

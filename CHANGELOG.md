@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.1 — Impacto Nexora · Bloque 1: Seguimiento → Cliente + USA/USD
+
+- Todo registro manual nuevo inicia como **Seguimiento** en CRM; `/clients/new` redirige al alta de seguimiento.
+- Un Seguimiento pasa automáticamente a **Cliente Activo** al confirmar su primera compra desde Nueva Venta o al convertir una cotización en venta.
+- Se conserva el mismo registro y, por tanto, su historial comercial previo.
+- La conversión automática queda auditada con el número de venta que la originó.
+- Las pantallas de Cliente redirigen los registros que aún son Seguimiento de vuelta a CRM.
+- Nueva Venta puede seleccionar tanto Seguimientos como Clientes existentes.
+- Se eliminan de la interfaz los botones de conversión manual; se reemplazan por **Registrar compra**.
+- Los clientes y seguimientos manuales quedan fijados a **USA**.
+- Ventas y cotizaciones quedan fijadas exclusivamente a **USD**, incluso si se manipula el formulario.
+- La interfaz de CRM adopta la terminología **Seguimiento** en lugar de Prospecto para el flujo principal.
+- No hay cambios de esquema ni migración de base de datos.
+- Se amplían las pruebas de Sales V2 para conversión automática, USA, USD y bloqueo de creación directa de clientes.
+
 ## 1.8.0 — Sales V2 · Cierre de Nueva Venta
 
 - Se completa el flujo de `/sales/new` para crear una venta con cliente, asesor, productos/servicios, descuentos, pago inicial y plan de pago.

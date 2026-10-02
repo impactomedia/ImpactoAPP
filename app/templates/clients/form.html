@@ -127,7 +127,7 @@
       <div class="col-12"><label class="form-label">Dirección</label><input name="address" class="form-control" value="{{ client.address if client else request.form.get('address','') }}"></div>
       <div class="col-md-3"><label class="form-label">Ciudad</label><input name="city" class="form-control" value="{{ client.city if client else request.form.get('city','') }}"></div>
       <div class="col-md-3"><label class="form-label">Estado / Provincia</label><input name="state" class="form-control" value="{{ client.state if client else request.form.get('state','') }}"></div>
-      <div class="col-md-3"><label class="form-label">País</label><input name="country" class="form-control" value="{{ client.country if client else request.form.get('country','') }}"></div>
+      <div class="col-md-3"><label class="form-label">País</label><input name="country" class="form-control" value="USA" readonly><small class="text-secondary">Impacto atiende únicamente clientes de Estados Unidos.</small></div>
       <div class="col-md-3"><label class="form-label">Zona horaria</label><input name="timezone" class="form-control" value="{{ client.timezone if client else request.form.get('timezone','') }}"></div>
       <div class="col-12"><label class="form-label">Notas</label><textarea name="notes" class="form-control" rows="4">{{ client.notes if client else request.form.get('notes','') }}</textarea></div>
     </div>

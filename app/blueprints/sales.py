@@ -30,7 +30,7 @@ bp = Blueprint("sales", __name__, url_prefix="/sales")
 
 COMMERCIAL_ROLE_NAMES = {"superadmin", "admin", "manager", "supervisor", "advisor"}
 PAYMENT_METHODS = {"transferencia", "efectivo", "Zelle", "ACH", "Wise", "tarjeta", "otro"}
-CURRENCIES = {"USD", "NIO"}
+CURRENCIES = {"USD"}
 MONEY = Decimal("0.01")
 
 
@@ -47,7 +47,7 @@ def _team_ids():
 
 def _visible_clients_query():
     query = Client.query.filter(
-        Client.record_type == "cliente",
+        Client.record_type.in_(("seguimiento", "cliente")),
         Client.client_status != "archivado",
     )
     role = _role_name()
@@ -142,11 +142,16 @@ def _sale_form_context():
     clients = _visible_clients_query().order_by(Client.business_name).all()
     products = ProductService.query.filter_by(active=True).order_by(ProductService.name).all()
     advisors = _allowed_advisors()
+    selected_client_id = (
+        request.form.get("client_id", type=int)
+        or request.args.get("client_id", type=int)
+    )
     return {
         "clients": clients,
         "products": products,
         "advisors": advisors,
         "today": date.today(),
+        "selected_client_id": selected_client_id,
     }
 
 
@@ -289,7 +294,7 @@ def new_sale():
         return render_template("sales/form.html", **context)
 
     if not clients:
-        flash("No hay clientes disponibles para registrar una venta.", "danger")
+        flash("No hay seguimientos o clientes disponibles para registrar una venta.", "danger")
         return render_template("sales/form.html", **context)
 
     try:
@@ -298,6 +303,7 @@ def new_sale():
             abort(403)
 
         client = db.get_or_404(Client, client_id)
+        was_followup = client.record_type == "seguimiento"
         role = _role_name()
         collaborator = current_user.collaborator
 
@@ -321,9 +327,7 @@ def new_sale():
         if sale_date_raw and not sale_date:
             raise ValueError("La fecha de venta no es válida.")
 
-        currency = request.form.get("currency", "USD")
-        if currency not in CURRENCIES:
-            currency = "USD"
+        currency = "USD"
 
         sale = Sale(
             sale_no=next_code("VEN", Sale),
@@ -445,6 +449,16 @@ def new_sale():
         client.record_type = "cliente"
         client.pipeline_stage = "venta_cerrada"
         client.client_status = "activo"
+        client.country = "USA"
+        if was_followup:
+            audit(
+                "convertir_registro_cliente",
+                "Client",
+                client.id,
+                before={"record_type": "seguimiento"},
+                after={"record_type": "cliente", "pipeline_stage": "venta_cerrada"},
+                reason=f"Compra confirmada {sale.sale_no}",
+            )
         db.session.flush()
 
         _create_installments(
