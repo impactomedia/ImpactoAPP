@@ -322,13 +322,25 @@ def profile():
         if new_password:
             if not current_user.check_password(current_password):
                 flash("La contraseña actual no es correcta.", "danger")
-                return redirect(url_for("auth.profile"))
+                return render_template(
+                    "auth/profile.html",
+                    two_factor=two_factor_enabled(current_user),
+                    can_enable_2fa=bool(current_app.config.get("SMTP_HOST")),
+                )
             if len(new_password) < 8:
                 flash("La nueva contraseña debe tener al menos 8 caracteres.", "danger")
-                return redirect(url_for("auth.profile"))
+                return render_template(
+                    "auth/profile.html",
+                    two_factor=two_factor_enabled(current_user),
+                    can_enable_2fa=bool(current_app.config.get("SMTP_HOST")),
+                )
             if new_password != confirm_password:
                 flash("La confirmación de la nueva contraseña no coincide.", "danger")
-                return redirect(url_for("auth.profile"))
+                return render_template(
+                    "auth/profile.html",
+                    two_factor=two_factor_enabled(current_user),
+                    can_enable_2fa=bool(current_app.config.get("SMTP_HOST")),
+                )
 
         current_user.name = name
         if new_password:
