@@ -1,0 +1,227 @@
+{% extends "app_base.html" %}
+{% block title %}Configuraciones | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Impacto Nexora · Bloque 11</span>
+    <h1>Configuraciones y catálogos</h1>
+    <p>Administra políticas, catálogos y reglas sin modificar código.</p>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6 col-xl-3">
+    <a class="panel-card d-block h-100" href="{{ url_for('settings.roles') }}">
+      <h2 class="h5">Roles y permisos</h2><p>{{ roles_count }} roles configurados</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a class="panel-card d-block h-100" href="{{ url_for('hr.schedules') }}">
+      <h2 class="h5">Horarios y turnos</h2><p>{{ schedules_count }} horarios activos</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a class="panel-card d-block h-100" href="{{ url_for('settings.products') }}">
+      <h2 class="h5">Productos y servicios</h2><p>{{ products_count }} activos</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a class="panel-card d-block h-100" href="{{ url_for('finance.commission_rules') }}">
+      <h2 class="h5">Reglas de comisión</h2><p>{{ commission_rules_count }} reglas activas</p>
+    </a>
+  </div>
+</div>
+
+<section class="panel-card mb-4" id="catalogs">
+  <div class="panel-header">
+    <div>
+      <h2 class="h5">Catálogos administrables</h2>
+      <p>Los valores activos alimentan CRM, Ventas, Operaciones, Soporte y formularios administrativos.</p>
+    </div>
+  </div>
+
+  <form method="get" class="row g-2 mb-4">
+    <div class="col-md-8">
+      <select name="category" class="form-select">
+        {% for key, definition in definitions.items() %}
+        <option value="{{ key }}" {% if selected_category==key %}selected{% endif %}>{{ definition.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4"><button class="btn btn-dark w-100">Abrir catálogo</button></div>
+  </form>
+
+  <div class="alert alert-light border">
+    <strong>{{ selected_definition.label }}</strong>
+    <small class="d-block text-secondary">Los códigos existentes son estables para preservar historial. Puedes cambiar nombre visible, orden y estado. Los códigos esenciales no pueden desactivarse.</small>
+  </div>
+
+  <form method="post" action="{{ url_for('settings_master.catalog_add', category=selected_category) }}" class="row g-2 align-items-end mb-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="col-md-3"><label class="form-label">Código</label><input name="code" class="form-control" placeholder="ej. referido_local" required></div>
+    <div class="col-md-5"><label class="form-label">Nombre visible</label><input name="label" class="form-control" placeholder="Referido local" required></div>
+    <div class="col-md-2"><label class="form-label">Orden</label><input name="sort_order" type="number" class="form-control" value="0"></div>
+    <div class="col-md-2"><button class="btn btn-brand w-100">Agregar</button></div>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Código</th><th>Nombre visible</th><th>Orden</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>
+      {% for item in catalog_items %}
+      <tr>
+        <td><code>{{ item.code }}</code>{% if item.code in selected_definition.get('protected', []) %}<small class="d-block text-secondary">Esencial</small>{% endif %}</td>
+        <td colspan="2">
+          <form method="post" action="{{ url_for('settings_master.catalog_update', item_id=item.id) }}" class="row g-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-8"><input name="label" class="form-control form-control-sm" value="{{ item.label }}" required></div>
+            <div class="col-md-2"><input name="sort_order" type="number" class="form-control form-control-sm" value="{{ item.sort_order }}"></div>
+            <div class="col-md-2"><button class="btn btn-sm btn-dark w-100">Guardar</button></div>
+          </form>
+        </td>
+        <td><span class="badge-soft {{ 'success' if item.active else 'muted' }}">{{ 'Activo' if item.active else 'Inactivo' }}</span></td>
+        <td>
+          <form method="post" action="{{ url_for('settings_master.catalog_toggle', item_id=item.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm {{ 'btn-outline-danger' if item.active else 'btn-outline-success' }}" {% if item.active and item.code in selected_definition.get('protected', []) %}disabled title="Valor esencial"{% endif %}>
+              {{ 'Desactivar' if item.active else 'Activar' }}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="text-center text-secondary py-4">Este catálogo todavía no tiene valores.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-card mb-4" id="policies">
+  <div class="panel-header">
+    <div><h2 class="h5">Políticas operativas</h2><p>Tolerancias, pausas, vacaciones, moneda predeterminada y recordatorios de renovación.</p></div>
+  </div>
+
+  <form method="post" action="{{ url_for('settings_master.policies_update') }}" class="row g-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="col-md-4"><label class="form-label">Tolerancia sugerida (min)</label><input name="attendance_default_tolerance_minutes" type="number" min="0" max="240" class="form-control" value="{{ policies.attendance_default_tolerance_minutes }}"></div>
+    <div class="col-md-4"><label class="form-label">Break sugerido (min)</label><input name="attendance_default_break_minutes" type="number" min="0" max="240" class="form-control" value="{{ policies.attendance_default_break_minutes }}"></div>
+    <div class="col-md-4"><label class="form-label">Almuerzo sugerido (min)</label><input name="attendance_default_lunch_minutes" type="number" min="0" max="240" class="form-control" value="{{ policies.attendance_default_lunch_minutes }}"></div>
+
+    <div class="col-md-4"><label class="form-label">Tasa predeterminada de vacaciones</label><input name="vacation_default_rate" type="number" min="0" step="0.001" class="form-control" value="{{ policies.vacation_default_rate }}"></div>
+    <div class="col-md-4">
+      <label class="form-label">Moneda predeterminada</label>
+      <select name="currency_default" class="form-select">
+        {% for option in catalog_options('currency') %}
+        <option value="{{ option.value }}" {% if policies.currency_default==option.value %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4"><label class="form-label">Alertas de renovación</label><input name="renewal_alert_days" class="form-control" value="{{ policies.renewal_alert_days }}" placeholder="60,30,15,7,0"><small class="text-secondary">Días antes del vencimiento, separados por coma.</small></div>
+
+    <div class="col-md-6"><label class="form-label">Política de asistencia</label><textarea name="attendance_policy_note" rows="3" class="form-control">{{ policies.attendance_policy_note }}</textarea></div>
+    <div class="col-md-6"><label class="form-label">Política de vacaciones</label><textarea name="vacation_policy_note" rows="3" class="form-control">{{ policies.vacation_policy_note }}</textarea></div>
+    <div class="col-12"><button class="btn btn-brand">Guardar políticas</button></div>
+  </form>
+</section>
+
+<section class="panel-card mb-4" id="holidays">
+  <div class="panel-header">
+    <div><h2 class="h5">Feriados y días no laborables</h2><p>Calendario administrable para políticas internas y futuros cálculos de jornada.</p></div>
+  </div>
+
+  <form method="post" action="{{ url_for('settings_master.holiday_add') }}" class="row g-2 align-items-end mb-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="col-md-3"><label class="form-label">Fecha</label><input name="holiday_date" type="date" class="form-control" required></div>
+    <div class="col-md-5"><label class="form-label">Nombre</label><input name="name" class="form-control" placeholder="Feriado / cierre especial" required></div>
+    <div class="col-md-2"><label class="form-check border rounded-3 p-2"><input name="non_working" type="checkbox" class="form-check-input" checked> No laborable</label></div>
+    <div class="col-md-2"><button class="btn btn-dark w-100">Agregar</button></div>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Fecha</th><th>Nombre</th><th>No laborable</th><th></th></tr></thead>
+      <tbody>
+      {% for holiday in holidays %}
+      <tr>
+        <td colspan="4">
+          <form method="post" action="{{ url_for('settings_master.holiday_update', holiday_id=holiday.id) }}" class="row g-2 align-items-center">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-3"><input name="holiday_date" type="date" class="form-control form-control-sm" value="{{ holiday.holiday_date.isoformat() }}" required></div>
+            <div class="col-md-5"><input name="name" class="form-control form-control-sm" value="{{ holiday.name }}" required></div>
+            <div class="col-md-2"><label class="form-check mb-0"><input name="non_working" type="checkbox" class="form-check-input" {% if holiday.non_working %}checked{% endif %}> No laborable</label></div>
+            <div class="col-md-2"><button class="btn btn-sm btn-dark w-100">Guardar</button></div>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-center text-secondary py-4">No hay feriados configurados.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-card" id="templates">
+  <div class="panel-header">
+    <div><h2 class="h5">Plantillas de proyecto / tareas</h2><p>Define tareas estándar vinculadas a un producto o servicio para reutilizarlas en la operación.</p></div>
+  </div>
+
+  <form method="post" action="{{ url_for('settings_master.task_template_add') }}" class="row g-2 align-items-end mb-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="col-md-5"><label class="form-label">Nombre de plantilla</label><input name="name" class="form-control" required></div>
+    <div class="col-md-5"><label class="form-label">Producto / servicio</label><select name="product_id" class="form-select"><option value="">Genérica</option>{% for product in products %}<option value="{{ product.id }}">{{ product.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><button class="btn btn-brand w-100">Crear plantilla</button></div>
+  </form>
+
+  {% for template in templates %}
+  <div class="border rounded-4 p-3 mb-3">
+    <div class="d-flex flex-wrap justify-content-between gap-2 align-items-center">
+      <div><strong>{{ template.name }}</strong><small class="d-block text-secondary">{{ template.product.name if template.product else 'Plantilla genérica' }} · {{ template.items|length }} tarea(s)</small></div>
+      <form method="post" action="{{ url_for('settings_master.task_template_toggle', template_id=template.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm {{ 'btn-outline-danger' if template.active else 'btn-outline-success' }}">{{ 'Desactivar' if template.active else 'Activar' }}</button>
+      </form>
+    </div>
+
+    <div class="table-responsive mt-3">
+      <table class="table table-sm align-middle">
+        <thead><tr><th>Tarea</th><th>Tipo</th><th>Prioridad</th><th>Vence en</th><th>Requerida</th><th></th></tr></thead>
+        <tbody>
+        {% for item in template.items %}
+        <tr>
+          <td>{{ item.title }}{% if item.description %}<small class="d-block text-secondary">{{ item.description }}</small>{% endif %}</td>
+          <td>{{ item.task_type|label }}</td>
+          <td>{{ item.priority|label }}</td>
+          <td>{{ item.due_days }} día(s)</td>
+          <td>{{ 'Sí' if item.required else 'No' }}</td>
+          <td>
+            <form method="post" action="{{ url_for('settings_master.task_template_item_delete', item_id=item.id) }}" onsubmit="return confirm('¿Eliminar este elemento de la plantilla?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}<tr><td colspan="6" class="text-secondary">Sin tareas configuradas.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if template.active %}
+    <form method="post" action="{{ url_for('settings_master.task_template_item_add', template_id=template.id) }}" class="row g-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-lg-3"><label class="form-label">Título</label><input name="title" class="form-control form-control-sm" required></div>
+      <div class="col-lg-2"><label class="form-label">Tipo</label><select name="task_type" class="form-select form-select-sm">{% for option in catalog_options('task_type') %}<option value="{{ option.value }}">{{ option.label }}</option>{% endfor %}</select></div>
+      <div class="col-lg-2"><label class="form-label">Prioridad</label><select name="priority" class="form-select form-select-sm">{% for option in catalog_options('priority') %}<option value="{{ option.value }}" {% if option.value=='media' %}selected{% endif %}>{{ option.label }}</option>{% endfor %}</select></div>
+      <div class="col-lg-2"><label class="form-label">Días</label><input name="due_days" type="number" min="0" max="365" class="form-control form-control-sm" value="3"></div>
+      <div class="col-lg-1"><label class="form-check"><input name="required" type="checkbox" class="form-check-input" checked> Requerida</label></div>
+      <div class="col-lg-2"><button class="btn btn-sm btn-dark w-100">Agregar tarea</button></div>
+      <div class="col-12"><input name="description" class="form-control form-control-sm" placeholder="Descripción opcional"></div>
+    </form>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="text-secondary">No hay plantillas.</p>
+  {% endfor %}
+</section>
+{% endblock %}

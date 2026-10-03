@@ -7,6 +7,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 from app.access_control import init_access_control
 from app.security_controls import init_security_controls
+from app.catalog_runtime import init_catalog_runtime
 from app.extensions import csrf, db, login_manager, migrate
 from app.helpers import human_label, money
 
@@ -52,6 +53,7 @@ def create_app(config_object=Config):
     from app.blueprints.support import bp as support_bp
     from app.blueprints.settings import bp as settings_bp
     from app.blueprints.security_admin import bp as security_admin_bp
+    from app.blueprints.settings_master import bp as settings_master_bp
     from app.blueprints.reports import bp as reports_bp
 
     for blueprint in [
@@ -71,10 +73,12 @@ def create_app(config_object=Config):
         support_bp,
         settings_bp,
         security_admin_bp,
+        settings_master_bp,
         reports_bp,
     ]:
         app.register_blueprint(blueprint)
 
+    init_catalog_runtime(app)
     init_security_controls(app)
     init_access_control(app)
 
@@ -131,12 +135,52 @@ def create_app(config_object=Config):
     @app.context_processor
     def inject_globals():
         unread = 0
+        catalog_payload = {}
         if current_user.is_authenticated:
             from app.notification_center import unread_count_for_user
+            from app.catalog_runtime import catalog_options, system_setting
+
             unread = unread_count_for_user(current_user)
+            catalog_payload = {
+                category: catalog_options(category)
+                for category in (
+                    "department",
+                    "job_title",
+                    "pipeline_stage",
+                    "prospect_source",
+                    "lost_reason",
+                    "priority",
+                    "interaction_type",
+                    "payment_method",
+                    "currency",
+                    "expense_category",
+                    "income_category",
+                    "provider",
+                    "task_type",
+                    "project_status",
+                    "task_status",
+                    "ticket_type",
+                    "ticket_status",
+                    "support_priority",
+                )
+            }
+
+        from app.catalog_runtime import catalog_options, system_setting
+
+        operational_defaults = {
+            "tolerance_minutes": system_setting("attendance_default_tolerance_minutes", "10"),
+            "break_minutes": system_setting("attendance_default_break_minutes", "30"),
+            "lunch_minutes": system_setting("attendance_default_lunch_minutes", "60"),
+            "vacation_rate": system_setting("vacation_default_rate", "0"),
+            "currency": system_setting("currency_default", "USD"),
+        } if current_user.is_authenticated else {}
+
         return {
             "company_name": app.config.get("COMPANY_NAME"),
             "unread_notifications": unread,
+            "catalog_options": catalog_options,
+            "catalog_payload": catalog_payload,
+            "operational_defaults": operational_defaults,
         }
 
     @app.errorhandler(403)

@@ -7,13 +7,15 @@
 <div class="row g-4">
   <div class="col-md-4 col-xl-2"><a class="panel-card d-block h-100" href="{{ url_for('settings.roles') }}"><h2 class="h5">Roles y permisos</h2><p>{{ roles|length }} roles</p></a></div>
   <div class="col-md-4 col-xl-2"><a class="panel-card d-block h-100" href="{{ url_for('settings.products') }}"><h2 class="h5">Productos y servicios</h2><p>Catálogo comercial</p></a></div>
-  <div class="col-md-4 col-xl-2"><a class="panel-card d-block h-100" href="{{ url_for('settings.catalogs') }}"><h2 class="h5">Catálogos</h2><p>Valores configurables</p></a></div>
+  <div class="col-md-4 col-xl-2"><a class="panel-card d-block h-100" href="{{ url_for('settings_master.index') }}"><h2 class="h5">Catálogos y políticas</h2><p>Configuración operativa central</p></a></div>
   <div class="col-md-4 col-xl-3"><a class="panel-card d-block h-100" href="{{ url_for('security_admin.index') }}"><h2 class="h5">Seguridad</h2><p>Sesiones, usuarios, 2FA y alcance de datos</p></a></div>
   <div class="col-md-4 col-xl-3"><a class="panel-card d-block h-100" href="{{ url_for('security_admin.audit_log') }}"><h2 class="h5">Auditoría</h2><p>Filtros, cambios e IP</p></a></div>
 </div>
 
 <section class="panel-card mt-4">
-  <h2 class="h5">Valores del sistema</h2>
+  <div class="panel-header">
+    <div><h2 class="h5">Valores técnicos del sistema</h2><p>Para ajustes avanzados. La configuración operativa cotidiana debe realizarse desde “Catálogos y políticas”.</p></div>
+  </div>
   <form method="post" action="{{ url_for('settings.values') }}" class="row g-2">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="col-md-3"><input name="key" class="form-control" placeholder="clave"></div>

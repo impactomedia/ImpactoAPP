@@ -76,7 +76,7 @@
       {% endif %}
 
       {% if current_user.has_permission('settings.view') and (current_user.is_superadmin or role_name in ['admin','manager']) %}
-      <a class="nav-item {% if request.blueprint == 'settings' and request.endpoint != 'settings.audit_log' %}active{% endif %}" href="{{ url_for('settings.index') }}"><i class="bi bi-gear"></i> Configuración</a>
+      <a class="nav-item {% if request.blueprint in ['settings','settings_master'] and request.endpoint != 'settings.audit_log' %}active{% endif %}" href="{{ url_for('settings.index') }}"><i class="bi bi-gear"></i> Configuración</a>
       <a class="nav-item {% if request.blueprint == 'security_admin' and request.endpoint != 'security_admin.audit_log' %}active{% endif %}" href="{{ url_for('security_admin.index') }}"><i class="bi bi-shield-lock"></i> Seguridad</a>
       {% endif %}
 
@@ -111,4 +111,135 @@
     <div class="page-content">{% block app_content %}{% endblock %}</div>
   </main>
 </div>
+
+{% if current_user.is_authenticated %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const catalogs = {{ catalog_payload|tojson }};
+  const operationalDefaults = {{ operational_defaults|tojson }};
+
+  const options = (category) => Array.isArray(catalogs[category]) ? catalogs[category] : [];
+
+  const replaceSelect = (name, category, preferredValue = null) => {
+    document.querySelectorAll(`select[name="${name}"]`).forEach((select) => {
+      const rows = options(category);
+      if (!rows.length) return;
+
+      const oldValue = select.value;
+      const keepBlank = [...select.options].find((option) => option.value === '');
+      select.innerHTML = '';
+
+      if (keepBlank) {
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = keepBlank.textContent;
+        select.appendChild(blank);
+      }
+
+      rows.forEach((row) => {
+        const option = document.createElement('option');
+        option.value = row.value;
+        option.textContent = row.label;
+        select.appendChild(option);
+      });
+
+      const candidate = oldValue || preferredValue || '';
+      if (candidate && [...select.options].some((option) => option.value === candidate)) {
+        select.value = candidate;
+      } else if (preferredValue && [...select.options].some((option) => option.value === preferredValue)) {
+        select.value = preferredValue;
+      }
+    });
+  };
+
+  const relabelSelect = (name, category) => {
+    const mapping = Object.fromEntries(options(category).map((row) => [String(row.value), row.label]));
+    document.querySelectorAll(`select[name="${name}"]`).forEach((select) => {
+      [...select.options].forEach((option) => {
+        if (mapping[option.value]) option.textContent = mapping[option.value];
+      });
+    });
+  };
+
+  const attachDatalist = (selector, category) => {
+    const rows = options(category);
+    if (!rows.length) return;
+
+    const id = `nexora-${category}-list`;
+    let list = document.getElementById(id);
+    if (!list) {
+      list = document.createElement('datalist');
+      list.id = id;
+      rows.forEach((row) => {
+        const option = document.createElement('option');
+        option.value = row.value;
+        option.label = row.label;
+        list.appendChild(option);
+      });
+      document.body.appendChild(list);
+    }
+
+    document.querySelectorAll(selector).forEach((input) => {
+      input.setAttribute('list', id);
+    });
+  };
+
+  replaceSelect('source', 'prospect_source');
+  replaceSelect(
+    'priority',
+    '{{ "support_priority" if request.blueprint == "support" else "priority" }}',
+    '{{ "normal" if request.blueprint == "support" else "media" }}'
+  );
+  replaceSelect('interaction_type', 'interaction_type', 'nota');
+  replaceSelect('ticket_type', 'ticket_type', 'soporte');
+  replaceSelect('method', 'payment_method');
+  replaceSelect('currency', 'currency', 'USD');
+
+  relabelSelect('stage', 'pipeline_stage');
+  {% if request.blueprint == 'support' %}
+  relabelSelect('status', 'ticket_status');
+  {% elif request.blueprint == 'operations' %}
+    if (window.location.pathname.includes('/tasks')) {
+      relabelSelect('status', 'task_status');
+    } else if (window.location.pathname.includes('/projects')) {
+      relabelSelect('status', 'project_status');
+    }
+  {% endif %}
+
+  attachDatalist('input[name="task_type"]', 'task_type');
+  attachDatalist('input[name="department"]', 'department');
+  attachDatalist('input[name="job_title"]', 'job_title');
+  attachDatalist('input[name="responsible_area"]', 'department');
+  attachDatalist('input[name="lost_reason"]', 'lost_reason');
+  {% if request.blueprint == 'finance' %}
+  attachDatalist('input[name="category"]', 'expense_category');
+  attachDatalist('input[name="provider"]', 'provider');
+  {% if request.endpoint == 'finance.incomes' %}
+  attachDatalist('input[name="concept"]', 'income_category');
+  {% endif %}
+  {% endif %}
+
+  {% if request.endpoint == 'hr.schedules' %}
+  const scheduleDefaults = {
+    tolerance_minutes: operationalDefaults.tolerance_minutes,
+    break_minutes: operationalDefaults.break_minutes,
+    lunch_minutes: operationalDefaults.lunch_minutes,
+  };
+  Object.entries(scheduleDefaults).forEach(([name, value]) => {
+    const field = document.querySelector(`input[name="${name}"]`);
+    if (field && value !== undefined && value !== null && value !== '') field.value = value;
+  });
+  {% endif %}
+
+  const vacationRate = document.querySelector('input[name="vacation_rate"]');
+  if (vacationRate && !vacationRate.value && operationalDefaults.vacation_rate !== undefined) {
+    vacationRate.value = operationalDefaults.vacation_rate;
+  }
+
+  document.querySelectorAll('select[name="currency"]').forEach((select) => {
+    if (!select.value && operationalDefaults.currency) select.value = operationalDefaults.currency;
+  });
+});
+</script>
+{% endif %}
 {% endblock %}
