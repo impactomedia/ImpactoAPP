@@ -3,37 +3,43 @@
 <div class="page-heading">
   <div>
     <span class="eyebrow">Mi cuenta</span>
-    <h1>Perfil personal</h1>
-    <p>Actualiza tu nombre o cambia tu contraseña de forma segura.</p>
+    <h1>Perfil y seguridad</h1>
+    <p>Actualiza tu perfil, contraseña y autenticación de dos factores.</p>
   </div>
 </div>
-<section class="panel-card form-card">
+
+<section class="panel-card form-card mb-4">
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="row g-3">
-      <div class="col-md-6">
-        <label class="form-label">Nombre</label>
-        <input class="form-control" name="name" value="{{ current_user.name }}" required>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Correo</label>
-        <input class="form-control" value="{{ current_user.email }}" disabled>
-      </div>
+      <div class="col-md-6"><label class="form-label">Nombre</label><input class="form-control" name="name" value="{{ current_user.name }}" required></div>
+      <div class="col-md-6"><label class="form-label">Correo</label><input class="form-control" value="{{ current_user.email }}" disabled></div>
       <div class="col-12"><hr><h2 class="h5">Cambiar contraseña</h2><p class="text-secondary">Completa estos campos solo si deseas cambiarla.</p></div>
-      <div class="col-md-4">
-        <label class="form-label">Contraseña actual</label>
-        <input class="form-control" type="password" name="current_password" autocomplete="current-password">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Nueva contraseña</label>
-        <input class="form-control" type="password" name="new_password" minlength="8" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Confirmar nueva contraseña</label>
-        <input class="form-control" type="password" name="confirm_password" minlength="8" autocomplete="new-password">
-      </div>
+      <div class="col-md-4"><label class="form-label">Contraseña actual</label><input class="form-control" type="password" name="current_password" autocomplete="current-password"></div>
+      <div class="col-md-4"><label class="form-label">Nueva contraseña</label><input class="form-control" type="password" name="new_password" minlength="8" autocomplete="new-password" placeholder="Mínimo 8 caracteres"></div>
+      <div class="col-md-4"><label class="form-label">Confirmar nueva contraseña</label><input class="form-control" type="password" name="confirm_password" minlength="8" autocomplete="new-password"></div>
     </div>
     <button class="btn btn-brand mt-4">Guardar cambios</button>
+  </form>
+</section>
+
+<section class="panel-card form-card">
+  <div class="panel-header"><div><h2 class="h5">Autenticación de dos factores (2FA)</h2><p>Al iniciar sesión recibirás un código temporal en {{ current_user.email }}.</p></div><span class="badge-soft {{ 'success' if two_factor else 'muted' }}">{{ 'Activa' if two_factor else 'Desactivada' }}</span></div>
+
+  {% if not can_enable_2fa and not two_factor %}
+  <div class="alert alert-warning">El envío de correo SMTP debe estar configurado antes de activar el 2FA.</div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('auth.profile_2fa') }}" class="row g-2 align-items-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="col-md-8"><label class="form-label">Confirma tu contraseña actual</label><input type="password" name="current_password" class="form-control" required autocomplete="current-password"></div>
+    <div class="col-md-4">
+      {% if two_factor %}
+      <button class="btn btn-outline-danger w-100" name="action" value="disable">Desactivar 2FA</button>
+      {% else %}
+      <button class="btn btn-dark w-100" name="action" value="enable" {% if not can_enable_2fa %}disabled{% endif %}>Activar 2FA</button>
+      {% endif %}
+    </div>
   </form>
 </section>
 {% endblock %}

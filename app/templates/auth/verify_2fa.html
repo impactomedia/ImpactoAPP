@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Verificación | Impacto Nexora{% endblock %}
+{% block content %}
+<div class="login-shell">
+  <section class="login-brand"><div><span class="eyebrow text-info">SEGURIDAD</span><h1>Verificación en dos pasos</h1><p>Enviamos un código temporal al correo asociado a tu cuenta.</p></div></section>
+  <section class="login-form"><div class="login-card">
+    <span class="eyebrow">Segundo factor</span>
+    <h2 class="mt-2">Código de seguridad</h2>
+    <p class="text-secondary mb-4">Ingresa el código de 6 dígitos. Expira en 10 minutos.</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input name="code" class="form-control form-control-lg text-center mb-3" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required>
+      <button class="btn btn-brand btn-lg w-100">Verificar e ingresar</button>
+    </form>
+    <a class="btn btn-link w-100 mt-2" href="{{ url_for('auth.login') }}">Volver al acceso</a>
+  </div></section>
+</div>
+{% endblock %}

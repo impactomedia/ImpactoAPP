@@ -77,10 +77,11 @@
 
       {% if current_user.has_permission('settings.view') and (current_user.is_superadmin or role_name in ['admin','manager']) %}
       <a class="nav-item {% if request.blueprint == 'settings' and request.endpoint != 'settings.audit_log' %}active{% endif %}" href="{{ url_for('settings.index') }}"><i class="bi bi-gear"></i> Configuración</a>
+      <a class="nav-item {% if request.blueprint == 'security_admin' and request.endpoint != 'security_admin.audit_log' %}active{% endif %}" href="{{ url_for('security_admin.index') }}"><i class="bi bi-shield-lock"></i> Seguridad</a>
       {% endif %}
 
       {% if current_user.has_permission('audit.view') %}
-      <a class="nav-item {% if request.endpoint == 'settings.audit_log' %}active{% endif %}" href="{{ url_for('settings.audit_log') }}"><i class="bi bi-shield-check"></i> Auditoría</a>
+      <a class="nav-item {% if request.endpoint == 'security_admin.audit_log' %}active{% endif %}" href="{{ url_for('security_admin.audit_log') }}"><i class="bi bi-shield-check"></i> Auditoría</a>
       {% endif %}
     </nav>
 

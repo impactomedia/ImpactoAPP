@@ -9,6 +9,7 @@ from app.notification_center import ensure_system_alerts
 from app.client_v3_services import ensure_client_v3_notifications, my_clients_query, sync_legacy_team_assignments
 from app.development_scope import DEVELOPMENT_COORDINATOR_ROLE, development_project_condition
 from app.dashboard_metrics import build_role_dashboard
+from app.security_controls import BUILTIN_ROLES, permission_scope
 
 bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
 
@@ -78,8 +79,38 @@ def _project_scope(query):
 @bp.route("/")
 @login_required
 def index():
-    if current_user.role and current_user.role.name == DEVELOPMENT_COORDINATOR_ROLE:
+    role_name = current_user.role.name if current_user.role else ""
+
+    if role_name == DEVELOPMENT_COORDINATOR_ROLE:
         return redirect(url_for("operations.development_dashboard"))
+
+    if role_name and role_name not in BUILTIN_ROLES:
+        ensure_system_alerts()
+        db.session.commit()
+        permissions = sorted(
+            (
+                {
+                    "code": permission.code,
+                    "label": permission.label,
+                    "module": permission.module,
+                    "scope": permission_scope(current_user, permission.code),
+                }
+                for permission in current_user.role.permissions
+            ),
+            key=lambda row: (row["module"], row["label"]),
+        )
+        recent_notifications = (
+            Notification.query
+            .filter_by(user_id=current_user.id)
+            .order_by(Notification.created_at.desc())
+            .limit(6)
+            .all()
+        )
+        return render_template(
+            "dashboard/custom_role.html",
+            permissions=permissions,
+            recent_notifications=recent_notifications,
+        )
 
     refresh_overdue_receivables()
     refresh_expired_contracts()

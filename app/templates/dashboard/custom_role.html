@@ -1,0 +1,26 @@
+{% extends "app_base.html" %}
+{% block title %}Inicio | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div><span class="eyebrow">Panel seguro</span><h1>{{ current_user.role.label if current_user.role else 'Usuario' }}</h1><p>Este rol personalizado utiliza alcance de datos seguro por permiso.</p></div>
+</div>
+
+<section class="panel-card mb-4">
+  <div class="panel-header"><div><h2 class="h5">Permisos efectivos</h2><p>Los listados globales quedan bloqueados cuando el alcance no es “Toda la empresa”. Los registros directos siguen validando propiedad/asignación en backend.</p></div></div>
+  <div class="table-responsive"><table class="table modern-table">
+    <thead><tr><th>Permiso</th><th>Módulo</th><th>Scope</th></tr></thead>
+    <tbody>
+    {% for p in permissions %}
+    <tr><td>{{ p.label }}<small class="d-block text-secondary">{{ p.code }}</small></td><td>{{ p.module|label }}</td><td><span class="badge-soft info">{{ p.scope|label }}</span></td></tr>
+    {% else %}<tr><td colspan="3" class="text-secondary text-center py-4">Este rol todavía no tiene permisos.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel-card" id="notifications">
+  <div class="panel-header"><div><h2 class="h5">Notificaciones recientes</h2><p>Alertas dirigidas exclusivamente a tu usuario.</p></div><a class="btn btn-sm btn-light border" href="{{ url_for('notifications.index') }}">Ver todas</a></div>
+  {% for n in recent_notifications %}
+  <div class="border-bottom py-2"><strong>{{ n.title }}</strong><small class="d-block text-secondary">{{ n.message }}</small></div>
+  {% else %}<p class="text-secondary mb-0">Sin alertas.</p>{% endfor %}
+</section>
+{% endblock %}

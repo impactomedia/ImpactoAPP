@@ -1,0 +1,178 @@
+{% extends "app_base.html" %}
+{% block title %}Seguridad | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Impacto Nexora · Bloque 10</span>
+    <h1>Administración de Seguridad</h1>
+    <p>Sesiones, bloqueo, usuarios, 2FA y alcance efectivo de datos.</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('security_admin.audit_log') }}"><i class="bi bi-shield-check"></i> Abrir auditoría</a>
+</div>
+
+<section class="panel-card mb-4" id="policy">
+  <div class="panel-header">
+    <div><h2 class="h5">Política de acceso</h2><p>Valores globales aplicados en backend.</p></div>
+  </div>
+  <form method="post" action="{{ url_for('security_admin.policy_update') }}" class="row g-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="col-md-4"><label class="form-label">Intentos antes de bloqueo</label><input name="failed_attempt_limit" type="number" min="3" max="20" class="form-control" value="{{ policy.failed_attempt_limit }}" required></div>
+    <div class="col-md-4"><label class="form-label">Bloqueo temporal (minutos)</label><input name="lock_minutes" type="number" min="1" max="1440" class="form-control" value="{{ policy.lock_minutes }}" required></div>
+    <div class="col-md-4"><label class="form-label">Expiración por inactividad (minutos)</label><input name="session_timeout_minutes" type="number" min="5" max="1440" class="form-control" value="{{ policy.session_timeout_minutes }}" required></div>
+    <div class="col-md-6"><label class="form-check border rounded-3 p-3"><input class="form-check-input" type="checkbox" name="allow_remember_me" {% if policy.allow_remember_me %}checked{% endif %}> <strong>Permitir “Recordarme”</strong><small class="d-block text-secondary">Si está desactivado, todas las sesiones respetan el tiempo de inactividad.</small></label></div>
+    <div class="col-md-6"><label class="form-check border rounded-3 p-3"><input class="form-check-input" type="checkbox" name="allow_2fa" {% if policy.allow_2fa %}checked{% endif %}> <strong>Permitir 2FA por correo</strong><small class="d-block text-secondary">Cada usuario decide si lo activa desde su perfil. Requiere SMTP.</small></label></div>
+    <div class="col-12"><button class="btn btn-brand">Guardar política de seguridad</button></div>
+  </form>
+</section>
+
+<section class="panel-card mb-4" id="users">
+  <div class="panel-header">
+    <div><h2 class="h5">Usuarios y acceso inmediato</h2><p>Desactivar un usuario no borra su historial. Su sesión se revoca en su siguiente solicitud.</p></div>
+  </div>
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Bloqueo</th><th>2FA</th><th>Último acceso</th><th>Acciones</th></tr></thead>
+      <tbody>
+      {% for item in user_rows %}
+      {% set u = item.user %}
+      <tr>
+        <td><strong>{{ u.name }}</strong><small class="d-block text-secondary">{{ u.email }}</small></td>
+        <td>{{ u.role.label if u.role else 'Sin rol' }}</td>
+        <td><span class="badge-soft {{ 'success' if u.active else 'danger' }}">{{ 'Activo' if u.active else 'Inactivo' }}</span></td>
+        <td>{% if u.locked_until %}<span class="badge-soft warning">Hasta {{ u.locked_until.strftime('%d/%m/%Y %H:%M') }}</span>{% else %}<span class="badge-soft muted">Sin bloqueo</span>{% endif %}<small class="d-block text-secondary">{{ u.failed_attempts }} intento(s)</small></td>
+        <td><span class="badge-soft {{ 'success' if item.two_factor else 'muted' }}">{{ 'Activo' if item.two_factor else 'No' }}</span></td>
+        <td>{{ u.last_login_at.strftime('%d/%m/%Y %H:%M') if u.last_login_at else '—' }}</td>
+        <td style="min-width:300px">
+          <div class="d-flex flex-wrap gap-1">
+            {% if u.active %}
+            <form method="post" action="{{ url_for('security_admin.user_status', user_id=u.id) }}" class="d-flex gap-1">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="status" value="inactive">
+              <input name="reason" class="form-control form-control-sm" placeholder="Motivo de desactivación" required style="max-width:170px">
+              <button class="btn btn-sm btn-outline-danger" {% if u.id == current_user.id %}disabled{% endif %}>Desactivar</button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('security_admin.user_status', user_id=u.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="status" value="active">
+              <button class="btn btn-sm btn-success">Reactivar</button>
+            </form>
+            {% endif %}
+            {% if u.locked_until or u.failed_attempts %}
+            <form method="post" action="{{ url_for('security_admin.unlock_user', user_id=u.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-light border">Desbloquear</button>
+            </form>
+            {% endif %}
+            {% if item.two_factor %}
+            <form method="post" action="{{ url_for('security_admin.disable_user_2fa', user_id=u.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-light border">Quitar 2FA</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="7" class="text-center text-secondary py-4">Sin usuarios.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-card" id="scopes">
+  <div class="panel-header">
+    <div><h2 class="h5">Matriz de permisos y alcance de datos</h2><p>Los roles base conservan su alcance protegido. Los roles personalizados comienzan con alcance propio por seguridad.</p></div>
+  </div>
+
+  {% for item in scope_rows %}
+  <div class="border rounded-4 p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div><strong>{{ item.role.label }}</strong><small class="d-block text-secondary">{{ item.role.name }}{% if item.builtin %} · Rol base protegido{% else %} · Rol personalizado{% endif %}</small></div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>Permiso</th><th>Módulo</th><th>Alcance efectivo</th></tr></thead>
+        <tbody>
+        {% for row in item.permissions %}
+        <tr>
+          <td>{{ row.permission.label }}<small class="d-block text-secondary">{{ row.permission.code }}</small></td>
+          <td>{{ row.permission.module|label }}</td>
+          <td>
+            {% if item.builtin %}
+            <span class="badge-soft info">{{ data_scopes[row.scope] }}</span>
+            {% else %}
+            <form method="post" action="{{ url_for('security_admin.scope_update', role_id=item.role.id, permission_id=row.permission.id) }}" class="d-flex gap-2">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <select name="scope" class="form-select form-select-sm">
+                {% for key,label in data_scopes.items() %}<option value="{{ key }}" {% if row.scope==key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+              <button class="btn btn-sm btn-dark">Guardar</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}<tr><td colspan="3" class="text-secondary">Sin permisos asignados.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+
+<section class="panel-card mt-4" id="temporary">
+  <div class="panel-header">
+    <div><h2 class="h5">Acceso especial temporal</h2><p>Concede a un usuario de rol personalizado acceso directo a un cliente específico para un permiso marcado como “Especial temporal”. Al vencer, el backend deja de autorizarlo automáticamente.</p></div>
+  </div>
+
+  <form method="post" action="{{ url_for('security_admin.temporary_grant') }}" class="row g-2 align-items-end mb-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="col-lg-3">
+      <label class="form-label">Usuario</label>
+      <select name="user_id" class="form-select" required>
+        <option value="">Seleccionar</option>
+        {% for item in user_rows %}
+          {% if item.user.role and item.user.role.name not in ['superadmin','admin','manager','hr','supervisor','advisor','development_coordinator','production','finance','audit'] %}
+          <option value="{{ item.user.id }}">{{ item.user.name }} · {{ item.user.role.label }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-3"><label class="form-label">Permiso</label><input name="permission_code" class="form-control" placeholder="Ej. clients.view" required></div>
+    <div class="col-lg-3">
+      <label class="form-label">Cliente</label>
+      <select name="client_id" class="form-select" required>
+        <option value="">Seleccionar</option>
+        {% for client in temporary_clients %}<option value="{{ client.id }}">{{ client.business_name }} · {{ client.code or client.id }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-2"><label class="form-label">Expira</label><input name="expires_at" type="datetime-local" class="form-control" required></div>
+    <div class="col-lg-1"><button class="btn btn-dark w-100">Dar acceso</button></div>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Usuario</th><th>Permiso</th><th>Cliente</th><th>Expira</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+      {% for grant in temporary_grants %}
+      <tr>
+        <td>{{ grant.user.name if grant.user else ('Usuario #' ~ grant.user_id) }}</td>
+        <td>{{ grant.permission_code }}</td>
+        <td>{{ grant.client.business_name if grant.client else ('Cliente #' ~ grant.client_id) }}</td>
+        <td>{{ grant.expires_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td><span class="badge-soft {{ 'success' if grant.active else 'muted' }}">{{ 'Activo' if grant.active else 'Expirado' }}</span></td>
+        <td>
+          <form method="post" action="{{ url_for('security_admin.temporary_grant_revoke') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="user_id" value="{{ grant.user_id }}">
+            <input type="hidden" name="permission_code" value="{{ grant.permission_code }}">
+            <input type="hidden" name="client_id" value="{{ grant.client_id }}">
+            <button class="btn btn-sm btn-outline-danger">Revocar</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="6" class="text-center text-secondary py-4">No hay accesos temporales registrados.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

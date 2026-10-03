@@ -1,0 +1,49 @@
+{% extends "app_base.html" %}
+{% block title %}Auditoría | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div><span class="eyebrow">Seguridad · Auditoría</span><h1>Bitácora del sistema</h1><p>Quién hizo qué, cuándo, desde qué IP y qué cambió.</p></div>
+  <a class="btn btn-light border" href="{{ url_for('security_admin.audit_csv', **request.args) }}">Exportar CSV</a>
+</div>
+
+<section class="panel-card mb-4">
+  <form class="row g-2 align-items-end">
+    <div class="col-md-3"><label class="form-label">Buscar</label><input name="q" class="form-control" value="{{ filters.q }}" placeholder="acción, entidad, ID, motivo, IP..."></div>
+    <div class="col-md-2"><label class="form-label">Usuario</label><select name="user_id" class="form-select"><option value="">Todos</option>{% for u in users %}<option value="{{ u.id }}" {% if filters.user_id==u.id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label class="form-label">Acción</label><select name="action" class="form-select"><option value="">Todas</option>{% for a in actions %}<option value="{{ a }}" {% if filters.action==a %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label class="form-label">Entidad</label><select name="entity" class="form-select"><option value="">Todas</option>{% for e in entities %}<option value="{{ e }}" {% if filters.entity==e %}selected{% endif %}>{{ e }}</option>{% endfor %}</select></div>
+    <div class="col-md-1"><label class="form-label">Desde</label><input type="date" name="starts" class="form-control" value="{{ filters.starts.isoformat() if filters.starts else '' }}"></div>
+    <div class="col-md-1"><label class="form-label">Hasta</label><input type="date" name="ends" class="form-control" value="{{ filters.ends.isoformat() if filters.ends else '' }}"></div>
+    <div class="col-md-1"><button class="btn btn-dark w-100">Filtrar</button></div>
+  </form>
+</section>
+
+<section class="panel-card">
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Entidad</th><th>IP</th><th>Motivo</th><th>Cambios</th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+      <tr>
+        <td style="white-space:nowrap">{{ r.created_at.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+        <td>{{ r.user.name if r.user else 'Sistema / no autenticado' }}{% if r.user %}<small class="d-block text-secondary">{{ r.user.email }}</small>{% endif %}</td>
+        <td><strong>{{ r.action }}</strong></td>
+        <td>{{ r.entity }}<small class="d-block text-secondary">ID {{ r.entity_id or '—' }}</small></td>
+        <td>{{ r.ip_address or '—' }}</td>
+        <td>{{ r.reason or '—' }}</td>
+        <td>
+          {% if r.before_json or r.after_json %}
+          <details>
+            <summary class="btn btn-sm btn-light border">Ver cambios</summary>
+            {% if r.before_json %}<small class="d-block text-secondary mt-2">Antes</small><pre class="small border rounded p-2 bg-light" style="max-width:420px;white-space:pre-wrap">{{ r.before_json }}</pre>{% endif %}
+            {% if r.after_json %}<small class="d-block text-secondary">Después</small><pre class="small border rounded p-2 bg-light" style="max-width:420px;white-space:pre-wrap">{{ r.after_json }}</pre>{% endif %}
+          </details>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="7" class="text-center text-secondary py-4">No hay registros para los filtros seleccionados.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

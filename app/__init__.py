@@ -6,6 +6,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from app.access_control import init_access_control
+from app.security_controls import init_security_controls
 from app.extensions import csrf, db, login_manager, migrate
 from app.helpers import human_label, money
 
@@ -50,6 +51,7 @@ def create_app(config_object=Config):
     from app.blueprints.hr import bp as hr_bp
     from app.blueprints.support import bp as support_bp
     from app.blueprints.settings import bp as settings_bp
+    from app.blueprints.security_admin import bp as security_admin_bp
     from app.blueprints.reports import bp as reports_bp
 
     for blueprint in [
@@ -68,10 +70,12 @@ def create_app(config_object=Config):
         hr_bp,
         support_bp,
         settings_bp,
+        security_admin_bp,
         reports_bp,
     ]:
         app.register_blueprint(blueprint)
 
+    init_security_controls(app)
     init_access_control(app)
 
     @app.before_request
@@ -109,6 +113,11 @@ def create_app(config_object=Config):
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=()",
         )
+        if request.is_secure:
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            )
         return response
 
     @app.template_filter("money")
