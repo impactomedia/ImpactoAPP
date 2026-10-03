@@ -3,7 +3,8 @@ from decimal import Decimal, InvalidOperation
 
 from app.client_v2_models import ClientContractDetail, ClientInstallment, ClientOperationalProfile
 from app.extensions import db
-from app.helpers import audit, next_code, notify
+from app.helpers import audit, next_code
+from app.notification_center import ensure_notification
 from app.models import (
     AccountReceivable,
     Client,
@@ -226,12 +227,13 @@ def ensure_renewal_alerts():
             continue
 
         if not _notification_exists(owner.user_id, title, message):
-            notify(
+            ensure_notification(
                 owner.user_id,
                 title,
                 message,
                 link="/renewals/",
                 priority="alta" if delta <= 7 else "normal",
+                category="renewals",
             )
 
     _ensure_installment_alerts(days)
@@ -269,12 +271,13 @@ def _ensure_installment_alerts(alert_days):
             continue
 
         if not _notification_exists(owner.user_id, title, message):
-            notify(
+            ensure_notification(
                 owner.user_id,
                 title,
                 message,
                 link=f"/sales/{installment.sale_id}" if installment.sale_id else "/renewals/",
                 priority="alta" if delta <= 0 else "normal",
+                category="payments",
             )
 
 

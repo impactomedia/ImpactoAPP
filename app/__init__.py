@@ -43,6 +43,7 @@ def create_app(config_object=Config):
     from app.blueprints.clients_import import bp as clients_import_bp
     from app.blueprints.sales import bp as sales_bp
     from app.blueprints.renewals import bp as renewals_bp
+    from app.blueprints.notifications import bp as notifications_bp
     from app.blueprints.operations import bp as operations_bp
     from app.blueprints.printing import bp as printing_bp
     from app.blueprints.finance import bp as finance_bp
@@ -60,6 +61,7 @@ def create_app(config_object=Config):
         clients_import_bp,
         sales_bp,
         renewals_bp,
+        notifications_bp,
         operations_bp,
         printing_bp,
         finance_bp,
@@ -121,7 +123,8 @@ def create_app(config_object=Config):
     def inject_globals():
         unread = 0
         if current_user.is_authenticated:
-            unread = sum(1 for notification in current_user.notifications if not notification.read)
+            from app.notification_center import unread_count_for_user
+            unread = unread_count_for_user(current_user)
         return {
             "company_name": app.config.get("COMPANY_NAME"),
             "unread_notifications": unread,

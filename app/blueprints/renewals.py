@@ -77,16 +77,6 @@ def _parse_datetime(value):
         return None
 
 
-@bp.before_app_request
-def refresh_renewals_on_dashboard():
-    if not current_user.is_authenticated:
-        return None
-    if request.endpoint == "dashboard.index":
-        ensure_renewal_alerts()
-        db.session.commit()
-    return None
-
-
 @bp.route("/")
 @login_required
 @permission_required("sales.view")

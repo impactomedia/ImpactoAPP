@@ -5,7 +5,7 @@ from sqlalchemy import func, or_
 from app.extensions import db
 from app.models import Client, Collaborator, Payment, Task, Project, Notification, Quote, Sale, SupportTicket
 from app.services import refresh_overdue_receivables, refresh_expired_contracts
-from app.renewal_services import ensure_renewal_alerts
+from app.notification_center import ensure_system_alerts
 from app.client_v3_services import ensure_client_v3_notifications, my_clients_query, sync_legacy_team_assignments
 from app.development_scope import DEVELOPMENT_COORDINATOR_ROLE, development_project_condition
 from app.dashboard_metrics import build_role_dashboard
@@ -83,7 +83,7 @@ def index():
 
     refresh_overdue_receivables()
     refresh_expired_contracts()
-    ensure_renewal_alerts()
+    ensure_system_alerts()
     sync_legacy_team_assignments()
     ensure_client_v3_notifications()
     db.session.commit()

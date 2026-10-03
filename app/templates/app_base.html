@@ -99,7 +99,7 @@
         <input class="border-0 bg-transparent" name="q" placeholder="Buscar información disponible..." style="min-width:320px;outline:none">
       </form>
       <div class="top-actions ms-auto">
-        <a class="btn btn-light border position-relative" href="{{ home_url }}#notifications"><i class="bi bi-bell"></i>{% if unread_notifications %}<span class="notif-badge">{{ unread_notifications }}</span>{% endif %}</a>
+        <a class="btn btn-light border position-relative" href="{{ url_for('notifications.index') }}" title="Centro de Notificaciones"><i class="bi bi-bell"></i>{% if unread_notifications %}<span class="notif-badge">{{ unread_notifications }}</span>{% endif %}</a>
         <a class="btn btn-light border" href="{{ url_for('auth.profile') }}"><i class="bi bi-person-circle"></i></a>
         <form method="post" action="{{ url_for('auth.logout') }}" class="d-inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

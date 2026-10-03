@@ -1,0 +1,195 @@
+{% extends "app_base.html" %}
+{% block title %}Notificaciones | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Impacto Nexora · Bloque 9</span>
+    <h1>Centro de Notificaciones</h1>
+    <p>Alertas, prioridades, historial y preferencias de comunicación interna.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <form method="post" action="{{ url_for('notifications.bulk') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="read">
+      <button class="btn btn-light border">Marcar todas leídas</button>
+    </form>
+    <form method="post" action="{{ url_for('notifications.bulk') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="unread">
+      <button class="btn btn-light border">Marcar todas no leídas</button>
+    </form>
+  </div>
+</div>
+
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>No leídas</span><strong>{{ unread }}</strong><small>Según filtros actuales</small></div>
+  <div class="metric-card"><span>Urgentes</span><strong>{{ urgent }}</strong><small>No leídas</small></div>
+  <div class="metric-card"><span>Historial visible</span><strong>{{ rows|length }}</strong><small>No se elimina automáticamente</small></div>
+</div>
+
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div><h2 class="h5">Filtros</h2><p>Filtra por tipo, prioridad, estado y rango de fecha.</p></div>
+  </div>
+  <form class="row g-2 align-items-end">
+    <div class="col-lg-3">
+      <label class="form-label">Tipo</label>
+      <select name="category" class="form-select">
+        <option value="">Todos</option>
+        {% for key, label in categories.items() %}
+        <option value="{{ key }}" {% if current_category == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-2">
+      <label class="form-label">Prioridad</label>
+      <select name="priority" class="form-select">
+        <option value="">Todas</option>
+        {% for key in priorities %}
+        <option value="{{ key }}" {% if current_priority == key %}selected{% endif %}>{{ key|label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-2">
+      <label class="form-label">Estado</label>
+      <select name="state" class="form-select">
+        <option value="">Todas</option>
+        <option value="unread" {% if current_state == 'unread' %}selected{% endif %}>No leídas</option>
+        <option value="read" {% if current_state == 'read' %}selected{% endif %}>Leídas</option>
+      </select>
+    </div>
+    <div class="col-lg-2">
+      <label class="form-label">Desde</label>
+      <input type="date" name="starts" value="{{ start_date.isoformat() if start_date else '' }}" class="form-control">
+    </div>
+    <div class="col-lg-2">
+      <label class="form-label">Hasta</label>
+      <input type="date" name="ends" value="{{ end_date.isoformat() if end_date else '' }}" class="form-control">
+    </div>
+    <div class="col-lg-1">
+      <button class="btn btn-dark w-100">Aplicar</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div><h2 class="h5">Tus alertas</h2><p>Las urgentes y altas aparecen primero. Cada alerta conserva su historial.</p></div>
+  </div>
+
+  <div class="d-flex flex-column gap-2">
+    {% for n in rows %}
+    <div class="border rounded-4 p-3 {% if not n.read %}bg-light{% endif %}">
+      <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
+        <div class="flex-grow-1">
+          <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
+            {% set category = 'renewals' if (n.link or '').startswith('/renewals') or 'renovaci' in (n.title or '')|lower
+              else 'commercial' if (n.link or '').startswith('/crm') or 'seguimiento' in (n.title or '')|lower
+              else 'payments' if 'pago' in (n.title or '')|lower or 'cuota' in (n.title or '')|lower
+              else 'tasks' if (n.link or '').startswith('/operations/tasks') or 'tarea' in (n.title or '')|lower
+              else 'projects' if (n.link or '').startswith('/operations/projects') or 'proyecto' in (n.title or '')|lower
+              else 'hr' if (n.link or '').startswith('/hr') or 'vacaci' in (n.title or '')|lower or 'marcaci' in (n.title or '')|lower
+              else 'support' if (n.link or '').startswith('/support') or 'ticket' in (n.title or '')|lower
+              else 'printing' if (n.link or '').startswith('/printing') or 'imprenta' in (n.title or '')|lower or 'recepci' in (n.title or '')|lower
+              else 'sales' if (n.link or '').startswith('/sales') or 'venta' in (n.title or '')|lower
+              else 'general' %}
+            <span class="badge-soft {{ 'danger' if n.priority=='urgente' else 'warning' if n.priority=='alta' else 'info' if n.priority=='normal' else 'muted' }}">{{ n.priority|label }}</span>
+            <span class="badge-soft muted">{{ categories.get(category, 'General') }}</span>
+            {% if not n.read %}<span class="badge-soft success">Nueva</span>{% endif %}
+          </div>
+          <strong class="d-block">{{ n.title }}</strong>
+          <span class="text-secondary">{{ n.message }}</span>
+          <small class="d-block text-secondary mt-1">{{ n.created_at.strftime('%d/%m/%Y %H:%M') if n.created_at else '—' }}</small>
+        </div>
+        <div class="d-flex flex-wrap gap-1">
+          {% if n.link %}
+          <form method="post" action="{{ url_for('notifications.open_notification', notification_id=n.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-brand">Abrir registro</button>
+          </form>
+          {% endif %}
+          <form method="post" action="{{ url_for('notifications.toggle', notification_id=n.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-light border">{{ 'Marcar no leída' if n.read else 'Marcar leída' }}</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-center text-secondary py-5">No hay notificaciones para los filtros seleccionados.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel-card mb-4" id="preferences">
+  <div class="panel-header">
+    <div><h2 class="h5">Mis preferencias</h2><p>Desactiva categorías que no necesitas. Tus alertas anteriores permanecen en el historial.</p></div>
+  </div>
+  <form method="post" action="{{ url_for('notifications.preferences') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      {% for key, label in categories.items() %}
+      <div class="col-md-4">
+        <label class="border rounded-3 p-3 d-flex gap-2 align-items-center w-100">
+          <input class="form-check-input mt-0" type="checkbox" name="category" value="{{ key }}" {% if preferences.get(key, True) %}checked{% endif %}>
+          <span><strong>{{ label }}</strong><small class="d-block text-secondary">Recibir nuevas alertas de esta categoría.</small></span>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    <button class="btn btn-brand mt-3">Guardar mis preferencias</button>
+  </form>
+</section>
+
+{% if editable_roles %}
+<section class="panel-card" id="role-preferences">
+  <div class="panel-header">
+    <div><h2 class="h5">Preferencias por rol</h2><p>Define los valores predeterminados. Cada usuario puede personalizarlos después.</p></div>
+  </div>
+
+  <form method="post" action="{{ url_for('notifications.role_preferences_update') }}" id="rolePreferencesForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Rol</label>
+        <select name="role_name" id="rolePreferenceSelect" class="form-select" required>
+          <option value="">Seleccionar</option>
+          {% for role in editable_roles %}
+          <option value="{{ role.name }}">{{ role.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="row g-3 mt-1" id="roleCategoryGrid">
+      {% for key, label in categories.items() %}
+      <div class="col-md-4">
+        <label class="border rounded-3 p-3 d-flex gap-2 align-items-center w-100">
+          <input class="form-check-input mt-0 role-category" type="checkbox" name="category" value="{{ key }}" checked>
+          <span>{{ label }}</span>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    <button class="btn btn-dark mt-3">Guardar preferencias del rol</button>
+  </form>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const select = document.getElementById('rolePreferenceSelect');
+  if (!select) return;
+  select.addEventListener('change', async () => {
+    const role = select.value;
+    if (!role) return;
+    const response = await fetch('{{ url_for("notifications.role_preferences_data", role_name="__ROLE__") }}'.replace('__ROLE__', encodeURIComponent(role)));
+    if (!response.ok) return;
+    const data = await response.json();
+    document.querySelectorAll('.role-category').forEach(box => {
+      box.checked = data.preferences[box.value] !== false;
+    });
+  });
+});
+</script>
+{% endif %}
+{% endblock %}
