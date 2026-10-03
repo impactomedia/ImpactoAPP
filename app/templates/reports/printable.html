@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Reporte Impacto Nexora</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:Arial,sans-serif;color:#111;margin:28px}
+    h1{font-size:24px;margin-bottom:4px} h2{font-size:18px;border-bottom:1px solid #ccc;padding-bottom:6px;margin-top:28px}
+    h3{font-size:14px;margin-top:18px}.meta{color:#555;margin-bottom:20px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .card{border:1px solid #ccc;border-radius:8px;padding:10px}.card span{display:block;color:#666;font-size:12px}.card strong{display:block;font-size:18px;margin-top:4px}
+    table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #ccc;padding:7px;text-align:left;font-size:12px}
+    .toolbar{margin-bottom:18px}.toolbar button{padding:8px 12px}@media print{.toolbar{display:none}body{margin:10mm}}
+  </style>
+</head>
+<body>
+<div class="toolbar"><button onclick="window.print()">Imprimir / Guardar como PDF</button></div>
+<h1>Impacto Nexora · Reporte</h1>
+<div class="meta">Período: {{ start_date }} → {{ end_date }} · Generado para {{ current_user.name }}</div>
+
+{% if 'finance' in sections %}
+{% set f=sections['finance'] %}
+<h2>Administración</h2>
+<div class="grid">
+  <div class="card"><span>Ingresos cobrados</span><strong>USD {{ f.income|money }}</strong></div>
+  <div class="card"><span>Egresos</span><strong>USD {{ f.expenses|money }}</strong></div>
+  <div class="card"><span>Resultado básico</span><strong>USD {{ f.result|money }}</strong></div>
+  <div class="card"><span>Cuentas por cobrar</span><strong>USD {{ f.receivable|money }}</strong></div>
+  <div class="card"><span>Cuentas por pagar</span><strong>USD {{ f.payable|money }}</strong></div>
+</div>
+{% endif %}
+
+{% if 'hr' in sections %}
+{% set h=sections['hr'] %}
+<h2>Recursos Humanos</h2>
+<div class="grid">
+  <div class="card"><span>Colaboradores con entrada</span><strong>{{ h.employees_with_entry }}</strong></div>
+  <div class="card"><span>Marcaciones corregidas</span><strong>{{ h.corrected_marks }}</strong></div>
+  <div class="card"><span>Solicitudes de ausencia</span><strong>{{ h.leave_total }}</strong></div>
+</div>
+<table><thead><tr><th>Marcación</th><th>Cantidad</th></tr></thead><tbody>{% for key,count in h.marks.items() %}<tr><td>{{ key|label }}</td><td>{{ count }}</td></tr>{% endfor %}</tbody></table>
+{% endif %}
+
+{% if 'commercial' in sections %}
+{% set c=sections['commercial'] %}
+<h2>Comercial</h2>
+<div class="grid">
+  <div class="card"><span>Prospectos</span><strong>{{ c.prospects }}</strong></div>
+  <div class="card"><span>Contactos</span><strong>{{ c.interactions }}</strong></div>
+  <div class="card"><span>Ventas</span><strong>{{ c.sales_count }} · USD {{ c.sales_total|money }}</strong></div>
+  <div class="card"><span>Cobrado</span><strong>USD {{ c.collected|money }}</strong></div>
+  <div class="card"><span>Conversión</span><strong>{{ c.conversion }}%</strong></div>
+  <div class="card"><span>Comisiones</span><strong>USD {{ c.commissions|money }}</strong></div>
+</div>
+{% endif %}
+
+{% if 'clients' in sections %}
+{% set cl=sections['clients'] %}
+<h2>Clientes</h2>
+<div class="grid">
+  <div class="card"><span>Activos</span><strong>{{ cl.active }}</strong></div>
+  <div class="card"><span>Inactivos</span><strong>{{ cl.inactive }}</strong></div>
+  <div class="card"><span>Compras</span><strong>{{ cl.purchases }} · USD {{ cl.purchases_total|money }}</strong></div>
+  <div class="card"><span>Pagos</span><strong>USD {{ cl.payments|money }}</strong></div>
+  <div class="card"><span>Saldos</span><strong>USD {{ cl.balance|money }}</strong></div>
+  <div class="card"><span>Servicios activos</span><strong>{{ cl.active_services }}</strong></div>
+  <div class="card"><span>Renovaciones</span><strong>{{ cl.renewals }}</strong></div>
+</div>
+{% endif %}
+
+{% if 'operations' in sections %}
+{% set o=sections['operations'] %}
+<h2>Operaciones</h2>
+<div class="grid">
+  <div class="card"><span>Proyectos creados</span><strong>{{ o.projects }}</strong></div>
+  <div class="card"><span>Proyectos atrasados</span><strong>{{ o.late_projects }}</strong></div>
+  <div class="card"><span>Tareas creadas</span><strong>{{ o.tasks }}</strong></div>
+  <div class="card"><span>Tareas completadas</span><strong>{{ o.completed_tasks }}</strong></div>
+  <div class="card"><span>Tareas vencidas</span><strong>{{ o.overdue_tasks }}</strong></div>
+  <div class="card"><span>Tiempo promedio entrega</span><strong>{{ o.average_delivery_days if o.average_delivery_days is not none else '—' }}</strong></div>
+</div>
+<table><thead><tr><th>Colaborador</th><th>Tareas abiertas</th></tr></thead><tbody>{% for row in o.workload %}<tr><td>{{ row.name }}</td><td>{{ row.tasks }}</td></tr>{% endfor %}</tbody></table>
+{% endif %}
+
+{% if 'printing' in sections %}
+{% set p=sections['printing'] %}
+<h2>Imprenta</h2>
+<div class="grid">
+  <div class="card"><span>Órdenes</span><strong>{{ p.orders }}</strong></div>
+  <div class="card"><span>Incidencias abiertas</span><strong>{{ p.open_incidents }}</strong></div>
+  <div class="card"><span>Tiempo promedio entrega</span><strong>{{ p.average_delivery_days if p.average_delivery_days is not none else '—' }}</strong></div>
+  {% if p.show_financial %}
+  <div class="card"><span>Costo</span><strong>USD {{ p.cost|money }}</strong></div>
+  <div class="card"><span>Venta</span><strong>USD {{ p.sale|money }}</strong></div>
+  <div class="card"><span>Margen</span><strong>USD {{ p.margin|money }}</strong></div>
+  {% endif %}
+</div>
+{% endif %}
+</body>
+</html>

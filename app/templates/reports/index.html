@@ -1,7 +1,205 @@
 {% extends "app_base.html" %}
+{% block title %}Reportes | Impacto Nexora{% endblock %}
 {% block app_content %}
-<div class="page-heading"><div><span class="eyebrow">Reportes</span><h1>Panel de indicadores</h1><p>Los indicadores se muestran según los permisos y el alcance de cada usuario.</p></div><form class="d-flex gap-2"><input type="date" name="starts" value="{{ start_date }}" class="form-control"><input type="date" name="ends" value="{{ end_date }}" class="form-control"><button class="btn btn-dark">Aplicar</button></form></div>
-<div class="metric-grid mb-4">{% if sales_total is not none %}<div class="metric-card"><span>Ventas</span><strong>{{ sales_total|money }}</strong><small>Período seleccionado</small></div>{% endif %}{% if payment_total is not none %}<div class="metric-card"><span>Cobrado</span><strong>{{ payment_total|money }}</strong><small>Pagos confirmados</small></div>{% endif %}{% if expense_total is not none %}<div class="metric-card"><span>Egresos</span><strong>{{ expense_total|money }}</strong><small>Solo información financiera autorizada</small></div>{% endif %}{% if commissions is not none %}<div class="metric-card"><span>Comisiones</span><strong>{{ commissions|money }}</strong><small>Según cartera o permiso financiero</small></div>{% endif %}</div>
-<div class="row g-4">{% if new_clients is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ new_clients }}</h2><p>Nuevos clientes</p></section></div>{% endif %}{% if projects is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ projects }}</h2><p>Proyectos creados</p></section></div>{% endif %}{% if print_orders is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ print_orders }}</h2><p>Órdenes de imprenta</p></section></div>{% endif %}{% if tasks_created is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ tasks_created }}</h2><p>Tareas creadas</p></section></div>{% endif %}{% if tasks_completed is not none %}<div class="col-md-4"><section class="panel-card"><h2>{{ tasks_completed }}</h2><p>Tareas completadas</p></section></div>{% endif %}</div>
-{% if can_export_sales or can_export_payments or can_export_printing %}<section class="panel-card mt-4"><h2 class="h5">Exportar información autorizada</h2><p class="text-secondary">La exportación respeta el mismo período seleccionado arriba.</p><div class="d-flex flex-wrap gap-2">{% if can_export_sales %}<a class="btn btn-light border" href="{{ url_for('reports.export_csv', report='sales', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Ventas CSV</a>{% endif %}{% if can_export_payments %}<a class="btn btn-light border" href="{{ url_for('reports.export_csv', report='payments', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Pagos CSV</a>{% endif %}{% if can_export_printing %}<a class="btn btn-light border" href="{{ url_for('reports.export_csv', report='printing', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Imprenta CSV</a>{% endif %}</div></section>{% endif %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Impacto Nexora · Bloque 8</span>
+    <h1>Indicadores y reportes</h1>
+    <p>La información visible y exportable depende de tu rol y permisos.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-light border" target="_blank" href="{{ url_for('reports.printable', starts=start_date.isoformat(), ends=end_date.isoformat()) }}"><i class="bi bi-printer"></i> Imprimir / Guardar PDF</a>
+  </div>
+</div>
+
+<section class="panel-card mb-4">
+  <form class="row g-2 align-items-end">
+    <div class="col-md-4"><label class="form-label">Desde</label><input type="date" name="starts" value="{{ start_date }}" class="form-control"></div>
+    <div class="col-md-4"><label class="form-label">Hasta</label><input type="date" name="ends" value="{{ end_date }}" class="form-control"></div>
+    <div class="col-md-4"><button class="btn btn-dark w-100">Aplicar período</button></div>
+  </form>
+</section>
+
+{% if 'finance' in sections %}
+{% set f = sections['finance'] %}
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div><span class="eyebrow">Administración</span><h2>Finanzas y rentabilidad básica</h2><p>Período {{ start_date }} → {{ end_date }}</p></div>
+    <a class="btn btn-sm btn-light border" target="_blank" href="{{ url_for('reports.printable', area='finance', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Imprimir sección</a>
+  </div>
+  <div class="metric-grid mb-4">
+    <div class="metric-card"><span>Ingresos cobrados</span><strong>USD {{ f.income|money }}</strong><small>Pagos confirmados</small></div>
+    <div class="metric-card"><span>Egresos</span><strong>USD {{ f.expenses|money }}</strong><small>Gastos pagados</small></div>
+    <div class="metric-card"><span>Resultado básico</span><strong>USD {{ f.result|money }}</strong><small>Ingresos menos egresos</small></div>
+    <div class="metric-card"><span>Cuentas por cobrar</span><strong>USD {{ f.receivable|money }}</strong><small>Saldo pendiente actual</small></div>
+    <div class="metric-card"><span>Cuentas por pagar</span><strong>USD {{ f.payable|money }}</strong><small>Saldo pendiente actual</small></div>
+  </div>
+  {% if f.expense_categories %}
+  <div class="table-responsive mb-3">
+    <table class="table modern-table"><thead><tr><th>Categoría de gasto</th><th>Monto</th></tr></thead><tbody>
+      {% for row in f.expense_categories %}<tr><td>{{ row.name }}</td><td>USD {{ row.amount|money }}</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  {% endif %}
+  {% if current_user.has_permission('reports.export') %}
+  <div class="d-flex flex-wrap gap-2">
+    {% for key, label in [('payments','Pagos CSV'),('expenses','Gastos CSV'),('receivables','Cuentas por cobrar CSV'),('payables','Cuentas por pagar CSV')] %}
+      {% if key in export_reports %}<a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report=key, starts=start_date.isoformat(), ends=end_date.isoformat()) }}">{{ label }}</a>{% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if 'hr' in sections %}
+{% set h = sections['hr'] %}
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div><span class="eyebrow">Recursos Humanos</span><h2>Asistencia, pausas y ausencias</h2><p>Marcaciones y solicitudes dentro del período.</p></div>
+    <a class="btn btn-sm btn-light border" target="_blank" href="{{ url_for('reports.printable', area='hr', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Imprimir sección</a>
+  </div>
+  <div class="metric-grid mb-4">
+    <div class="metric-card"><span>Colaboradores con entrada</span><strong>{{ h.employees_with_entry }}</strong><small>En el período</small></div>
+    <div class="metric-card"><span>Marcaciones corregidas</span><strong>{{ h.corrected_marks }}</strong><small>Con ajuste administrativo</small></div>
+    <div class="metric-card"><span>Solicitudes de ausencia</span><strong>{{ h.leave_total }}</strong><small>{{ h.leave_pending }} pendientes</small></div>
+  </div>
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <h3 class="h6">Marcaciones por tipo</h3>
+      {% for key, count in h.marks.items() %}<div class="d-flex justify-content-between border-bottom py-2"><span>{{ key|label }}</span><strong>{{ count }}</strong></div>{% else %}<p class="text-secondary">Sin marcaciones.</p>{% endfor %}
+    </div>
+    <div class="col-lg-6">
+      <h3 class="h6">Ausencias / vacaciones / permisos</h3>
+      {% for row in h.leave_types %}<div class="d-flex justify-content-between border-bottom py-2"><span>{{ row.name|label }}</span><strong>{{ row.count }} · {{ row.days }} día(s)</strong></div>{% else %}<p class="text-secondary">Sin solicitudes.</p>{% endfor %}
+    </div>
+  </div>
+  {% if current_user.has_permission('reports.export') %}
+  <div class="d-flex flex-wrap gap-2 mt-3">
+    {% if 'attendance' in export_reports %}<a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report='attendance', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Asistencia CSV</a>{% endif %}
+    {% if 'leaves' in export_reports %}<a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report='leaves', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Ausencias CSV</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if 'commercial' in sections %}
+{% set c = sections['commercial'] %}
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div><span class="eyebrow">Comercial</span><h2>CRM, conversión y ventas</h2><p>Solo la cartera autorizada para tu usuario.</p></div>
+    <a class="btn btn-sm btn-light border" target="_blank" href="{{ url_for('reports.printable', area='commercial', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Imprimir sección</a>
+  </div>
+  <div class="metric-grid mb-4">
+    <div class="metric-card"><span>Prospectos</span><strong>{{ c.prospects }}</strong><small>Creados en el período</small></div>
+    <div class="metric-card"><span>Contactos</span><strong>{{ c.interactions }}</strong><small>Interacciones registradas</small></div>
+    <div class="metric-card"><span>Ventas</span><strong>{{ c.sales_count }}</strong><small>USD {{ c.sales_total|money }}</small></div>
+    <div class="metric-card"><span>Cobrado</span><strong>USD {{ c.collected|money }}</strong><small>Pagos confirmados</small></div>
+    <div class="metric-card"><span>Conversión</span><strong>{{ c.conversion }}%</strong><small>Registros creados en el período</small></div>
+    <div class="metric-card"><span>Motivos de pérdida</span><strong>{{ c.lost }}</strong><small>Registros perdidos</small></div>
+    <div class="metric-card"><span>Comisiones</span><strong>USD {{ c.commissions|money }}</strong><small>Según cartera y permisos</small></div>
+  </div>
+  <h3 class="h6">Pipeline actual</h3>
+  <div class="row g-2 mb-3">
+    {% for key, count in c.pipeline.items() %}<div class="col-md-3"><div class="border rounded-3 p-3 d-flex justify-content-between"><span>{{ key|label }}</span><strong>{{ count }}</strong></div></div>{% else %}<div class="col-12 text-secondary">Sin registros en pipeline.</div>{% endfor %}
+  </div>
+  {% if current_user.has_permission('reports.export') %}
+  <div class="d-flex flex-wrap gap-2">
+    {% if 'prospects' in export_reports %}<a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report='prospects', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Prospectos CSV</a>{% endif %}
+    {% if 'sales' in export_reports %}<a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report='sales', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Ventas CSV</a>{% endif %}
+    {% if 'payments' in export_reports %}<a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report='payments', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Pagos CSV</a>{% endif %}
+    {% if 'renewals' in export_reports %}<a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report='renewals', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Renovaciones CSV</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if 'clients' in sections %}
+{% set cl = sections['clients'] %}
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div><span class="eyebrow">Clientes</span><h2>Cartera, compras y servicios</h2><p>Estado actual y movimientos del período.</p></div>
+    <a class="btn btn-sm btn-light border" target="_blank" href="{{ url_for('reports.printable', area='clients', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Imprimir sección</a>
+  </div>
+  <div class="metric-grid mb-4">
+    <div class="metric-card"><span>Clientes activos</span><strong>{{ cl.active }}</strong><small>Cartera visible</small></div>
+    <div class="metric-card"><span>Clientes inactivos</span><strong>{{ cl.inactive }}</strong><small>Cartera visible</small></div>
+    <div class="metric-card"><span>Compras</span><strong>{{ cl.purchases }}</strong><small>USD {{ cl.purchases_total|money }}</small></div>
+    <div class="metric-card"><span>Pagos</span><strong>USD {{ cl.payments|money }}</strong><small>Período seleccionado</small></div>
+    <div class="metric-card"><span>Saldos</span><strong>USD {{ cl.balance|money }}</strong><small>Saldo pendiente actual</small></div>
+    <div class="metric-card"><span>Servicios activos</span><strong>{{ cl.active_services }}</strong><small>Contratos vigentes</small></div>
+    <div class="metric-card"><span>Renovaciones</span><strong>{{ cl.renewals }}</strong><small>Próximos 60 días</small></div>
+  </div>
+  {% if current_user.has_permission('reports.export') %}
+  <div class="d-flex flex-wrap gap-2">
+    {% if 'clients' in export_reports %}<a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report='clients', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Clientes CSV</a>{% endif %}
+    {% if 'renewals' in export_reports %}<a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report='renewals', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Renovaciones CSV</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if 'operations' in sections %}
+{% set o = sections['operations'] %}
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div><span class="eyebrow">Operaciones</span><h2>Proyectos, tareas y carga</h2><p>Alcance limitado según rol y asignaciones.</p></div>
+    <a class="btn btn-sm btn-light border" target="_blank" href="{{ url_for('reports.printable', area='operations', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Imprimir sección</a>
+  </div>
+  <div class="metric-grid mb-4">
+    <div class="metric-card"><span>Proyectos creados</span><strong>{{ o.projects }}</strong><small>En el período</small></div>
+    <div class="metric-card"><span>Proyectos atrasados</span><strong>{{ o.late_projects }}</strong><small>Fuera de fecha</small></div>
+    <div class="metric-card"><span>Tareas creadas</span><strong>{{ o.tasks }}</strong><small>En el período</small></div>
+    <div class="metric-card"><span>Tareas completadas</span><strong>{{ o.completed_tasks }}</strong><small>En el período</small></div>
+    <div class="metric-card"><span>Tareas vencidas</span><strong>{{ o.overdue_tasks }}</strong><small>Pendientes fuera de fecha</small></div>
+    <div class="metric-card"><span>Tiempo promedio entrega</span><strong>{{ o.average_delivery_days if o.average_delivery_days is not none else '—' }}</strong><small>Días por proyecto completado</small></div>
+  </div>
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <h3 class="h6">Proyectos por estado</h3>
+      {% for key, count in o.project_status.items() %}<div class="d-flex justify-content-between border-bottom py-2"><span>{{ key|label }}</span><strong>{{ count }}</strong></div>{% else %}<p class="text-secondary">Sin proyectos.</p>{% endfor %}
+    </div>
+    <div class="col-lg-6">
+      <h3 class="h6">Carga por colaborador</h3>
+      {% for row in o.workload %}<div class="d-flex justify-content-between border-bottom py-2"><span>{{ row.name }}</span><strong>{{ row.tasks }} tarea(s)</strong></div>{% else %}<p class="text-secondary">Sin carga pendiente.</p>{% endfor %}
+    </div>
+  </div>
+  {% if current_user.has_permission('reports.export') %}
+  <div class="d-flex flex-wrap gap-2 mt-3">
+    {% if 'projects' in export_reports %}<a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report='projects', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Proyectos CSV</a>{% endif %}
+    {% if 'tasks' in export_reports %}<a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report='tasks', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Tareas CSV</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if 'printing' in sections %}
+{% set p = sections['printing'] %}
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div><span class="eyebrow">Imprenta</span><h2>Órdenes, entregas e incidencias</h2><p>Los costos y márgenes solo aparecen con permiso financiero.</p></div>
+    <a class="btn btn-sm btn-light border" target="_blank" href="{{ url_for('reports.printable', area='printing', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Imprimir sección</a>
+  </div>
+  <div class="metric-grid mb-4">
+    <div class="metric-card"><span>Órdenes</span><strong>{{ p.orders }}</strong><small>En el período</small></div>
+    <div class="metric-card"><span>Incidencias abiertas</span><strong>{{ p.open_incidents }}</strong><small>Requieren seguimiento</small></div>
+    <div class="metric-card"><span>Tiempo promedio entrega</span><strong>{{ p.average_delivery_days if p.average_delivery_days is not none else '—' }}</strong><small>Días desde envío hasta recepción</small></div>
+    {% if p.show_financial %}
+    <div class="metric-card"><span>Costo</span><strong>USD {{ p.cost|money }}</strong><small>Período seleccionado</small></div>
+    <div class="metric-card"><span>Venta</span><strong>USD {{ p.sale|money }}</strong><small>Período seleccionado</small></div>
+    <div class="metric-card"><span>Margen</span><strong>USD {{ p.margin|money }}</strong><small>Venta menos costo</small></div>
+    {% endif %}
+  </div>
+  <h3 class="h6">Órdenes por estado</h3>
+  <div class="row g-2 mb-3">
+    {% for key, count in p.status.items() %}<div class="col-md-3"><div class="border rounded-3 p-3 d-flex justify-content-between"><span>{{ key|label }}</span><strong>{{ count }}</strong></div></div>{% else %}<div class="col-12 text-secondary">Sin órdenes en el período.</div>{% endfor %}
+  </div>
+  {% if current_user.has_permission('reports.export') and 'printing' in export_reports %}
+  <a class="btn btn-sm btn-light border" href="{{ url_for('reports.export_csv', report='printing', starts=start_date.isoformat(), ends=end_date.isoformat()) }}">Imprenta CSV</a>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if not sections %}
+<section class="panel-card"><p class="text-secondary mb-0">No hay áreas de reporte habilitadas para este usuario.</p></section>
+{% endif %}
 {% endblock %}

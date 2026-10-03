@@ -1,20 +1,152 @@
 {% extends "app_base.html" %}
-{% block title %}Inicio | Impacto Manager{% endblock %}
+{% block title %}Inicio | Impacto Nexora{% endblock %}
 {% block app_content %}
 {% set role_name = current_user.role.name if current_user.role else '' %}
+
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Panel principal</span>
-    <h1>Resumen de operación</h1>
-    <p>Información disponible según tu rol y permisos.</p>
+    <span class="eyebrow">Impacto Nexora · Bloque 8</span>
+    <h1>{{ role_dashboard.title if role_dashboard else 'Resumen de operación' }}</h1>
+    <p>{{ role_dashboard.subtitle if role_dashboard else 'Información disponible según tu rol y permisos.' }}</p>
   </div>
-  {% if current_user.has_permission('clients.view') %}
-  <div>
+  <div class="d-flex flex-wrap gap-2">
+    {% if current_user.has_permission('reports.view') %}
+    <a class="btn btn-light border" href="{{ url_for('reports.index') }}"><i class="bi bi-bar-chart"></i> Reportes</a>
+    {% endif %}
+    {% if current_user.has_permission('clients.view') %}
     <a class="btn btn-brand" href="{{ url_for('clients_v3.mine') }}">Mis clientes</a>
+    {% endif %}
   </div>
-  {% endif %}
 </div>
 
+{% if role_dashboard and role_dashboard.kind == 'management' %}
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Ingresos cobrados</span><strong>USD {{ role_dashboard.metrics.income|money }}</strong><small>{{ role_dashboard.metrics.period_label }}</small></div>
+  <div class="metric-card"><span>Egresos</span><strong>USD {{ role_dashboard.metrics.expenses|money }}</strong><small>{{ role_dashboard.metrics.period_label }}</small></div>
+  <div class="metric-card"><span>Ventas cerradas</span><strong>USD {{ role_dashboard.metrics.sales_total|money }}</strong><small>{{ role_dashboard.metrics.sales_count }} venta(s)</small></div>
+  <div class="metric-card"><span>Cuentas por cobrar</span><strong>USD {{ role_dashboard.metrics.receivable|money }}</strong><small>Saldo pendiente actual</small></div>
+  <div class="metric-card"><span>Cuentas por pagar</span><strong>USD {{ role_dashboard.metrics.payable|money }}</strong><small>Saldo pendiente actual</small></div>
+  <div class="metric-card"><span>Clientes activos</span><strong>{{ role_dashboard.metrics.active_clients }}</strong><small>{{ role_dashboard.metrics.new_clients }} nuevos este mes</small></div>
+  <div class="metric-card"><span>Renovaciones próximas</span><strong>{{ role_dashboard.metrics.renewals_30 }}</strong><small>Próximos 30 días</small></div>
+  <div class="metric-card"><span>Conversión cartera</span><strong>{{ role_dashboard.metrics.pipeline_conversion }}%</strong><small>Clientes / registros comerciales</small></div>
+  <div class="metric-card"><span>Proyectos atrasados</span><strong>{{ role_dashboard.metrics.late_projects }}</strong><small>Fuera de fecha</small></div>
+  <div class="metric-card"><span>Tareas vencidas</span><strong>{{ role_dashboard.metrics.overdue_tasks }}</strong><small>Pendientes fuera de fecha</small></div>
+  <div class="metric-card"><span>Asistencia de hoy</span><strong>{{ role_dashboard.metrics.attendance_today }}</strong><small>Entradas registradas</small></div>
+  <div class="metric-card"><span>Ausencias próximas</span><strong>{{ role_dashboard.metrics.upcoming_leave_count }}</strong><small>Próximos 30 días</small></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-7">
+    <section class="panel-card h-100">
+      <div class="panel-header"><div><h2>Ventas por asesor</h2><p>Mes actual.</p></div></div>
+      <div class="table-responsive">
+        <table class="table modern-table align-middle">
+          <thead><tr><th>Asesor</th><th>Ventas</th><th>Total</th></tr></thead>
+          <tbody>
+          {% for row in role_dashboard.sales_by_advisor %}
+          <tr><td><strong>{{ row.name }}</strong></td><td>{{ row.count }}</td><td>USD {{ row.total|money }}</td></tr>
+          {% else %}<tr><td colspan="3" class="text-center text-secondary py-4">Sin ventas en el período.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  <div class="col-xl-5">
+    <section class="panel-card h-100">
+      <div class="panel-header"><div><h2>Vacaciones y ausencias próximas</h2><p>Solicitudes aprobadas dentro de 30 días.</p></div></div>
+      {% for row in role_dashboard.upcoming_leave %}
+      <div class="border-bottom py-2">
+        <strong>{{ row.collaborator.user.name if row.collaborator and row.collaborator.user else 'Colaborador' }}</strong>
+        <small class="d-block text-secondary">{{ row.leave_type|label }} · {{ row.start_date }} → {{ row.end_date }}</small>
+      </div>
+      {% else %}<p class="text-secondary mb-0">No hay ausencias próximas registradas.</p>{% endfor %}
+    </section>
+  </div>
+</div>
+
+{% elif role_dashboard and role_dashboard.kind == 'advisor' %}
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Prospectos nuevos</span><strong>{{ role_dashboard.metrics.new_prospects }}</strong><small>Mes actual</small></div>
+  <div class="metric-card"><span>Seguimientos vencidos</span><strong>{{ role_dashboard.metrics.followup_overdue }}</strong><small>Requieren atención</small></div>
+  <div class="metric-card"><span>Seguimientos hoy</span><strong>{{ role_dashboard.metrics.followup_today }}</strong><small>Agenda de hoy</small></div>
+  <div class="metric-card"><span>Cotizaciones pendientes</span><strong>{{ role_dashboard.metrics.quotes_pending }}</strong><small>Borrador o enviadas</small></div>
+  <div class="metric-card"><span>Ventas del mes</span><strong>USD {{ role_dashboard.metrics.sales_total|money }}</strong><small>{{ role_dashboard.metrics.sales_count }} venta(s)</small></div>
+  <div class="metric-card"><span>Cobrado de tus ventas</span><strong>USD {{ role_dashboard.metrics.collected|money }}</strong><small>Pagos confirmados</small></div>
+  <div class="metric-card"><span>Meta</span><strong>{% if role_dashboard.metrics.goal_percent is not none %}{{ role_dashboard.metrics.goal_percent }}%{% else %}—{% endif %}</strong><small>USD {{ role_dashboard.metrics.goal_amount|money }} objetivo</small></div>
+  <div class="metric-card"><span>Comisión estimada</span><strong>USD {{ role_dashboard.metrics.commission_estimated|money }}</strong><small>Aún no aprobada</small></div>
+  <div class="metric-card"><span>Comisión aprobada</span><strong>USD {{ role_dashboard.metrics.commission_approved|money }}</strong><small>Según reglas vigentes</small></div>
+  <div class="metric-card"><span>Clientes asignados</span><strong>{{ role_dashboard.metrics.clients }}</strong><small>Cartera comercial</small></div>
+  <div class="metric-card"><span>Renovaciones</span><strong>{{ role_dashboard.metrics.renewals }}</strong><small>Próximos / vencidos</small></div>
+  <div class="metric-card"><span>Seguimientos próximos</span><strong>{{ role_dashboard.metrics.followup_upcoming }}</strong><small>Programados</small></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-4">
+    <section class="panel-card h-100">
+      <div class="panel-header"><div><h2>Pipeline personal</h2><p>Tu cartera actual por etapa.</p></div></div>
+      {% for stage, count in role_dashboard.pipeline.items() %}
+      <div class="d-flex justify-content-between border-bottom py-2"><span>{{ stage|label }}</span><strong>{{ count }}</strong></div>
+      {% else %}<p class="text-secondary mb-0">Sin seguimientos activos.</p>{% endfor %}
+    </section>
+  </div>
+  <div class="col-xl-4">
+    <section class="panel-card h-100">
+      <div class="panel-header"><div><h2>Próximos seguimientos</h2><p>Ordenados por fecha.</p></div></div>
+      {% for row in role_dashboard.followups %}
+      <div class="border-bottom py-2">
+        <strong>{{ row.client.business_name }}</strong>
+        <small class="d-block text-secondary">{{ row.next_followup_at.strftime('%d/%m/%Y %H:%M') }} · {{ row.subject or row.interaction_type|label }}</small>
+      </div>
+      {% else %}<p class="text-secondary mb-0">Sin seguimientos programados.</p>{% endfor %}
+    </section>
+  </div>
+  <div class="col-xl-4">
+    <section class="panel-card h-100">
+      <div class="panel-header"><div><h2>Renovaciones por gestionar</h2><p>Hasta 60 días.</p></div></div>
+      {% for row in role_dashboard.renewals %}
+      <div class="border-bottom py-2">
+        <strong>{{ row.client.business_name }}</strong>
+        <small class="d-block text-secondary">{{ row.renewal_type }} · {{ row.due_date }} · {{ row.status|label }}</small>
+      </div>
+      {% else %}<p class="text-secondary mb-0">Sin renovaciones pendientes.</p>{% endfor %}
+    </section>
+  </div>
+</div>
+
+{% elif role_dashboard and role_dashboard.kind == 'production' %}
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Proyectos asignados</span><strong>{{ role_dashboard.metrics.projects }}</strong><small>Activos</small></div>
+  <div class="metric-card"><span>Tareas pendientes</span><strong>{{ role_dashboard.metrics.tasks }}</strong><small>Asignadas a ti</small></div>
+  <div class="metric-card"><span>Entregas hoy</span><strong>{{ role_dashboard.metrics.due_today }}</strong><small>Tareas con fecha de hoy</small></div>
+  <div class="metric-card"><span>Entregas 7 días</span><strong>{{ role_dashboard.metrics.due_week }}</strong><small>Próxima semana</small></div>
+  <div class="metric-card"><span>Tareas vencidas</span><strong>{{ role_dashboard.metrics.overdue }}</strong><small>Fuera de fecha</small></div>
+  <div class="metric-card"><span>Clientes esperando entrega</span><strong>{{ role_dashboard.metrics.waiting_delivery }}</strong><small>Revisión / aprobación</small></div>
+  <div class="metric-card"><span>Trabajos bloqueados</span><strong>{{ role_dashboard.metrics.blocked }}</strong><small>Bloqueos o esperando cliente</small></div>
+  <div class="metric-card"><span>Tickets abiertos</span><strong>{{ role_dashboard.metrics.tickets }}</strong><small>Asignados a ti</small></div>
+</div>
+
+<section class="panel-card mb-4">
+  <div class="panel-header"><div><h2>Próximas tareas y entregas</h2><p>Solo trabajo directamente asignado.</p></div></div>
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Tarea</th><th>Cliente</th><th>Prioridad</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
+      <tbody>
+      {% for row in role_dashboard.upcoming_tasks %}
+      <tr>
+        <td><strong>{{ row.title }}</strong></td>
+        <td>{{ row.client.business_name if row.client else '—' }}</td>
+        <td>{{ row.priority|label }}</td>
+        <td>{{ row.status|label }}</td>
+        <td>{{ row.due_at.strftime('%d/%m/%Y %H:%M') if row.due_at else '—' }}</td>
+        <td><a class="btn btn-sm btn-light border" href="{{ url_for('operations.task_detail', task_id=row.id) }}">Abrir</a></td>
+      </tr>
+      {% else %}<tr><td colspan="6" class="text-center text-secondary py-4">Sin tareas próximas asignadas.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% else %}
 {% if total_clients is not none or followups is not none or active_projects is not none or pending_tasks is not none %}
 <div class="metric-grid mb-4">
   {% if total_clients is not none %}<div class="metric-card"><span>Clientes</span><strong>{{ total_clients }}</strong><small>Convertidos</small></div>{% endif %}
@@ -25,54 +157,48 @@
 </div>
 {% endif %}
 
+{% if current_user.has_permission('clients.view') or current_user.has_permission('crm.view') %}
+<section class="panel-card mb-4">
+  <div class="panel-header"><div><h2>Registros recientes</h2><p>Últimos registros a los que tienes acceso.</p></div></div>
+  <div class="table-responsive">
+    <table class="table modern-table">
+      <thead><tr><th>Negocio</th><th>Tipo</th><th>Etapa</th><th>Responsable</th><th></th></tr></thead>
+      <tbody>
+      {% for c in recent_clients %}
+      <tr>
+        <td><strong>{{ c.business_name }}</strong><small class="d-block text-secondary">{{ c.contact_name }}</small></td>
+        <td><span class="badge-soft {{ 'success' if c.record_type=='cliente' else 'info' }}">{{ c.record_type|label }}</span></td>
+        <td>{{ c.pipeline_stage|label }}</td>
+        <td>{{ c.owner.user.name if c.owner else 'Sin asignar' }}</td>
+        <td>
+          {% if c.record_type == 'cliente' and current_user.has_permission('clients.view') %}
+            {% if role_name == 'production' %}
+            <a class="btn btn-sm btn-light border" href="{{ url_for('clients_v3.coordination', client_id=c.id) }}">Abrir</a>
+            {% else %}
+            <a class="btn btn-sm btn-light border" href="{{ url_for('clients.detail', client_id=c.id) }}">Abrir</a>
+            {% endif %}
+          {% elif c.record_type != 'cliente' and current_user.has_permission('crm.view') %}
+          <a class="btn btn-sm btn-light border" href="{{ url_for('crm.detail', client_id=c.id) }}">Abrir</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="5" class="text-center text-secondary py-4">Sin registros recientes.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endif %}
+
 <div class="row g-4">
   <div class="col-xl-8">
-    {% if current_user.has_permission('clients.view') or current_user.has_permission('crm.view') %}
+    {% if current_user.has_permission('reports.view') %}
     <section class="panel-card">
-      <div class="panel-header">
-        <div><h2>Registros recientes</h2><p>Últimos registros a los que tienes acceso.</p></div>
-        <div class="d-flex gap-2">
-          {% if current_user.has_permission('clients.view') %}
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients_v3.mine') }}">Mis clientes</a>
-          {% if role_name != 'production' %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.index') }}">Ver todos</a>{% endif %}
-          {% endif %}
-        </div>
-      </div>
-      <div class="table-responsive">
-        <table class="table modern-table">
-          <thead><tr><th>Negocio</th><th>Tipo</th><th>Etapa</th><th>Responsable</th><th></th></tr></thead>
-          <tbody>
-          {% for c in recent_clients %}
-            <tr>
-              <td><strong>{{ c.business_name }}</strong><small class="d-block text-secondary">{{ c.contact_name }}</small></td>
-              <td><span class="badge-soft {{ 'success' if c.record_type=='cliente' else 'info' }}">{{ c.record_type|label }}</span></td>
-              <td>{{ c.pipeline_stage|label }}</td>
-              <td>{{ c.owner.user.name if c.owner else 'Sin asignar' }}</td>
-              <td>
-                {% if c.record_type == 'cliente' and current_user.has_permission('clients.view') %}
-                  {% if role_name == 'production' %}
-                  <a class="btn btn-sm btn-light border" href="{{ url_for('clients_v3.coordination', client_id=c.id) }}">Abrir</a>
-                  {% else %}
-                  <a class="btn btn-sm btn-light border" href="{{ url_for('clients.detail', client_id=c.id) }}">Abrir</a>
-                  {% endif %}
-                {% elif c.record_type != 'cliente' and current_user.has_permission('crm.view') %}
-                  <a class="btn btn-sm btn-light border" href="{{ url_for('crm.detail', client_id=c.id) }}">Abrir</a>
-                {% endif %}
-              </td>
-            </tr>
-          {% else %}<tr><td colspan="5" class="text-center text-secondary py-4">Sin registros recientes.</td></tr>{% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
-    {% else %}
-    <section class="panel-card">
-      <h2>Bienvenido a Impacto Manager</h2>
-      <p class="text-secondary mb-0">Utiliza el menú lateral para acceder a las funciones habilitadas para tu rol.</p>
+      <div class="panel-header"><div><h2>Indicadores y reportes</h2><p>Consulta el período que necesites y exporta únicamente la información autorizada.</p></div></div>
+      <a class="btn btn-light border" href="{{ url_for('reports.index') }}">Abrir panel de reportes</a>
     </section>
     {% endif %}
   </div>
-
   <div class="col-xl-4">
     <section class="panel-card" id="notifications">
       <div class="panel-header"><div><h2>Notificaciones</h2><p>Alertas y próximos vencimientos.</p></div></div>
@@ -83,14 +209,6 @@
       </form>
       {% else %}<p class="text-secondary">No tienes alertas.</p>{% endfor %}
     </section>
-
-    {% if confirmed_income is not none %}
-    <section class="panel-card mt-4">
-      <span class="eyebrow">Ingresos confirmados</span>
-      <h2 class="display-6 mt-2">{{ confirmed_income|money }}</h2>
-      <p class="text-secondary mb-0">Suma de pagos registrados.</p>
-    </section>
-    {% endif %}
   </div>
 </div>
 {% endblock %}
