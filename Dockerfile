@@ -12,4 +12,4 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "gunicorn -w 3 -b 0.0.0.0:${PORT:-5000} wsgi:app"]
+CMD ["sh", "-c", "python -m scripts.init_db && gunicorn -w 3 -b 0.0.0.0:${PORT:-5000} wsgi:app"]
