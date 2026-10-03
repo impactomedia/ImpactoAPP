@@ -33,7 +33,7 @@
 
       {% if current_user.has_permission('sales.view') %}
       <a class="nav-item {% if request.blueprint == 'sales' and request.endpoint != 'sales.renewals' %}active{% endif %}" href="{{ url_for('sales.index') }}"><i class="bi bi-receipt"></i> Ventas y pagos</a>
-      <a class="nav-item {% if request.endpoint == 'sales.renewals' %}active{% endif %}" href="{{ url_for('sales.renewals') }}"><i class="bi bi-arrow-repeat"></i> Renovaciones</a>
+      <a class="nav-item {% if request.blueprint == 'renewals' %}active{% endif %}" href="{{ url_for('renewals.index') }}"><i class="bi bi-arrow-repeat"></i> Renovaciones</a>
       {% endif %}
 
       {% if current_user.has_permission('projects.view') or current_user.has_permission('tasks.view') or current_user.has_permission('printing.view') or current_user.has_permission('support.view') %}

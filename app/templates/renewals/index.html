@@ -1,0 +1,164 @@
+{% extends "app_base.html" %}
+{% block title %}Renovaciones | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Impacto Nexora · Bloque 7</span>
+    <h1>Centro de Renovaciones</h1>
+    <p>Planes, servicios, dominio, hosting y cuotas próximas o vencidas.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn {{ 'btn-dark' if scope=='open' else 'btn-light border' }}" href="{{ url_for('renewals.index', scope='open') }}">Pendientes</a>
+    <a class="btn {{ 'btn-dark' if scope=='closed' else 'btn-light border' }}" href="{{ url_for('renewals.index', scope='closed') }}">Cerradas</a>
+    <a class="btn {{ 'btn-dark' if scope=='all' else 'btn-light border' }}" href="{{ url_for('renewals.index', scope='all') }}">Todas</a>
+  </div>
+</div>
+
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Vencidas</span><strong>{{ overdue }}</strong><small>Renovaciones abiertas</small></div>
+  <div class="metric-card"><span>Próximos 7 días</span><strong>{{ next_7 }}</strong><small>Atención prioritaria</small></div>
+  <div class="metric-card"><span>Próximos 30 días</span><strong>{{ next_30 }}</strong><small>Preparar contacto/cotización</small></div>
+  <div class="metric-card"><span>Cuotas atrasadas</span><strong>{{ overdue_installments }}</strong><small>Cobranza pendiente</small></div>
+</div>
+
+<div class="alert alert-light border d-flex flex-wrap justify-content-between gap-2 align-items-center">
+  <div><strong>Alertas automáticas:</strong> {{ alert_days|join(', ') }} días antes + aviso cuando ya está vencido.</div>
+  {% if current_user.has_permission('settings.view') %}
+  <a class="btn btn-sm btn-light border" href="{{ url_for('settings.index') }}">Configurar días</a>
+  {% endif %}
+</div>
+
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div><h2 class="h5">Renovaciones y vencimientos</h2><p>El historial anterior nunca se reemplaza; cada renovación crea un nuevo período.</p></div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead>
+        <tr><th>Cliente</th><th>Concepto</th><th>Vence</th><th>Días</th><th>Responsable</th><th>Estado</th><th>Último contacto</th><th>Acciones</th></tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        {% set days = (r.due_date - today).days %}
+        <tr class="{% if days < 0 and r.status in ['pendiente','contactado'] %}overdue{% endif %}">
+          <td><a href="{{ url_for('clients.detail', client_id=r.client_id) }}"><strong>{{ r.client.business_name }}</strong></a><small class="d-block text-secondary">{{ r.client.code or '' }}</small></td>
+          <td><strong>{{ r.renewal_type }}</strong><small class="d-block text-secondary">{{ 'Contrato / servicio' if r.contract else 'Vencimiento operativo' }}</small></td>
+          <td>{{ r.due_date }}</td>
+          <td>
+            {% if days < 0 %}<span class="badge-soft danger">{{ days|abs }} día(s) vencido</span>
+            {% elif days <= 7 %}<span class="badge-soft danger">{{ days }} día(s)</span>
+            {% elif days <= 30 %}<span class="badge-soft warning">{{ days }} día(s)</span>
+            {% else %}<span class="badge-soft info">{{ days }} día(s)</span>{% endif %}
+          </td>
+          <td>{{ r.client.owner.user.name if r.client.owner and r.client.owner.user else 'Sin asignar' }}</td>
+          <td><span class="badge-soft {{ 'success' if r.status=='renovado' else 'muted' if r.status in ['no_renueva','cancelado'] else 'warning' }}">{{ r.status|label }}</span></td>
+          <td>{{ r.last_contact_at.strftime('%d/%m/%Y %H:%M') if r.last_contact_at else '—' }}</td>
+          <td style="min-width:230px">
+            {% if r.status in ['pendiente','contactado'] %}
+            <div class="d-flex flex-wrap gap-1">
+              {% if current_user.has_permission('sales.edit') %}
+              <button class="btn btn-sm btn-light border" data-bs-toggle="collapse" data-bs-target="#contact-{{ r.id }}">Contacto</button>
+              {% endif %}
+              {% if current_user.has_permission('crm.edit') %}
+              <button class="btn btn-sm btn-light border" data-bs-toggle="collapse" data-bs-target="#quote-{{ r.id }}">Cotizar</button>
+              {% endif %}
+              {% if current_user.has_permission('sales.create') %}
+              <button class="btn btn-sm btn-brand" data-bs-toggle="collapse" data-bs-target="#complete-{{ r.id }}">Renovar</button>
+              {% endif %}
+              {% if current_user.has_permission('sales.edit') %}
+              <button class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#decline-{{ r.id }}">No renueva</button>
+              {% endif %}
+            </div>
+            {% else %}
+              <small class="text-secondary">{{ r.notes or 'Proceso cerrado.' }}</small>
+            {% endif %}
+          </td>
+        </tr>
+
+        {% if r.status in ['pendiente','contactado'] %}
+        <tr class="collapse" id="contact-{{ r.id }}">
+          <td colspan="8">
+            <form method="post" action="{{ url_for('renewals.contact', renewal_id=r.id) }}" class="row g-2">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="col-md-2"><select name="channel" class="form-select"><option value="llamada">Llamada</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="reunion">Reunión</option></select></div>
+              <div class="col-md-3"><input name="result" class="form-control" placeholder="Resultado"></div>
+              <div class="col-md-3"><input name="next_followup_at" type="datetime-local" class="form-control"></div>
+              <div class="col-md-3"><input name="notes" class="form-control" placeholder="Nota del contacto"></div>
+              <div class="col-md-1"><button class="btn btn-dark w-100">Guardar</button></div>
+            </form>
+          </td>
+        </tr>
+
+        <tr class="collapse" id="quote-{{ r.id }}">
+          <td colspan="8">
+            <form method="post" action="{{ url_for('renewals.quote', renewal_id=r.id) }}" class="row g-2 align-items-end">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="col-md-3"><label class="form-label">Monto de renovación USD</label><input name="amount" type="number" min="0.01" step="0.01" class="form-control" value="{{ amounts[r.id] if amounts[r.id] > 0 else '' }}" required></div>
+              <div class="col-md-7"><small class="text-secondary">La cotización queda vinculada a este vencimiento. La confirmación final se realiza desde este Centro de Renovaciones.</small></div>
+              <div class="col-md-2"><button class="btn btn-dark w-100">Crear cotización</button></div>
+            </form>
+          </td>
+        </tr>
+
+        <tr class="collapse" id="complete-{{ r.id }}">
+          <td colspan="8">
+            <form method="post" action="{{ url_for('renewals.complete', renewal_id=r.id) }}" class="row g-2 align-items-end">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="col-md-2"><label class="form-label">Monto USD</label><input name="amount" type="number" min="0" step="0.01" class="form-control" value="{{ amounts[r.id] if amounts[r.id] > 0 else '' }}" {% if r.contract %}required{% endif %}></div>
+              <div class="col-md-2"><label class="form-label">Pago inicial</label><input name="initial_payment" type="number" min="0" step="0.01" class="form-control" value="0"></div>
+              <div class="col-md-2"><label class="form-label">Método</label><select name="payment_method" class="form-select"><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="Zelle">Zelle</option><option value="ACH">ACH</option><option value="Wise">Wise</option><option value="tarjeta">Tarjeta</option><option value="otro">Otro</option></select></div>
+              <div class="col-md-2"><label class="form-label">Vence saldo</label><input name="balance_due" type="date" class="form-control"></div>
+              {% if not r.contract %}
+              <div class="col-md-2"><label class="form-label">Próximo vencimiento *</label><input name="next_due_date" type="date" class="form-control" required></div>
+              {% else %}
+              <div class="col-md-2"><small class="text-secondary">El siguiente período se calcula con la duración del servicio actual.</small></div>
+              {% endif %}
+              <div class="col-md-2"><button class="btn btn-brand w-100">Confirmar renovación</button></div>
+            </form>
+          </td>
+        </tr>
+
+        <tr class="collapse" id="decline-{{ r.id }}">
+          <td colspan="8">
+            <form method="post" action="{{ url_for('renewals.decline', renewal_id=r.id) }}" class="row g-2">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="col-md-10"><input name="reason" class="form-control" placeholder="Motivo por el que no renueva" required></div>
+              <div class="col-md-2"><button class="btn btn-outline-danger w-100">Registrar no renovación</button></div>
+            </form>
+          </td>
+        </tr>
+        {% endif %}
+      {% else %}
+        <tr><td colspan="8" class="text-center py-4">No hay renovaciones para este filtro.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-card">
+  <div class="panel-header"><div><h2 class="h5">Cuotas próximas y atrasadas</h2><p>Aviso previo y aviso de atraso según la venta original.</p></div></div>
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Cliente</th><th>Venta</th><th>Cuota</th><th>Monto</th><th>Pagado</th><th>Vence</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+      {% for i in installments %}
+        <tr class="{% if i.due_date < today %}overdue{% endif %}">
+          <td>{{ i.client.business_name }}</td>
+          <td>{{ i.sale.sale_no if i.sale else '—' }}</td>
+          <td>#{{ i.sequence }}</td>
+          <td>USD {{ i.amount|money }}</td>
+          <td>USD {{ i.paid_amount|money }}</td>
+          <td>{{ i.due_date }}</td>
+          <td><span class="badge-soft {{ 'danger' if i.due_date < today else 'warning' }}">{{ i.status|label }}</span></td>
+          <td>{% if i.sale %}<a class="btn btn-sm btn-light border" href="{{ url_for('sales.detail', sale_id=i.sale_id) }}">Abrir venta</a>{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="text-center py-4">No hay cuotas pendientes.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
