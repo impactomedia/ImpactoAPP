@@ -9,8 +9,9 @@
     {% if role_name in ['superadmin','admin','manager'] and current_user.has_permission('clients.create') %}
       <a class="btn btn-outline-primary" href="{{ url_for('clients_import.index') }}">Importar Excel Operativo</a>
     {% endif %}
-    {% if current_user.has_permission('clients.create') %}<a class="btn btn-light border" href="{{ url_for('clients.import_csv') }}">Importar CSV</a>{% endif %}{% if current_user.has_permission('crm.create') %}<a class="btn btn-brand" href="{{ url_for('crm.new_prospect') }}">Nuevo seguimiento</a>{% endif %}
-    {% if current_user.has_permission('clients.export') %}<a class="btn btn-outline-secondary" href="{{ url_for('clients.export_csv') }}">Exportar</a>{% endif %}
+    {% if current_user.has_permission('clients.create') %}<a class="btn btn-light border" href="{{ url_for('data_hub.index') }}#import">Importar CSV / XLSX</a>{% endif %}
+    {% if current_user.has_permission('crm.create') %}<a class="btn btn-brand" href="{{ url_for('crm.new_prospect') }}">Nuevo seguimiento</a>{% endif %}
+    {% if current_user.has_permission('clients.export') %}<a class="btn btn-outline-secondary" href="{{ url_for('data_hub.export_clients', q=search, status=status, advisor_project_id=advisor_project_id) }}">Exportar filtrado</a>{% endif %}
   </div>
 </div>
 {% if pending_followups and current_user.has_permission('crm.view') %}<div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2"><div><strong>{{ pending_followups }} registro(s) siguen clasificados como seguimiento.</strong> <span>Estos registros permanecen en CRM hasta que confirmen una compra.</span></div><a class="btn btn-sm btn-outline-dark" href="{{ url_for('crm.prospects') }}">Revisar CRM</a></div>{% endif %}

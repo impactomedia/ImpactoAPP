@@ -1,0 +1,203 @@
+{% extends "app_base.html" %}
+{% block title %}Centro de Datos | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Impacto Nexora · Bloque 12</span>
+    <h1>Centro de Datos</h1>
+    <p>Búsqueda, importación controlada, exportaciones, respaldos e integraciones.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-light border" href="{{ url_for('dashboard.search', q='') }}"><i class="bi bi-search"></i> Búsqueda global</a>
+    {% if current_user.has_permission('reports.view') %}<a class="btn btn-outline-secondary" href="{{ url_for('reports.index') }}">Reportes</a>{% endif %}
+  </div>
+</div>
+
+<div class="alert alert-info">
+  <strong>Búsqueda global:</strong> el buscador superior consulta clientes/seguimientos, cotizaciones, ventas y tickets únicamente dentro de los permisos y el alcance de datos del usuario.
+</div>
+
+{% if can_import %}
+<section class="panel-card mb-4" id="import">
+  <div class="panel-header">
+    <div>
+      <h2>Importación inicial CSV / XLSX</h2>
+      <p>Vista previa obligatoria, detección de duplicados, filas rechazadas y asignación masiva.</p>
+    </div>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('data_hub.import_template') }}">Descargar plantilla CSV</a>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('data_hub.import_upload') }}" class="row g-3 align-items-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="col-lg-9">
+      <label class="form-label">Archivo CSV o XLSX</label>
+      <input class="form-control" type="file" name="file" accept=".csv,.xlsx" required>
+      <small class="text-secondary">Máximo 8 MB y 1,000 registros. El archivo original no se almacena.</small>
+    </div>
+    <div class="col-lg-3"><button class="btn btn-brand w-100">Generar vista previa</button></div>
+  </form>
+
+  <hr>
+  <div class="d-flex flex-wrap justify-content-between gap-2 align-items-center">
+    <div>
+      <strong>Excel operativo avanzado</strong>
+      <small class="d-block text-secondary">Para las fichas históricas con plataformas, planes y datos operativos.</small>
+    </div>
+    <a class="btn btn-sm btn-light border" href="{{ url_for('clients_import.index') }}">Abrir importador operativo</a>
+  </div>
+</section>
+
+<section class="panel-card mb-4">
+  <div class="panel-header"><div><h2>Lotes generales recientes</h2><p>Vistas previas e importaciones realizadas desde este centro.</p></div></div>
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Lote</th><th>Archivo</th><th>Registros</th><th>Estado</th><th>Creado</th><th></th></tr></thead>
+      <tbody>
+      {% for batch in batches %}
+      <tr>
+        <td>#{{ batch.id }}</td>
+        <td>{{ batch.file_name }}</td>
+        <td>{{ batch.client_count }}</td>
+        <td><span class="badge-soft {{ 'success' if batch.status=='completed' else 'warning' if batch.status=='previewed' else 'danger' }}">{{ batch.status|label }}</span></td>
+        <td>{{ batch.created_at.strftime('%d/%m/%Y %H:%M') if batch.created_at else '—' }}</td>
+        <td><a class="btn btn-sm btn-light border" href="{{ url_for('data_hub.import_preview', batch_id=batch.id) }}">Abrir</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-secondary py-4">No hay lotes generales todavía.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if can_export_clients or can_export_crm %}
+<section class="panel-card mb-4" id="exports">
+  <div class="panel-header">
+    <div><h2>Exportaciones filtradas</h2><p>El CSV respeta cartera/equipo y registra la exportación en auditoría.</p></div>
+  </div>
+
+  <div class="row g-4">
+    {% if can_export_clients %}
+    <div class="col-xl-6">
+      <div class="border rounded-4 p-3 h-100">
+        <h3 class="h6">Clientes</h3>
+        <form method="get" action="{{ url_for('data_hub.export_clients') }}" class="row g-2">
+          <div class="col-12"><input name="q" class="form-control" placeholder="Negocio, contacto, teléfono, correo o código"></div>
+          <div class="col-md-6">
+            <select name="status" class="form-select">
+              <option value="">Activos y vigentes</option>
+              <option value="activo">Activo</option>
+              <option value="inactivo">Inactivo</option>
+              <option value="caducado">Caducado</option>
+              <option value="archivado">Archivado</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <select name="advisor_project_id" class="form-select">
+              <option value="">Todos los proyectos comerciales</option>
+              {% for project in advisor_projects %}<option value="{{ project.id }}">{{ project.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-12"><button class="btn btn-dark w-100">Exportar clientes CSV</button></div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if can_export_crm %}
+    <div class="col-xl-6">
+      <div class="border rounded-4 p-3 h-100">
+        <h3 class="h6">Seguimientos / CRM</h3>
+        <form method="get" action="{{ url_for('data_hub.export_prospects') }}" class="row g-2">
+          <div class="col-12"><input name="q" class="form-control" placeholder="Negocio, contacto, teléfono, correo o código"></div>
+          <div class="col-md-6">
+            <select name="stage" class="form-select">
+              <option value="">Todas las etapas</option>
+              {% for item in stages %}<option value="{{ item.value }}">{{ item.label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <select name="source" class="form-select">
+              <option value="">Todas las fuentes</option>
+              {% for item in sources %}<option value="{{ item.value }}">{{ item.label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <select name="owner_id" class="form-select">
+              <option value="">Todos los responsables dentro de mi alcance</option>
+              {% for collaborator in collaborators %}<option value="{{ collaborator.id }}">{{ collaborator.user.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-12"><button class="btn btn-dark w-100">Exportar seguimientos CSV</button></div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if current_user.has_permission('reports.export') %}
+  <div class="mt-3">
+    <a href="{{ url_for('reports.index') }}">Exportar ventas, pagos, finanzas, RR. HH., renovaciones, proyectos, tareas e imprenta desde Reportes →</a>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if can_backups %}
+<section class="panel-card mb-4" id="backups">
+  <div class="panel-header">
+    <div><h2>Respaldos y recuperación</h2><p>Copia lógica de MySQL + archivos disponibles del servicio.</p></div>
+    <form method="post" action="{{ url_for('data_hub.backup_create') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-brand">Crear respaldo manual</button>
+    </form>
+  </div>
+
+  {% if volume_mount %}
+  <div class="alert alert-success"><strong>Volumen Railway detectado:</strong> {{ volume_mount }}. Los respaldos creados por Nexora se guardarán bajo el volumen persistente.</div>
+  {% else %}
+  <div class="alert alert-warning"><strong>No se detecta un volumen Railway en la aplicación.</strong> Un respaldo creado dentro del almacenamiento efímero puede perderse en un redeploy. Configura un volumen antes de depender de estos archivos.</div>
+  {% endif %}
+
+  <div class="table-responsive">
+    <table class="table modern-table">
+      <thead><tr><th>Respaldo</th><th>Fecha</th><th>Tamaño</th><th></th></tr></thead>
+      <tbody>
+      {% for backup in backups %}
+      <tr>
+        <td>{{ backup.name }}</td>
+        <td>{{ backup.modified.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td>{{ backup.size_mb }} MB</td>
+        <td><a class="btn btn-sm btn-light border" href="{{ url_for('data_hub.backup_download', file_name=backup.name) }}">Descargar</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-center text-secondary py-4">No hay respaldos generados por la aplicación.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="alert alert-light border mb-0">
+    <strong>Política recomendada en Railway:</strong> habilitar backups programados del volumen/MySQL y mantener además copias lógicas periódicas. El paquete incluye <code>scripts/restore_backup.py</code> para validar o restaurar una copia lógica únicamente contra una base de prueba explícita.
+  </div>
+</section>
+
+<section class="panel-card" id="integrations">
+  <div class="panel-header"><div><h2>Preparación de integraciones</h2><p>No se muestran secretos; solo el estado de configuración.</p></div></div>
+  <div class="row g-3">
+    {% for integration in integrations %}
+    <div class="col-md-6 col-xl-4">
+      <div class="border rounded-4 p-3 h-100">
+        <div class="d-flex justify-content-between gap-2">
+          <strong>{{ integration.name }}</strong>
+          <span class="badge-soft {{ 'success' if integration.configured else 'muted' }}">{{ 'Configurada' if integration.configured else 'Pendiente' }}</span>
+        </div>
+        <small class="d-block text-secondary mt-2">{{ integration.note }}</small>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

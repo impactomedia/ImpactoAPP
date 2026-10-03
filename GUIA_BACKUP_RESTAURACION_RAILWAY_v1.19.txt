@@ -1,0 +1,98 @@
+IMPACTO NEXORA v1.19.0
+GUIA DE BACKUP Y RESTAURACION EN RAILWAY
+=========================================
+
+ARQUITECTURA ACTUAL
+-------------------
+- Código: GitHub
+- Aplicación: Railway
+- Base MySQL: Railway
+- Dominio/DNS: Hostinger
+
+1. ARCHIVOS PERSISTENTES DE NEXORA
+----------------------------------
+Para que los archivos cargados por usuarios no dependan del filesystem
+efímero del deployment:
+
+1) En Railway, adjunta un Volume al servicio web de Nexora.
+2) Monta el volumen en /data.
+3) v1.19.0 detecta RAILWAY_VOLUME_MOUNT_PATH automáticamente.
+4) Si no defines variables adicionales:
+   - uploads -> /data/uploads
+   - backups lógicos -> /data/backups
+
+Opcionalmente puedes definir:
+UPLOAD_FOLDER=/data/uploads
+BACKUP_DIR=/data/backups
+
+2. BACKUPS AUTOMATICOS NATIVOS
+------------------------------
+En el servicio MySQL:
+- Abre Backups.
+- Activa una política automática apropiada.
+- Recomendación operativa inicial: Daily + Weekly + Monthly si el plan
+  y el volumen lo permiten.
+
+En el servicio web, después de adjuntar el Volume:
+- Abre Backups del volumen.
+- Configura también una política automática para proteger archivos.
+
+La política exacta puede adaptarse al costo, volumen de cambios y retención
+requerida por Impacto Media Agency.
+
+3. BACKUP LOGICO PORTABLE DE NEXORA
+-----------------------------------
+Desde:
+Configuración -> Centro de Datos -> Respaldos
+
+"Crear respaldo manual" genera un ZIP que contiene:
+- database.sql para MySQL;
+- uploads/ cuando existen archivos;
+- manifest.json.
+
+La imagen Docker v1.19.0 instala default-mysql-client para disponer de
+mysqldump/mysql en Railway.
+
+También puede ejecutarse:
+python -m scripts.backup
+
+Retención predeterminada para copias lógicas:
+- BACKUP_RETENTION_DAYS=14
+- BACKUP_MAX_FILES=30
+
+Ambas variables pueden modificarse.
+
+4. VALIDAR UN BACKUP SIN RESTAURAR
+----------------------------------
+python -m scripts.restore_backup /ruta/impacto_nexora_FECHA.zip
+
+Esto verifica estructura e integridad del ZIP, sin tocar ninguna base.
+
+5. PRUEBA REAL DE RESTAURACION
+------------------------------
+NUNCA usar la base productiva como destino.
+
+Crea una base MySQL temporal de prueba y define:
+RESTORE_DATABASE_URL=mysql+pymysql://USUARIO:CLAVE@HOST:PUERTO/BASE_PRUEBA
+
+Luego ejecuta:
+python -m scripts.restore_backup /ruta/impacto_nexora_FECHA.zip
+
+El script:
+- compara RESTORE_DATABASE_URL con DATABASE_URL;
+- se niega a continuar si ambas apuntan a la misma base;
+- restaura el dump;
+- conecta a la base restaurada;
+- confirma que existan tablas.
+
+6. ANTES DE CERRAR EL BLOQUE 12
+--------------------------------
+Validar en Railway:
+[ ] MySQL tiene backups automáticos configurados.
+[ ] El servicio web tiene Volume si se conservarán uploads.
+[ ] El Volume tiene política de backup si aplica.
+[ ] Centro de Datos genera un backup manual sin error.
+[ ] Se descargó/validó al menos un backup lógico.
+[ ] Idealmente se hizo un restore drill contra una base temporal.
+
+No modificar DNS/Hostinger para estas tareas.

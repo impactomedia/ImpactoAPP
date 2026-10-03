@@ -5,6 +5,18 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
+_VOLUME_MOUNT = os.getenv("RAILWAY_VOLUME_MOUNT_PATH")
+_DEFAULT_UPLOAD_FOLDER = (
+    str(Path(_VOLUME_MOUNT) / "uploads")
+    if _VOLUME_MOUNT
+    else str(BASE_DIR / "app" / "static" / "uploads")
+)
+_DEFAULT_BACKUP_DIR = (
+    str(Path(_VOLUME_MOUNT) / "backups")
+    if _VOLUME_MOUNT
+    else str(BASE_DIR / "backups")
+)
+
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "change-this-in-production")
@@ -14,10 +26,8 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_UPLOAD_MB", "20")) * 1024 * 1024
-    UPLOAD_FOLDER = os.getenv(
-        "UPLOAD_FOLDER",
-        str(BASE_DIR / "app" / "static" / "uploads"),
-    )
+    UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", _DEFAULT_UPLOAD_FOLDER)
+    BACKUP_DIR = os.getenv("BACKUP_DIR", _DEFAULT_BACKUP_DIR)
 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"

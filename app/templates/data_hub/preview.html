@@ -1,0 +1,126 @@
+{% extends "app_base.html" %}
+{% block title %}Vista previa de importación | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Centro de Datos · Importación</span>
+    <h1>Lote #{{ batch.id }}</h1>
+    <p>{{ batch.file_name }} · {{ payload.format|upper }} · Estado: {{ batch.status|label }}</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('data_hub.index') }}">Volver al Centro de Datos</a>
+</div>
+
+{% set summary = payload.summary %}
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Total</span><strong>{{ rows|length }}</strong><small>Filas procesadas</small></div>
+  <div class="metric-card"><span>Listos</span><strong>{{ summary.ready }}</strong><small>Se pueden importar</small></div>
+  <div class="metric-card"><span>Duplicados</span><strong>{{ summary.duplicate }}</strong><small>Se omitirán</small></div>
+  <div class="metric-card"><span>Rechazados</span><strong>{{ summary.rejected }}</strong><small>Con motivo</small></div>
+</div>
+
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div><h2>Vista previa</h2><p>Ningún registro se escribe en Clientes/CRM hasta confirmar el lote.</p></div>
+    {% if summary.duplicate or summary.rejected %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('data_hub.import_rejections', batch_id=batch.id) }}">Descargar reporte de omitidos</a>
+    {% endif %}
+  </div>
+
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Línea</th><th>Negocio</th><th>Contacto</th><th>Teléfono / email</th><th>Archivo</th><th>Resultado</th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.line }}</td>
+        <td><strong>{{ row.business_name or '—' }}</strong></td>
+        <td>{{ row.contact_name or '—' }}</td>
+        <td>{{ row.phone or row.email or '—' }}{% if row.phone and row.email %}<small class="d-block text-secondary">{{ row.email }}</small>{% endif %}</td>
+        <td>
+          <small class="d-block">Tipo: {{ row.record_type or 'seguimiento' }}</small>
+          <small class="d-block">Fuente: {{ row.source or '—' }}</small>
+          <small class="d-block">Asesor: {{ row.advisor or '—' }}</small>
+        </td>
+        <td>
+          <span class="badge-soft {{ 'success' if row.status=='ready' else 'warning' if row.status=='duplicate' else 'danger' }}">{{ row.status|label }}</span>
+          <small class="d-block text-secondary mt-1">{{ row.reason }}</small>
+          {% if row.existing_visible and row.existing_client_id %}<a class="small" href="{{ url_for('clients.detail', client_id=row.existing_client_id) }}">Abrir coincidencia</a>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center py-4">No hay registros.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if batch.status == 'previewed' and summary.ready %}
+<section class="panel-card mb-4">
+  <div class="panel-header"><div><h2>Asignación masiva y confirmación</h2><p>Los valores seleccionados aquí tienen prioridad sobre los del archivo.</p></div></div>
+
+  <form method="post" action="{{ url_for('data_hub.import_execute', batch_id=batch.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-md-6 col-xl-3">
+        <label class="form-label">Tipo de registro</label>
+        <select name="record_type" class="form-select">
+          <option value="from_file">Según archivo (vacío = Seguimiento)</option>
+          <option value="seguimiento">Todos como Seguimiento</option>
+          <option value="cliente">Todos como Cliente histórico</option>
+        </select>
+      </div>
+      <div class="col-md-6 col-xl-3">
+        <label class="form-label">Responsable</label>
+        <select name="owner_id" class="form-select">
+          <option value="">Según archivo / automático</option>
+          {% for collaborator in collaborators %}
+          <option value="{{ collaborator.id }}">{{ collaborator.user.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6 col-xl-3">
+        <label class="form-label">Fuente</label>
+        <select name="source" class="form-select">
+          <option value="">Según archivo</option>
+          {% for item in sources %}<option value="{{ item.value }}">{{ item.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6 col-xl-3">
+        <label class="form-label">Etapa para seguimientos</label>
+        <select name="pipeline_stage" class="form-select">
+          <option value="">Según archivo / Nuevo</option>
+          {% for item in stages %}<option value="{{ item.value }}">{{ item.label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="alert alert-warning mt-4">
+      <strong>Duplicados:</strong> se omiten siempre en esta importación general. El importador Excel operativo continúa disponible cuando necesitas conciliar y actualizar fichas históricas existentes.
+    </div>
+
+    <label class="form-check border rounded-3 p-3 mt-3">
+      <input class="form-check-input" type="checkbox" name="confirm_import" required>
+      <span class="ms-2"><strong>Confirmo que revisé esta vista previa y deseo crear los registros marcados como “Listo”.</strong></span>
+    </label>
+    <button class="btn btn-brand mt-3">Ejecutar lote</button>
+  </form>
+</section>
+{% endif %}
+
+{% if batch.status == 'completed' and batch.result_json %}
+<section class="panel-card">
+  <div class="panel-header">
+    <div><h2>Resultado final</h2><p>El lote fue aplicado en una sola transacción.</p></div>
+    {% if batch.result_json.rejected %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('data_hub.import_rejections', batch_id=batch.id) }}">Descargar reporte</a>{% endif %}
+  </div>
+  <div class="metric-grid">
+    <div class="metric-card"><span>Creados</span><strong>{{ batch.result_json.created }}</strong></div>
+    <div class="metric-card"><span>Duplicados omitidos</span><strong>{{ batch.result_json.duplicates_skipped }}</strong></div>
+    <div class="metric-card"><span>Reportados</span><strong>{{ batch.result_json.rejected }}</strong></div>
+  </div>
+</section>
+{% elif batch.status == 'failed' %}
+<div class="alert alert-danger">{{ batch.result_json.error if batch.result_json else 'El lote falló y fue revertido.' }}</div>
+{% endif %}
+{% endblock %}

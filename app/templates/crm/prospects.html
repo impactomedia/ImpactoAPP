@@ -1,6 +1,13 @@
 {% extends "app_base.html" %}
 {% block app_content %}
-<div class="page-heading"><div><span class="eyebrow">CRM Comercial</span><h1>Seguimientos</h1><p>Gestiona contactos y oportunidades hasta que confirmen una compra y pasen a Clientes.</p></div><div><a class="btn btn-outline-secondary" href="{{ url_for('crm.pipeline') }}">Pipeline</a>{% if current_user.has_permission('crm.create') %} <a class="btn btn-brand" href="{{ url_for('crm.new_prospect') }}">Nuevo seguimiento</a>{% endif %}</div></div>
+<div class="page-heading">
+  <div><span class="eyebrow">CRM Comercial</span><h1>Seguimientos</h1><p>Gestiona contactos y oportunidades hasta que confirmen una compra y pasen a Clientes.</p></div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('crm.pipeline') }}">Pipeline</a>
+    {% if current_user.has_permission('crm.export') %}<a class="btn btn-outline-secondary" href="{{ url_for('data_hub.export_prospects', q=search, stage=stage, advisor_project_id=advisor_project_id) }}">Exportar filtrado</a>{% endif %}
+    {% if current_user.has_permission('crm.create') %}<a class="btn btn-brand" href="{{ url_for('crm.new_prospect') }}">Nuevo seguimiento</a>{% endif %}
+  </div>
+</div>
 <section class="panel-card">
   <form class="row g-2 mb-3"><div class="col-md-4"><input class="form-control" name="q" value="{{ search }}" placeholder="Buscar negocio, contacto, teléfono o correo"></div><div class="col-md-3"><select class="form-select" name="stage"><option value="">Todas las etapas</option>{% for s in stages %}<option value="{{ s }}" {% if stage==s %}selected{% endif %}>{{ s|label }}</option>{% endfor %}</select></div><div class="col-md-3"><select class="form-select" name="advisor_project_id"><option value="">IMPACTO + NOVAX</option>{% for p in advisor_projects %}<option value="{{ p.id }}" {% if advisor_project_id==p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div><div class="col-md-2"><button class="btn btn-dark w-100">Filtrar</button></div></form>
   <div class="table-responsive"><table class="table modern-table align-middle"><thead><tr><th>Negocio</th><th>Contacto</th><th>Etapa</th><th>Prioridad</th><th>Responsable</th><th>Proyecto</th><th>Próximo paso</th><th></th></tr></thead><tbody>
