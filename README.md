@@ -1,8 +1,28 @@
-# Impacto Manager – Sistema Integral
+# Impacto Nexora – Sistema Integral
 
-Aplicación web para Impacto Media Agency construida con Flask + SQLAlchemy + MySQL/SQLite. Incluye módulos de CRM, clientes, ventas/pagos, proyectos/tareas, imprenta, finanzas/comisiones/planilla, RR. HH., soporte, reportes, configuración y auditoría.
+Impacto Nexora es la plataforma interna de Impacto Media Agency LLC para CRM,
+clientes, ventas, cobros, operaciones, imprenta, finanzas, RR. HH., soporte,
+reportes, seguridad, respaldos y control administrativo.
 
-## 1. Instalación local
+Versión de cierre del núcleo: **v1.23.0**
+
+## Arquitectura productiva
+
+- Código fuente: GitHub
+- Aplicación: Railway
+- Base de datos: MySQL en Railway
+- Persistencia de uploads/backups lógicos: Railway Volume del servicio web
+- Dominio/DNS: Hostinger
+- Framework: Flask + SQLAlchemy
+- Servidor WSGI: Gunicorn
+
+Flujo de despliegue:
+
+`GitHub -> GitHub Actions -> Railway`
+
+Hostinger no despliega la aplicación; se utiliza para dominio/DNS.
+
+## Instalación local
 
 ```powershell
 py -m venv .venv
@@ -13,74 +33,177 @@ python -m scripts.init_db
 python run.py
 ```
 
-Abre `http://127.0.0.1:5000`.
+Abre:
 
-Usuario inicial por defecto: `admin@impactomedia.local` / `ChangeMe123!` (cámbialo inmediatamente). Puedes configurar otro en `.env` antes de inicializar.
+`http://127.0.0.1:5000`
 
-## 2. MySQL
+El usuario inicial de desarrollo puede configurarse mediante las variables
+ADMIN_NAME, ADMIN_EMAIL y ADMIN_PASSWORD. Cambia cualquier credencial inicial
+antes de utilizar una instalación real.
 
-Crea una base y edita `.env`:
+## MySQL
+
+Ejemplo local:
 
 ```env
 DATABASE_URL=mysql+pymysql://usuario:clave@localhost:3306/impacto_manager
 ```
 
-Luego ejecuta `python -m scripts.init_db`.
-
-## 3. Docker
+Luego:
 
 ```bash
-docker compose up --build
+python -m scripts.init_db
 ```
 
-## 4. Módulos incluidos
+## Módulos incluidos
 
-- Usuarios, roles, permisos y recuperación de contraseña.
-- CRM de prospectos, pipeline, interacciones, propiedad comercial y cotizaciones.
-- Conversión sin perder historial de seguimiento → cliente.
-- Ficha operativa de cliente, colaboradores asignados, contratos/paquetes, timeline, importación/exportación CSV.
-- Ventas, pagos parciales, saldos, cuentas por cobrar, deducciones y comisiones configurables.
-- Proyectos generados desde ventas, tareas, Kanban, comentarios y solicitudes de cambio.
-- Imprenta: orden, versiones de diseño, aprobación de diseño separada de aprobación de envío, producción, tracking, envíos parciales, recepción e incidencias.
-- Finanzas: ingresos, egresos, cuentas por cobrar/pagar, reglas de comisión y planilla.
-- Recursos Humanos: expediente, horarios, marcaciones, breaks/almuerzo, vacaciones/permisos, evaluaciones, capacitaciones y documentos.
-- Soporte/tickets con prioridad y SLA interno.
-- Renovaciones y alertas.
-- Reportes y exportaciones.
-- Catálogos/configuraciones y bitácora de auditoría.
-- Script de backup básico (`python -m scripts.backup`).
+- Login, recuperación de contraseña, 2FA y seguridad de sesión.
+- Usuarios, roles, permisos, alcances y auditoría.
+- CRM / Seguimientos / Pipeline / Cotizaciones.
+- Conversión Seguimiento -> Cliente sin perder historial.
+- Clientes y ficha integral.
+- Ventas, pagos, saldos, cuentas por cobrar y comisiones.
+- Renovaciones y vencimientos.
+- Proyectos, tareas, Kanban, onboarding y cambios.
+- Imprenta, diseños, aprobaciones, tracking, envíos parciales y recepción.
+- Finanzas, ingresos, egresos, cuentas por pagar y nómina.
+- RR. HH., horarios, asistencia, incidencias, vacaciones y documentos.
+- Soporte/tickets.
+- Notificaciones.
+- Dashboards y reportes.
+- Configuración y catálogos.
+- Centro de Datos e importación/exportación.
+- Backups automáticos y restore protegido.
+- Planificación.
+- Auditoría de Flujos.
+- Aceptación final.
 
-## 5. Valores que deben configurarse con la empresa
+## Producción
 
-Las políticas exactas de asistencia, vacaciones, comisiones, precios y reglas internas se dejaron configurables porque deben definirse con Impacto Media Agency. No se deben liquidar comisiones o vacaciones con valores de ejemplo sin validarlos.
+Antes de considerar una instancia productiva:
 
-## 6. Flask-Migrate para cambios futuros
+- SECRET_KEY debe ser larga y privada.
+- DATABASE_URL debe apuntar al MySQL correcto.
+- HTTPS debe estar activo.
+- Los uploads deben persistir en un Railway Volume.
+- Backups automáticos deben estar activos.
+- Debe existir al menos un backup validado.
+- Debe realizarse periódicamente un restore drill en una base separada.
+- GitHub Actions debe estar en SUCCESS antes de desplegar.
+- `/healthz` debe responder `{"status":"ok"}`.
 
-La instalación inicial usa `db.create_all()` para poder arrancar en una base nueva. A partir de la primera versión en producción, inicializa migraciones:
+## Paginación y rendimiento
+
+Variables opcionales:
+
+```env
+LIST_PAGE_SIZE=25
+LIST_MAX_PAGE_SIZE=100
+DB_POOL_RECYCLE_SECONDS=1800
+```
+
+## Uploads
+
+Variables:
+
+```env
+MAX_UPLOAD_MB=20
+MAX_FILE_UPLOAD_MB=20
+```
+
+Los uploads se validan por extensión, tamaño y firma/contenido básico.
+
+## Backups
+
+Crear backup manual:
 
 ```bash
-python -m flask --app run db init
-python -m flask --app run db migrate -m "baseline"
-python -m flask --app run db upgrade
+python -m scripts.backup
 ```
 
-Mantén backups antes de cada migración.
-
-## 7. Producción
-
-- Usa una `SECRET_KEY` larga y aleatoria.
-- Activa HTTPS en proxy/hosting.
-- Cambia la contraseña inicial.
-- Configura SMTP para recuperación de contraseña.
-- Configura backups automáticos y prueba restauración.
-- No expongas `.env` ni credenciales en Git.
-
-## 8. Pruebas rápidas
-
-Con las dependencias instaladas:
+Validar backup:
 
 ```bash
-pytest -q
+python -m scripts.restore_backup /ruta/backup.zip
 ```
 
-El smoke test inicia una base SQLite en memoria, crea catálogos/roles, inicia sesión con el superadministrador y verifica las páginas principales.
+Restore de prueba:
+
+```bash
+RESTORE_DATABASE_URL=mysql+pymysql://.../base_temporal \
+python -m scripts.restore_backup /ruta/backup.zip
+```
+
+El script se niega a restaurar si RESTORE_DATABASE_URL coincide con
+DATABASE_URL.
+
+## Healthcheck
+
+```text
+GET /healthz
+```
+
+200:
+```json
+{"status":"ok"}
+```
+
+503:
+```json
+{"status":"degraded"}
+```
+
+## Pruebas
+
+```bash
+python -m pytest -q
+```
+
+El repositorio incluye pruebas de:
+- seguridad;
+- roles y permisos;
+- CRM;
+- ventas;
+- clientes;
+- timeline;
+- renovaciones;
+- dashboards/reportes;
+- notificaciones;
+- catálogos;
+- importación/exportación;
+- backups;
+- planificación;
+- reglas críticas;
+- hardening;
+- aceptación final.
+
+## Cierre de aceptación
+
+En Nexora:
+
+`Configuración -> Aceptación final`
+
+La entrega se considera cerrada únicamente cuando:
+- todas las validaciones automáticas están correctas;
+- todos los criterios manuales están aprobados;
+- no hay criterios rechazados;
+- el reporte de aceptación ha sido exportado.
+
+Documentación complementaria incluida:
+- `DOCUMENTACION_TECNICA_NEXORA_v1.23.txt`
+- `MANUAL_ADMINISTRACION_NEXORA_v1.23.txt`
+- `PLAN_ACEPTACION_FINAL_NEXORA_v1.23.txt`
+
+## Integraciones futuras
+
+La especificación contempla una fase posterior opcional para:
+- email corporativo;
+- WhatsApp Business;
+- telefonía/VoIP;
+- calendarios;
+- conciliación de pagos;
+- almacenamiento cloud;
+- firma electrónica;
+- contabilidad externa.
+
+Estas integraciones no forman parte del cierre del núcleo v1.23.0.

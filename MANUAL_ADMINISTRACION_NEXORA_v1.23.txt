@@ -1,0 +1,186 @@
+IMPACTO NEXORA v1.23.0
+MANUAL BASICO DE ADMINISTRACION
+===============================
+
+1. INGRESO
+----------
+Accede con tu usuario administrativo.
+No compartas credenciales.
+Activa 2FA cuando esté disponible/configurado para tu cuenta.
+
+2. CONFIGURACION
+----------------
+Desde Configuración puedes administrar:
+- Roles y permisos
+- Productos y servicios
+- Catálogos y políticas
+- Centro de Datos
+- Planificación
+- Auditoría de Flujos
+- Aceptación final
+- Backups automáticos
+- Seguridad
+- Auditoría
+
+Evita modificar "Valores técnicos del sistema" sin saber qué proceso depende
+de la clave.
+
+3. USUARIOS Y SEGURIDAD
+-----------------------
+Configuración -> Seguridad
+
+Permite:
+- activar/desactivar usuarios;
+- desbloquear cuentas;
+- revisar 2FA;
+- asignar alcance/permisos;
+- concesiones temporales;
+- revisar auditoría.
+
+Los permisos deben seguir el principio de mínimo acceso necesario.
+
+4. CRM
+------
+Todo contacto nuevo inicia como Seguimiento.
+No crees un Cliente manual para saltarte la conversión comercial si el flujo
+real fue una oportunidad de venta.
+
+Una compra confirmada debe conservar el mismo registro y convertirlo a Cliente.
+
+5. CLIENTES
+-----------
+La ficha centraliza:
+- datos generales;
+- contratos/paquetes;
+- equipo asignado;
+- ventas y pagos;
+- servicios;
+- tareas/proyectos;
+- archivos;
+- timeline.
+
+Archivar conserva historial.
+Eliminar definitivamente debe usarse solo cuando no exista historial relacionado.
+
+6. VENTAS Y PAGOS
+-----------------
+Registra pagos contra la venta correcta.
+Nunca uses un monto negativo para corregir un error.
+
+Para corregir un pago:
+- utiliza Reversar;
+- indica motivo;
+- registra luego el movimiento correcto.
+
+7. PROYECTOS Y TAREAS
+---------------------
+Los proyectos generados desde ventas deben mantener cliente y venta vinculados.
+Un proyecto no puede cerrarse cuando existen requisitos obligatorios pendientes.
+
+8. IMPRENTA
+-----------
+Flujo recomendado:
+Diseño -> Aprobación de diseño -> Aprobación de envío -> Enviado ->
+Recibido o Incidencia.
+
+Tracking es obligatorio salvo entrega local.
+La fecha estimada de recepción es obligatoria al enviar.
+Usa recepción parcial cuando aplique.
+
+9. FINANZAS
+-----------
+Revisa:
+- ingresos;
+- egresos;
+- cuentas por cobrar;
+- cuentas por pagar;
+- comisiones;
+- nómina.
+
+No liquides comisiones o vacaciones con valores de ejemplo.
+Las políticas deben estar definidas por Impacto.
+
+10. RECURSOS HUMANOS
+--------------------
+La marcación original es evidencia.
+Correcciones e incidencias deben conservar trazabilidad.
+
+Las vacaciones deben usar la política/tasa configurada por Impacto.
+
+11. REPORTES
+------------
+Usa filtros antes de exportar.
+Las exportaciones respetan el alcance y permisos del usuario.
+
+12. BACKUPS
+-----------
+Configuración -> Backups automáticos
+
+Verifica periódicamente:
+- estado Activo;
+- última ejecución;
+- último archivo;
+- ausencia de errores.
+
+Antes de cambios importantes:
+Crear respaldo ahora.
+
+Además del backup, debe existir periódicamente un restore drill en una base de
+pruebas separada.
+
+13. AUDITORIA DE FLUJOS
+-----------------------
+Configuración -> Auditoría de Flujos
+
+Ejecuta esta revisión:
+- antes de una entrega;
+- después de migraciones importantes;
+- cuando se sospeche inconsistencia;
+- periódicamente como control interno.
+
+Hallazgos críticos deben corregirse antes de aceptar la versión.
+
+14. ACEPTACION FINAL
+--------------------
+Configuración -> Aceptación final
+
+Cada criterio debe marcarse:
+- Pendiente;
+- Aprobado;
+- Rechazado.
+
+Incluye nota/evidencia cuando sea útil.
+No marques "Aprobado" sin realizar la prueba.
+
+El sistema solo indica LISTO cuando:
+- todas las validaciones automáticas pasan;
+- todos los criterios manuales están aprobados;
+- ninguno está rechazado.
+
+15. OPERACION DIARIA RECOMENDADA
+--------------------------------
+Inicio del día:
+- revisar Notificaciones;
+- revisar Agenda CRM;
+- revisar tareas/proyectos vencidos;
+- revisar cobranza;
+- revisar imprenta atrasada.
+
+Fin del día:
+- validar incidencias importantes;
+- revisar operaciones pendientes;
+- confirmar que no existan errores de backup.
+
+16. CUANDO REPORTAR UN ERROR
+----------------------------
+Conserva:
+- pantalla/módulo;
+- usuario/rol;
+- acción realizada;
+- fecha/hora;
+- X-Request-ID si aparece;
+- captura del mensaje.
+
+No publiques contraseñas, DATABASE_URL ni secretos en tickets/capturas.
+
+FIN DEL MANUAL

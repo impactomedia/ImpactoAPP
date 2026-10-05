@@ -1,0 +1,218 @@
+IMPACTO NEXORA v1.23.0
+DOCUMENTACION TECNICA DE ENTREGA
+================================
+
+1. IDENTIDAD DEL SISTEMA
+------------------------
+Nombre operativo: Impacto Nexora
+Empresa: Impacto Media Agency LLC
+Arquitectura: aplicación web Flask + SQLAlchemy + MySQL
+Repositorio: GitHub
+Runtime / aplicación: Railway
+Base de datos: MySQL en Railway
+Dominio y DNS: Hostinger
+Archivos persistentes y backups lógicos: Railway Volume del servicio ImpactoAPP
+
+2. FLUJO DE DESPLIEGUE
+----------------------
+Código:
+GitHub -> Railway
+
+El repositorio main es la fuente de código desplegable.
+Antes de desplegar:
+1) subir cambios a GitHub;
+2) esperar GitHub Actions;
+3) desplegar únicamente cuando el workflow termine SUCCESS;
+4) validar producción.
+
+Hostinger NO despliega Nexora. Se utiliza únicamente para dominio/DNS.
+
+3. SERVICIOS Y PERSISTENCIA
+---------------------------
+MySQL utiliza su propio volumen gestionado por el servicio MySQL.
+ImpactoAPP utiliza un volumen separado para:
+- uploads;
+- backups lógicos.
+
+Montaje recomendado/actual:
+RAILWAY_VOLUME_MOUNT_PATH=/data
+
+Rutas predeterminadas cuando existe el volumen:
+- /data/uploads
+- /data/backups
+
+No adjuntar mysql-volume al servicio ImpactoAPP.
+
+4. VARIABLES IMPORTANTES
+------------------------
+Obligatorias/recomendadas:
+DATABASE_URL
+SECRET_KEY
+COMPANY_TIMEZONE=America/Managua
+
+Persistencia:
+UPLOAD_FOLDER (opcional; por defecto /data/uploads si hay volume)
+BACKUP_DIR (opcional; por defecto /data/backups si hay volume)
+
+Uploads:
+MAX_UPLOAD_MB=20
+MAX_FILE_UPLOAD_MB=20
+
+Paginación:
+LIST_PAGE_SIZE=25
+LIST_MAX_PAGE_SIZE=100
+
+MySQL:
+DB_POOL_RECYCLE_SECONDS=1800
+
+Correo, si se habilita:
+SMTP_HOST
+SMTP_PORT
+SMTP_USER
+SMTP_PASSWORD
+SMTP_FROM
+SMTP_USE_TLS
+
+Backups:
+BACKUP_RETENTION_DAYS
+BACKUP_MAX_FILES
+AUTO_BACKUP_INITIAL_DELAY_SECONDS
+AUTO_BACKUP_CHECK_SECONDS
+
+5. ARRANQUE
+-----------
+Dockerfile instala dependencias y cliente MySQL.
+
+Comando de arranque:
+python -m scripts.init_db
+gunicorn -w 3 -b 0.0.0.0:${PORT:-5000} wsgi:app
+
+scripts.init_db es idempotente para la estructura inicial existente.
+
+6. HEALTHCHECK
+--------------
+Ruta:
+GET /healthz
+
+Respuesta esperada:
+200 {"status":"ok"}
+
+El healthcheck realiza SELECT 1 contra la base.
+No expone credenciales ni información sensible.
+
+7. SEGURIDAD
+------------
+Controles implementados:
+- login y recuperación de contraseña;
+- roles/permisos;
+- alcance jerárquico;
+- 2FA opcional;
+- bloqueo por intentos fallidos;
+- expiración de sesión;
+- CSRF;
+- cabeceras HTTP de seguridad;
+- CSP;
+- cookies HttpOnly/SameSite/Secure en producción;
+- auditoría;
+- operaciones sensibles con motivo;
+- uploads no públicos;
+- validación de tipo/firma/tamaño de archivo;
+- request ID para diagnóstico.
+
+SECRET_KEY no debe conservar:
+change-this-in-production
+
+8. BACKUPS
+----------
+Backups automáticos:
+Configuración -> Backups automáticos
+
+Predeterminado:
+- diario 02:00;
+- retención 14 días;
+- máximo 30 archivos.
+
+El sistema utiliza:
+- MySQL GET_LOCK para exclusión distribuida;
+- lock de filesystem sobre el Volume;
+- archivo temporal .part + replace atómico.
+
+Backup manual:
+python -m scripts.backup
+
+Validación:
+python -m scripts.restore_backup /ruta/backup.zip
+
+Restore real:
+RESTORE_DATABASE_URL debe apuntar a una base separada.
+El script bloquea restauración cuando el destino coincide con DATABASE_URL.
+
+9. MODULOS PRINCIPALES
+----------------------
+- Dashboard
+- CRM / Seguimientos
+- Pipeline
+- Clientes
+- Ventas y pagos
+- Renovaciones
+- Notificaciones
+- Proyectos
+- Tareas / Kanban
+- Imprenta
+- Finanzas
+- Recursos Humanos
+- Soporte
+- Reportes
+- Configuración
+- Seguridad
+- Auditoría
+- Centro de Datos
+- Backups automáticos
+- Planificación
+- Auditoría de Flujos
+- Aceptación final
+
+10. PANTALLAS DE CONTROL FINAL
+------------------------------
+Configuración -> Auditoría de Flujos
+Detecta inconsistencias de negocio.
+
+Configuración -> Aceptación final
+Registra evidencia de los criterios exigidos antes de entregar el sistema.
+
+11. ACTUALIZACIONES FUTURAS
+---------------------------
+Para cambios de esquema futuros:
+- crear backup antes de migrar;
+- desarrollar en ambiente separado;
+- agregar migración versionada;
+- ejecutar CI;
+- probar restore;
+- aplicar migración primero en ambiente de prueba;
+- desplegar producción solo después de aceptación.
+
+12. INTEGRACIONES FUTURAS
+-------------------------
+La especificación deja como Fase 4 opcional:
+- correo corporativo;
+- WhatsApp Business;
+- telefonía/VoIP;
+- Google/Microsoft Calendar;
+- conciliación de pagos;
+- almacenamiento cloud;
+- firma electrónica;
+- contabilidad externa.
+
+Estas integraciones no forman parte del cierre del núcleo v1.23.0.
+
+13. SOPORTE Y DIAGNOSTICO
+-------------------------
+Ante un error:
+1) anotar fecha/hora;
+2) copiar X-Request-ID si aparece;
+3) revisar Railway Logs;
+4) identificar endpoint/usuario;
+5) reproducir en ambiente de pruebas;
+6) no modificar directamente la base productiva sin backup.
+
+FIN DEL DOCUMENTO

@@ -1,0 +1,147 @@
+{% extends "app_base.html" %}
+{% block title %}Aceptación final | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Impacto Nexora · Bloque 16</span>
+    <h1>Aceptación final y entrega</h1>
+    <p>Checklist oficial previo al cierre de la primera versión productiva de Nexora.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-light border" href="{{ url_for('quality.index') }}">Auditoría de Flujos</a>
+    <a class="btn btn-dark" href="{{ url_for('acceptance.export_report') }}">Exportar reporte</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="metric-card h-100">
+      <span>Automáticas</span>
+      <strong>{{ report.automatic_passed }}/{{ report.automatic_total }}</strong>
+      <small>Validaciones técnicas correctas.</small>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="metric-card h-100">
+      <span>Manuales aprobadas</span>
+      <strong>{{ report.manual_approved }}/{{ report.manual_total }}</strong>
+      <small>Criterios confirmados por administración.</small>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="metric-card h-100">
+      <span>Rechazadas</span>
+      <strong>{{ report.manual_rejected }}</strong>
+      <small>Criterios que requieren corrección.</small>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="metric-card h-100">
+      <span>Estado final</span>
+      <strong>{{ 'LISTO' if report.ready else 'PENDIENTE' }}</strong>
+      <small>{{ 'Todos los criterios están aprobados.' if report.ready else 'Aún faltan evidencias o validaciones.' }}</small>
+    </div>
+  </div>
+</div>
+
+{% if report.ready %}
+<div class="alert alert-success">
+  <strong>Nexora cumple la matriz de aceptación final registrada.</strong>
+  Conserva el reporte exportado junto con la documentación de entrega.
+</div>
+{% else %}
+<div class="alert alert-warning">
+  <strong>La aceptación final todavía está abierta.</strong>
+  No marques un criterio como aprobado hasta haberlo probado realmente.
+</div>
+{% endif %}
+
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div>
+      <h2 class="h5">Validaciones automáticas de producción</h2>
+      <p>Se recalculan cada vez que abres esta pantalla.</p>
+    </div>
+  </div>
+  <div class="row g-3">
+    {% for check in report.automatic_checks %}
+    <div class="col-md-6">
+      <div class="border rounded-4 p-3 h-100">
+        <div class="d-flex justify-content-between gap-3">
+          <div>
+            <strong>{{ check.title }}</strong>
+            <small class="d-block text-secondary mt-1">{{ check.detail }}</small>
+          </div>
+          <span class="badge-soft {{ 'success' if check.passed else 'danger' }}">
+            {{ 'OK' if check.passed else 'Pendiente' }}
+          </span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+{% set ns = namespace(last_category='') %}
+{% for item in report.criteria %}
+  {% if item.category != ns.last_category %}
+    {% if not loop.first %}</div></section>{% endif %}
+    <section class="panel-card mb-4">
+      <div class="panel-header">
+        <div>
+          <h2 class="h5">{{ item.category }}</h2>
+          <p>Criterios de aceptación y evidencia administrativa.</p>
+        </div>
+      </div>
+      <div class="row g-3">
+    {% set ns.last_category = item.category %}
+  {% endif %}
+
+  <div class="col-12" id="{{ item.key }}">
+    <div class="border rounded-4 p-3">
+      <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+        <div>
+          <h3 class="h6 mb-1">{{ item.title }}</h3>
+          <p class="text-secondary mb-0">{{ item.description }}</p>
+        </div>
+        <span class="badge-soft {{ 'success' if item.status=='aprobado' else 'danger' if item.status=='rechazado' else 'warning' }}">
+          {{ item.status|label }}
+        </span>
+      </div>
+
+      <form method="post" action="{{ url_for('acceptance.update_criterion', key=item.key) }}" class="row g-2 align-items-end mt-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="col-md-3">
+          <label class="form-label small">Estado</label>
+          <select name="status" class="form-select">
+            <option value="pendiente" {% if item.status=='pendiente' %}selected{% endif %}>Pendiente</option>
+            <option value="aprobado" {% if item.status=='aprobado' %}selected{% endif %}>Aprobado</option>
+            <option value="rechazado" {% if item.status=='rechazado' %}selected{% endif %}>Rechazado</option>
+          </select>
+        </div>
+        <div class="col-md-7">
+          <label class="form-label small">Evidencia / nota</label>
+          <input name="notes" class="form-control" maxlength="1500" value="{{ item.notes or '' }}" placeholder="Ej.: probado con usuario Asesor, correcto">
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-dark w-100">Guardar</button>
+        </div>
+      </form>
+
+      {% if item.updated_at %}
+      <small class="d-block text-secondary mt-2">
+        Última actualización: {{ item.updated_at }} · {{ item.updated_by or '—' }}
+      </small>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if loop.last %}</div></section>{% endif %}
+{% endfor %}
+
+<div class="alert alert-light border">
+  <strong>Entrega responsable:</strong>
+  los criterios manuales son evidencia de aceptación, no simples indicadores visuales.
+  El restore real debe ejecutarse contra una base temporal separada de producción.
+</div>
+{% endblock %}

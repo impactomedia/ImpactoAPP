@@ -1,0 +1,168 @@
+IMPACTO NEXORA v1.23.0
+BLOQUE 16 - ACEPTACION FINAL Y ENTREGA
+======================================
+
+OBJETIVO
+--------
+Cerrar formalmente la primera versión productiva del núcleo de Impacto Nexora
+contra los criterios de aceptación de la especificación funcional.
+
+Esta versión NO agrega otro módulo de negocio. Agrega herramientas y
+documentación para validar y evidenciar la entrega.
+
+NUEVO: CENTRO DE ACEPTACION FINAL
+---------------------------------
+Ruta:
+Configuración -> Aceptación final
+/acceptance/
+
+Acceso:
+- superadmin
+- admin
+- manager
+
+Incluye:
+- validaciones automáticas de producción;
+- 27 criterios manuales basados en la especificación;
+- estados Pendiente / Aprobado / Rechazado;
+- notas/evidencia por criterio;
+- usuario y fecha de actualización;
+- auditoría de cada cambio;
+- reporte TXT exportable;
+- estado global LISTO únicamente cuando todo está aprobado.
+
+VALIDACIONES AUTOMATICAS
+------------------------
+1. Conectividad real con base de datos.
+2. SECRET_KEY distinta al valor predeterminado.
+3. Almacenamiento persistente detectado.
+4. Backups automáticos activos y con copia existente.
+5. Auditoría de Flujos sin hallazgos críticos.
+6. Instancia actual fuera de TESTING.
+
+Estas validaciones se recalculan al abrir la pantalla.
+
+CRITERIOS MANUALES
+------------------
+Cubren los criterios de aceptación de la especificación:
+- ambiente de pruebas separado;
+- roles/permisos;
+- Seguimiento -> Cliente;
+- cartera/alcance;
+- ventas/saldos/operaciones;
+- ficha del cliente;
+- paquetes/status/asignaciones;
+- jornada/incidencias/vacaciones;
+- reportes;
+- alertas;
+- auditoría;
+- PC/móvil;
+- backup + restore drill;
+- documentación;
+- accesos administrativos;
+- flujo completo de imprenta.
+
+Los criterios manuales NO se autoaprueban.
+
+PERSISTENCIA
+------------
+Los estados de aceptación reutilizan SystemSetting:
+acceptance:v1.23:<criterio>
+
+No requiere nueva tabla ni migración.
+
+Cada modificación crea registro de auditoría:
+actualizar_criterio_aceptacion
+
+DOCUMENTACION ENTREGADA
+-----------------------
+DOCUMENTACION_TECNICA_NEXORA_v1.23.txt
+MANUAL_ADMINISTRACION_NEXORA_v1.23.txt
+PLAN_ACEPTACION_FINAL_NEXORA_v1.23.txt
+
+README.md también se actualiza al estado de entrega v1.23.0.
+
+.env.example se actualiza con variables incorporadas hasta el Bloque 15.
+
+AMBIENTE DE PRUEBAS
+-------------------
+El plan de aceptación explica cómo crear un ambiente Railway separado.
+
+Esto NO se marca automáticamente como cumplido porque requiere una
+infraestructura realmente independiente.
+
+RESTORE DRILL
+-------------
+El restore final debe realizarse contra una base temporal separada.
+
+scripts/restore_backup.py ya:
+- valida el ZIP;
+- exige RESTORE_DATABASE_URL para restaurar;
+- bloquea destino igual a DATABASE_URL;
+- restaura MySQL/SQLite;
+- verifica tablas/integridad.
+
+La v1.23.0 no debilita esa protección.
+
+ARCHIVOS NUEVOS
+---------------
+app/blueprints/acceptance.py
+app/templates/acceptance/index.html
+tests/test_acceptance_final_v123.py
+DOCUMENTACION_TECNICA_NEXORA_v1.23.txt
+MANUAL_ADMINISTRACION_NEXORA_v1.23.txt
+PLAN_ACEPTACION_FINAL_NEXORA_v1.23.txt
+LEEME_v1.23.0_BLOQUE_16.txt
+
+ARCHIVOS A REEMPLAZAR COMPLETOS
+-------------------------------
+app/__init__.py
+app/templates/settings/index.html
+README.md
+.env.example
+
+NO CAMBIA
+---------
+- MySQL schema.
+- Dockerfile.
+- Railway volumes.
+- Backups v1.19.1.
+- Planificación v1.20.
+- Auditoría de Flujos v1.21.
+- Hardening v1.22.
+- Hostinger/DNS.
+
+PRUEBAS NUEVAS
+--------------
+tests/test_acceptance_final_v123.py:
+- Admin abre Centro de Aceptación.
+- Asesor recibe 403.
+- Admin registra criterio con evidencia.
+- Estado inválido recibe 400.
+- Criterio inexistente recibe 404.
+- Reporte final TXT se exporta.
+
+DESPUES DE CI SUCCESS
+---------------------
+1. Desplegar v1.23.0 en Railway.
+2. Abrir Configuración -> Aceptación final.
+3. Confirmar validaciones automáticas.
+4. Crear ambiente de pruebas separado.
+5. Ejecutar restore drill.
+6. Probar criterios restantes.
+7. Marcar cada criterio con evidencia.
+8. Exportar reporte final.
+9. Cuando la pantalla indique LISTO, cerrar oficialmente Nexora v1.
+
+VERSION
+-------
+Subir a GitHub como:
+
+1.23.0 - Impacto Nexora
+
+IMPORTANTE
+----------
+No desplegar en Railway hasta que GitHub Actions termine SUCCESS.
+
+La compilación Python, Jinja, integración estructural e integridad del ZIP se
+validan antes de entregar. El pytest completo se confirma solo en GitHub Actions.

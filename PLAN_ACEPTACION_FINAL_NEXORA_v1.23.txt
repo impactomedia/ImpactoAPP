@@ -1,0 +1,158 @@
+IMPACTO NEXORA v1.23.0
+PLAN DE ACEPTACION FINAL, STAGING Y RESTORE DRILL
+=================================================
+
+OBJETIVO
+--------
+Validar Nexora sin poner en riesgo la base productiva.
+
+A. AMBIENTE DE PRUEBAS SEPARADO
+-------------------------------
+La aceptación final requiere un ambiente separado de producción.
+
+Recomendación en Railway:
+1) Crear un Environment temporal, por ejemplo "staging" o "acceptance".
+2) Desplegar el mismo commit aprobado de GitHub.
+3) Crear/usar una MySQL de pruebas separada.
+4) Nunca reutilizar DATABASE_URL de producción.
+5) Usar una SECRET_KEY distinta.
+6) No conectar el dominio productivo.
+7) Si se prueba restore, el destino debe ser exclusivamente la DB temporal.
+
+El criterio "Ambiente de pruebas separado" se aprueba únicamente después de
+comprobar que el DATABASE_URL del ambiente de prueba no corresponde a la base
+productiva.
+
+B. ROLES
+--------
+Crear usuarios de ejemplo para:
+- Admin/Manager
+- Supervisor
+- Asesor
+- Producción
+
+Probar:
+- menús visibles;
+- acceso permitido;
+- 403 en módulos no autorizados;
+- cartera propia;
+- equipo del supervisor;
+- cliente/tarea asignada para Producción.
+
+C. FLUJO COMERCIAL
+------------------
+1) Crear Seguimiento.
+2) Agregar interacción.
+3) Crear cotización.
+4) Confirmar venta.
+5) Verificar conversión del mismo registro a Cliente.
+6) Verificar venta, pago, saldo/CxC.
+7) Verificar proyecto/tareas u orden de imprenta.
+8) Confirmar timeline.
+
+D. CLIENTES Y PAQUETES
+----------------------
+Validar:
+- modalidades;
+- status;
+- fechas;
+- historial;
+- múltiples asignaciones;
+- documentos;
+- timeline.
+
+E. RR. HH.
+-----------
+Probar:
+- entrada;
+- break;
+- almuerzo;
+- salida;
+- incidencia;
+- corrección/justificación;
+- solicitud de vacaciones;
+- aprobación/cancelación;
+- saldo según política configurada.
+
+F. REPORTES Y ALERTAS
+---------------------
+Crear datos controlados y comprobar:
+- ventas;
+- pagos;
+- tareas;
+- renovaciones;
+- imprenta;
+- exportaciones.
+
+Validar notificaciones de:
+- seguimiento;
+- pago;
+- tarea;
+- renovación.
+
+G. IMPRENTA
+-----------
+Probar:
+1) venta física;
+2) orden;
+3) diseño;
+4) aprobación de diseño;
+5) aprobación de envío;
+6) envío con tracking o entrega local;
+7) fecha estimada;
+8) recepción parcial;
+9) recepción completa;
+10) incidencia de no recibido;
+11) reporte.
+
+H. RESTORE DRILL REAL
+---------------------
+1) En producción, crear/descargar un backup reciente.
+2) Preparar MySQL temporal de pruebas.
+3) Definir en el ambiente de prueba:
+   RESTORE_DATABASE_URL=mysql+pymysql://.../BASE_TEMPORAL
+4) Mantener DATABASE_URL apuntando a producción solo si la ejecución se realiza
+   desde un contexto controlado; preferiblemente ejecutar el script desde
+   staging con DATABASE_URL de staging.
+5) Ejecutar:
+   python -m scripts.restore_backup /ruta/impacto_nexora_....zip
+6) El script debe responder:
+   Restauración de prueba verificada
+   y mostrar table_count > 0.
+7) Abrir staging conectado a la DB restaurada y comprobar:
+   - login;
+   - cliente de muestra;
+   - venta de muestra;
+   - proyecto/tarea;
+   - auditoría.
+8) Eliminar o aislar la DB temporal al terminar.
+
+NUNCA establecer RESTORE_DATABASE_URL igual a DATABASE_URL productiva.
+El script contiene una protección adicional que rechaza esa condición.
+
+I. PC Y MOVIL
+-------------
+Desktop:
+- Chrome/Edge actual.
+
+Móvil:
+- ancho aproximado 390–430 px;
+- sidebar;
+- formularios;
+- tablas en tarjetas;
+- calendario con scroll;
+- ficha de cliente;
+- CRM;
+- tareas;
+- notificaciones.
+
+J. CIERRE
+---------
+1) Abrir Configuración -> Auditoría de Flujos.
+2) Confirmar cero hallazgos críticos.
+3) Abrir Configuración -> Aceptación final.
+4) Registrar evidencia criterio por criterio.
+5) Exportar reporte.
+6) Conservar reporte y documentación con la versión entregada.
+
+FIN
