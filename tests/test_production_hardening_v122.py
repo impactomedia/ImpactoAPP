@@ -182,4 +182,6 @@ def test_mobile_hardening_assets_are_served(client):
     assert css.status_code == 200
     assert js.status_code == 200
     assert b"mobile-card-table" in css.data
-    assert b"data-label" in js.data
+    # El JavaScript usa DOMStringMap: cell.dataset.label genera
+    # el atributo HTML data-label en cada celda.
+    assert b"dataset.label" in js.data
