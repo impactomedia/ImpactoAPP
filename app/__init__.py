@@ -12,6 +12,10 @@ from app.security_controls import init_security_controls
 from app.catalog_runtime import init_catalog_runtime
 from app.extensions import csrf, db, login_manager, migrate
 from app.helpers import human_label, money
+from app.production_hardening import (
+    init_paginated_views,
+    init_production_hardening,
+)
 
 
 def create_app(config_object=Config):
@@ -88,6 +92,7 @@ def create_app(config_object=Config):
     ]:
         app.register_blueprint(blueprint)
 
+    init_production_hardening(app)
     init_catalog_runtime(app)
     init_security_controls(app)
     init_access_control(app)
@@ -119,6 +124,8 @@ def create_app(config_object=Config):
             }:
                 abort(403)
         return None
+
+    init_paginated_views(app)
 
     @app.after_request
     def add_security_headers(response):

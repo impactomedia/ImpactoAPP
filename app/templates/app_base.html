@@ -112,7 +112,12 @@
         </form>
       </div>
     </header>
-    <div class="page-content">{% block app_content %}{% endblock %}</div>
+    <div class="page-content">
+      {% block app_content %}{% endblock %}
+      {% if pagination is defined and pagination %}
+        {% include "_pagination.html" %}
+      {% endif %}
+    </div>
   </main>
 </div>
 

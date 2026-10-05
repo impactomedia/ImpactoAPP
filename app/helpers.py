@@ -3,6 +3,7 @@ import json
 import os
 import secrets
 import smtplib
+import zipfile
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -90,7 +91,6 @@ HUMAN_LABELS = {
     "aprobada": "Aprobada",
     "pagada": "Pagada",
     "anulada": "Anulada",
-    "contactado": "Contactado",
     "renovado": "Renovado",
     "no_renueva": "No renueva",
     "vacaciones": "Vacaciones",
@@ -108,6 +108,23 @@ HUMAN_LABELS = {
     "alta": "Alta",
     "urgente": "Urgente",
 }
+
+
+_ALLOWED_UPLOAD_SUFFIXES = {
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".csv",
+    ".txt",
+}
+
+_LEGACY_OFFICE_MAGIC = bytes.fromhex("D0CF11E0A1B11AE1")
 
 
 def money(value):
@@ -152,28 +169,170 @@ def audit(action, entity, entity_id=None, before=None, after=None, reason=None):
 
 
 def notify(user_id, title, message, link=None, priority="normal"):
-    db.session.add(Notification(user_id=user_id, title=title, message=message, link=link, priority=priority))
+    db.session.add(
+        Notification(
+            user_id=user_id,
+            title=title,
+            message=message,
+            link=link,
+            priority=priority,
+        )
+    )
+
+
+def _stream_size(file_storage):
+    stream = file_storage.stream
+    try:
+        position = stream.tell()
+        stream.seek(0, os.SEEK_END)
+        size = stream.tell()
+        stream.seek(position)
+        return int(size)
+    except Exception:
+        try:
+            stream.seek(0)
+        except Exception:
+            pass
+        return int(file_storage.content_length or 0)
+
+
+def _read_head(file_storage, size=8192):
+    stream = file_storage.stream
+    try:
+        position = stream.tell()
+    except Exception:
+        position = 0
+
+    try:
+        stream.seek(0)
+        head = stream.read(size)
+    finally:
+        try:
+            stream.seek(position)
+        except Exception:
+            try:
+                stream.seek(0)
+            except Exception:
+                pass
+
+    return head or b""
+
+
+def _validate_ooxml(file_storage, suffix):
+    stream = file_storage.stream
+    try:
+        stream.seek(0)
+        with zipfile.ZipFile(stream) as archive:
+            names = set(archive.namelist())
+            if "[Content_Types].xml" not in names:
+                return False
+            if suffix == ".docx":
+                return any(name.startswith("word/") for name in names)
+            if suffix == ".xlsx":
+                return any(name.startswith("xl/") for name in names)
+            return False
+    except (zipfile.BadZipFile, OSError, ValueError):
+        return False
+    finally:
+        try:
+            stream.seek(0)
+        except Exception:
+            pass
+
+
+def _validate_upload_signature(file_storage, suffix):
+    head = _read_head(file_storage)
+
+    if suffix == ".pdf":
+        return head.startswith(b"%PDF-")
+    if suffix == ".png":
+        return head.startswith(b"\x89PNG\r\n\x1a\n")
+    if suffix in {".jpg", ".jpeg"}:
+        return head.startswith(b"\xff\xd8\xff")
+    if suffix == ".webp":
+        return (
+            len(head) >= 12
+            and head.startswith(b"RIFF")
+            and head[8:12] == b"WEBP"
+        )
+    if suffix in {".doc", ".xls"}:
+        return head.startswith(_LEGACY_OFFICE_MAGIC)
+    if suffix in {".docx", ".xlsx"}:
+        return _validate_ooxml(file_storage, suffix)
+    if suffix in {".csv", ".txt"}:
+        if b"\x00" in head:
+            return False
+        try:
+            head.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                head.decode("latin-1")
+            except UnicodeDecodeError:
+                return False
+        return True
+
+    return False
 
 
 def save_upload(file_storage, prefix="file"):
     if not file_storage or not file_storage.filename:
         return None
+
+    original = secure_filename(file_storage.filename)
+    if not original:
+        raise ValueError("El nombre del archivo no es válido")
+
+    suffix = Path(original).suffix.lower()
+    if suffix not in _ALLOWED_UPLOAD_SUFFIXES:
+        raise ValueError("Tipo de archivo no permitido")
+
+    max_mb = int(current_app.config.get("MAX_FILE_UPLOAD_MB", 20))
+    size = _stream_size(file_storage)
+    if size <= 0:
+        raise ValueError("El archivo está vacío")
+    if size > max_mb * 1024 * 1024:
+        raise ValueError(
+            f"El archivo supera el máximo permitido de {max_mb} MB"
+        )
+
+    if not _validate_upload_signature(file_storage, suffix):
+        raise ValueError(
+            "El contenido del archivo no coincide con su extensión o no es válido"
+        )
+
     upload_dir = Path(current_app.config["UPLOAD_FOLDER"])
     upload_dir.mkdir(parents=True, exist_ok=True)
-    original = secure_filename(file_storage.filename)
-    suffix = Path(original).suffix.lower()
-    allowed = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt"}
-    if suffix not in allowed:
-        raise ValueError("Tipo de archivo no permitido")
+
     filename = f"{prefix}_{secrets.token_hex(8)}{suffix}"
-    file_storage.save(upload_dir / filename)
+    final_path = upload_dir / filename
+    temp_path = upload_dir / f".{filename}.{secrets.token_hex(4)}.part"
+
+    try:
+        file_storage.stream.seek(0)
+        file_storage.save(temp_path)
+        os.replace(temp_path, final_path)
+        try:
+            os.chmod(final_path, 0o600)
+        except OSError:
+            pass
+    finally:
+        temp_path.unlink(missing_ok=True)
+        try:
+            file_storage.stream.seek(0)
+        except Exception:
+            pass
+
     return f"uploads/{filename}"
 
 
 def send_email(to_email, subject, body):
     host = current_app.config.get("SMTP_HOST")
     if not host:
-        current_app.logger.warning("SMTP no configurado. Correo para %s: %s", to_email, body)
+        current_app.logger.warning(
+            "SMTP no configurado. Correo para %s: %s",
+            to_email,
+            body,
+        )
         return False
     msg = EmailMessage()
     msg["From"] = current_app.config.get("SMTP_FROM")
@@ -193,5 +352,7 @@ def send_email(to_email, subject, body):
 
 
 def next_code(prefix, model, field="id"):
-    last_id = db.session.query(db.func.max(getattr(model, field))).scalar() or 0
+    last_id = db.session.query(
+        db.func.max(getattr(model, field))
+    ).scalar() or 0
     return f"{prefix}-{int(last_id)+1:05d}"

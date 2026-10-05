@@ -25,9 +25,18 @@ class Config:
         f"sqlite:///{BASE_DIR / 'impacto_manager.db'}",
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": int(os.getenv("DB_POOL_RECYCLE_SECONDS", "1800")),
+    }
+
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_UPLOAD_MB", "20")) * 1024 * 1024
+    MAX_FILE_UPLOAD_MB = int(os.getenv("MAX_FILE_UPLOAD_MB", "20"))
     UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", _DEFAULT_UPLOAD_FOLDER)
     BACKUP_DIR = os.getenv("BACKUP_DIR", _DEFAULT_BACKUP_DIR)
+
+    LIST_PAGE_SIZE = int(os.getenv("LIST_PAGE_SIZE", "25"))
+    LIST_MAX_PAGE_SIZE = int(os.getenv("LIST_MAX_PAGE_SIZE", "100"))
 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
