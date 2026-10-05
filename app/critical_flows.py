@@ -6,7 +6,7 @@ from flask import flash, redirect, request, url_for
 from flask_login import current_user
 
 from app.extensions import db
-from app.models import Client, Payment, PrintOrder, Project, Task
+from app.models import Client, PrintOrder, Project, Task
 
 
 def _required_project_blockers(project_id):
@@ -33,28 +33,6 @@ def init_critical_flow_guards(app):
             return None
 
         endpoint = request.endpoint or ""
-
-        if endpoint == "sales.reverse_payment":
-            payment_id = (request.view_args or {}).get("payment_id")
-            payment = (
-                db.session.get(Payment, payment_id)
-                if payment_id
-                else None
-            )
-            reason = (request.form.get("reason") or "").strip()
-            if payment and payment.status == "confirmado" and not reason:
-                flash(
-                    "El reverso de un pago requiere un motivo para conservar trazabilidad.",
-                    "danger",
-                )
-                if payment.sale:
-                    return redirect(
-                        url_for(
-                            "sales.detail",
-                            sale_id=payment.sale.id,
-                        )
-                    )
-                return redirect(url_for("sales.index"))
 
         if endpoint == "crm.transfer":
             client_id = (request.view_args or {}).get("client_id")

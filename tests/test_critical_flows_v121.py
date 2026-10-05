@@ -229,7 +229,9 @@ def test_reverse_payment_requires_reason(client, app):
         data={},
         follow_redirects=False,
     )
-    assert response.status_code in {302, 303}
+    # Esta regla ya existe en security_controls desde el Bloque 10:
+    # una reversión sensible sin motivo se rechaza con HTTP 400.
+    assert response.status_code == 400
 
     with app.app_context():
         payment = db.session.get(Payment, payment_id)
