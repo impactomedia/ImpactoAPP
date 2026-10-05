@@ -5,9 +5,8 @@ Crea un ZIP con:
 - uploads/ (si existe)
 - manifest.json
 
-En Railway, para persistencia configure un Volume y BACKUP_DIR/UPLOAD_FOLDER
-dentro de ese volumen. El comando termina al finalizar y puede usarse en un
-servicio Cron separado si se desea conservar copias lógicas adicionales.
+La v1.19.1 protege la generación con un lock de filesystem compartido por
+todos los workers que usan el mismo Railway Volume.
 """
 
 from __future__ import annotations
@@ -18,12 +17,22 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Railway/Linux sí dispone de fcntl.
+    fcntl = None
+
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class BackupBusyError(RuntimeError):
+    """Raised when another worker/process already owns the backup lock."""
 
 
 def backup_directory():
@@ -42,18 +51,27 @@ def upload_directory():
     if configured:
         return Path(configured)
     mount = os.getenv("RAILWAY_VOLUME_MOUNT_PATH")
-    return Path(mount) / "uploads" if mount else ROOT / "app" / "static" / "uploads"
+    return (
+        Path(mount) / "uploads"
+        if mount
+        else ROOT / "app" / "static" / "uploads"
+    )
 
 
 def _database_url():
-    return os.getenv("DATABASE_URL", f"sqlite:///{ROOT / 'impacto_manager.db'}")
+    return os.getenv(
+        "DATABASE_URL",
+        f"sqlite:///{ROOT / 'impacto_manager.db'}",
+    )
 
 
 def _mysql_parts(url):
     normalized = url.replace("mysql+pymysql://", "mysql://", 1)
     parsed = urlparse(normalized)
     if parsed.scheme != "mysql":
-        raise ValueError("La URL de base de datos no corresponde a MySQL.")
+        raise ValueError(
+            "La URL de base de datos no corresponde a MySQL."
+        )
     return {
         "host": parsed.hostname or "localhost",
         "port": parsed.port or 3306,
@@ -67,13 +85,46 @@ def _find_mysql_dump():
     return shutil.which("mysqldump") or shutil.which("mariadb-dump")
 
 
+@contextmanager
+def _exclusive_backup_lock(directory):
+    lock_path = directory / ".nexora-backup.lock"
+    handle = lock_path.open("a+b")
+
+    if fcntl is None:
+        # Compatibilidad defensiva para desarrollo fuera de Linux.
+        yield
+        handle.close()
+        return
+
+    try:
+        try:
+            fcntl.flock(
+                handle.fileno(),
+                fcntl.LOCK_EX | fcntl.LOCK_NB,
+            )
+        except BlockingIOError as exc:
+            raise BackupBusyError(
+                "Ya hay otro respaldo de Nexora en ejecución."
+            ) from exc
+
+        yield
+    finally:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        except Exception:
+            pass
+        handle.close()
+
+
 def _dump_database(target):
     url = _database_url()
 
     if url.startswith("sqlite:///"):
         source = Path(url.replace("sqlite:///", "", 1))
         if not source.exists():
-            raise FileNotFoundError(f"No existe la base SQLite: {source}")
+            raise FileNotFoundError(
+                f"No existe la base SQLite: {source}"
+            )
         sqlite_target = target.with_suffix(".sqlite3")
         shutil.copy2(source, sqlite_target)
         return sqlite_target, "sqlite"
@@ -82,7 +133,8 @@ def _dump_database(target):
     exe = _find_mysql_dump()
     if not exe:
         raise RuntimeError(
-            "No se encontró mysqldump/mariadb-dump. La imagen debe incluir default-mysql-client."
+            "No se encontró mysqldump/mariadb-dump. "
+            "La imagen debe incluir default-mysql-client."
         )
 
     sql_target = target.with_suffix(".sql")
@@ -107,13 +159,18 @@ def _dump_database(target):
     ]
 
     with sql_target.open("wb") as handle:
-        subprocess.run(
-            args,
-            stdout=handle,
-            stderr=subprocess.PIPE,
-            check=True,
-            env=env,
-        )
+        try:
+            subprocess.run(
+                args,
+                stdout=handle,
+                stderr=subprocess.PIPE,
+                check=True,
+                env=env,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(
+                "mysqldump no pudo completar el respaldo de MySQL."
+            ) from exc
 
     if sql_target.stat().st_size == 0:
         raise RuntimeError("El dump MySQL quedó vacío.")
@@ -121,9 +178,37 @@ def _dump_database(target):
     return sql_target, "mysql"
 
 
-def _cleanup_retention(directory):
-    days = max(1, int(os.getenv("BACKUP_RETENTION_DAYS", "14")))
-    max_files = max(1, int(os.getenv("BACKUP_MAX_FILES", "30")))
+def _bounded_int(value, default, minimum=1, maximum=3650):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = int(default)
+    return max(minimum, min(maximum, parsed))
+
+
+def _cleanup_retention(
+    directory,
+    *,
+    retention_days=None,
+    max_files=None,
+):
+    days = _bounded_int(
+        retention_days
+        if retention_days is not None
+        else os.getenv("BACKUP_RETENTION_DAYS", "14"),
+        14,
+        1,
+        3650,
+    )
+    limit = _bounded_int(
+        max_files
+        if max_files is not None
+        else os.getenv("BACKUP_MAX_FILES", "30"),
+        30,
+        1,
+        1000,
+    )
+
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     files = sorted(
@@ -133,68 +218,116 @@ def _cleanup_retention(directory):
     )
 
     for index, path in enumerate(files):
-        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
-        if index >= max_files or modified < cutoff:
+        modified = datetime.fromtimestamp(
+            path.stat().st_mtime,
+            tz=timezone.utc,
+        )
+        if index >= limit or modified < cutoff:
             try:
                 path.unlink()
             except FileNotFoundError:
                 pass
 
 
-def create_backup():
+def create_backup(
+    *,
+    retention_days=None,
+    max_files=None,
+    source="manual",
+):
     directory = backup_directory()
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_UTC")
-    final_path = directory / f"impacto_nexora_{stamp}.zip"
 
-    with tempfile.TemporaryDirectory(prefix="nexora_backup_") as temp_name:
-        temp_dir = Path(temp_name)
-        database_file, engine = _dump_database(temp_dir / "database")
+    with _exclusive_backup_lock(directory):
+        stamp = datetime.now(timezone.utc).strftime(
+            "%Y%m%d_%H%M%S_%f_UTC"
+        )
+        final_path = directory / f"impacto_nexora_{stamp}.zip"
+        partial_path = directory / f".{final_path.name}.part"
 
-        uploads = upload_directory()
-        upload_files = []
-        if uploads.exists():
-            upload_files = [
-                path
-                for path in uploads.rglob("*")
-                if path.is_file()
-            ]
-
-        manifest = {
-            "created_at_utc": datetime.now(timezone.utc).isoformat(),
-            "database_engine": engine,
-            "database_file": database_file.name,
-            "upload_file_count": len(upload_files),
-            "upload_root": str(uploads),
-            "contains_secrets": False,
-            "restore_note": (
-                "Use scripts/restore_backup.py contra RESTORE_DATABASE_URL. "
-                "Nunca pruebe una restauración sobre DATABASE_URL de producción."
-            ),
-        }
-
-        with zipfile.ZipFile(final_path, "w", zipfile.ZIP_DEFLATED) as archive:
-            archive.write(database_file, arcname=database_file.name)
-            archive.writestr(
-                "manifest.json",
-                json.dumps(manifest, ensure_ascii=False, indent=2),
+        with tempfile.TemporaryDirectory(
+            prefix="nexora_backup_"
+        ) as temp_name:
+            temp_dir = Path(temp_name)
+            database_file, engine = _dump_database(
+                temp_dir / "database"
             )
 
-            for source in upload_files:
-                relative = source.relative_to(uploads)
-                archive.write(source, arcname=str(Path("uploads") / relative))
+            uploads = upload_directory()
+            upload_files = []
+            if uploads.exists():
+                upload_files = [
+                    path
+                    for path in uploads.rglob("*")
+                    if path.is_file()
+                ]
 
-    with zipfile.ZipFile(final_path, "r") as archive:
-        bad = archive.testzip()
-        if bad:
-            final_path.unlink(missing_ok=True)
-            raise RuntimeError(f"El ZIP generado está corrupto: {bad}")
+            manifest = {
+                "created_at_utc": datetime.now(
+                    timezone.utc
+                ).isoformat(),
+                "database_engine": engine,
+                "database_file": database_file.name,
+                "upload_file_count": len(upload_files),
+                "upload_root": str(uploads),
+                "source": source,
+                "contains_secrets": False,
+                "restore_note": (
+                    "Use scripts/restore_backup.py contra "
+                    "RESTORE_DATABASE_URL. Nunca pruebe una "
+                    "restauración sobre DATABASE_URL de producción."
+                ),
+            }
 
-    _cleanup_retention(directory)
-    return final_path
+            try:
+                with zipfile.ZipFile(
+                    partial_path,
+                    "w",
+                    zipfile.ZIP_DEFLATED,
+                ) as archive:
+                    archive.write(
+                        database_file,
+                        arcname=database_file.name,
+                    )
+                    archive.writestr(
+                        "manifest.json",
+                        json.dumps(
+                            manifest,
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                    )
+
+                    for source_file in upload_files:
+                        relative = source_file.relative_to(uploads)
+                        archive.write(
+                            source_file,
+                            arcname=str(
+                                Path("uploads") / relative
+                            ),
+                        )
+
+                with zipfile.ZipFile(partial_path, "r") as archive:
+                    bad = archive.testzip()
+                    if bad:
+                        raise RuntimeError(
+                            f"El ZIP generado está corrupto: {bad}"
+                        )
+
+                os.replace(partial_path, final_path)
+            except Exception:
+                partial_path.unlink(missing_ok=True)
+                raise
+
+        _cleanup_retention(
+            directory,
+            retention_days=retention_days,
+            max_files=max_files,
+        )
+        return final_path
 
 
 def main():
-    path = create_backup()
+    path = create_backup(source="cli")
     print(path)
 
 

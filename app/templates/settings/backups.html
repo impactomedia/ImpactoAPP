@@ -1,0 +1,152 @@
+{% extends "app_base.html" %}
+{% block title %}Backups automáticos | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Impacto Nexora · v1.19.1</span>
+    <h1>Backups automáticos</h1>
+    <p>Programa copias lógicas diarias de MySQL y archivos sobre el volumen persistente de Nexora.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-light border" href="{{ url_for('data_hub.index') }}#backups">Centro de Datos</a>
+    <form method="post" action="{{ url_for('backup_admin.run_now') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-brand">Crear respaldo ahora</button>
+    </form>
+  </div>
+</div>
+
+{% if status.persistent_storage %}
+<div class="alert alert-success">
+  <strong>Almacenamiento persistente disponible.</strong>
+  {% if status.volume_mount %}
+    Railway Volume detectado en <code>{{ status.volume_mount }}</code>.
+  {% else %}
+    BACKUP_DIR persistente configurado.
+  {% endif %}
+</div>
+{% else %}
+<div class="alert alert-danger">
+  <strong>No hay almacenamiento persistente.</strong>
+  El scheduler no ejecutará copias automáticas hasta que exista un Railway Volume o BACKUP_DIR persistente.
+</div>
+{% endif %}
+
+<div class="row g-4 mb-4">
+  <div class="col-md-6 col-xl-3">
+    <div class="metric-card h-100">
+      <span>Estado</span>
+      <strong>{{ 'Activo' if status.enabled else 'Desactivado' }}</strong>
+      <small>{{ 'Scheduler habilitado' if status.thread_enabled else 'Scheduler de proceso deshabilitado' }}</small>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="metric-card h-100">
+      <span>Hora diaria</span>
+      <strong>{{ status.time }}</strong>
+      <small>{{ status.timezone }}</small>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="metric-card h-100">
+      <span>Último respaldo</span>
+      <strong>{{ status.last_success_local.strftime('%d/%m/%Y') if status.last_success_local else '—' }}</strong>
+      <small>{{ status.last_success_local.strftime('%H:%M') if status.last_success_local else 'Sin ejecución registrada' }}</small>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="metric-card h-100">
+      <span>Próxima ejecución</span>
+      <strong>{{ status.next_run_local.strftime('%d/%m/%Y') if status.next_run_local else '—' }}</strong>
+      <small>{{ status.next_run_local.strftime('%H:%M') if status.next_run_local else 'Desactivado' }}</small>
+    </div>
+  </div>
+</div>
+
+{% if status.last_error %}
+<div class="alert alert-danger">
+  <strong>Último error:</strong> {{ status.last_error }}
+</div>
+{% elif status.last_file %}
+<div class="alert alert-light border">
+  <strong>Último archivo generado:</strong> <code>{{ status.last_file }}</code>
+</div>
+{% endif %}
+
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div>
+      <h2>Política automática</h2>
+      <p>La configuración se guarda en Nexora y no requiere variables nuevas ni modificar código.</p>
+    </div>
+  </div>
+
+  <form method="post" action="{{ url_for('backup_admin.update_policy') }}" class="row g-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="col-md-6 col-xl-3">
+      <label class="form-label">Estado</label>
+      <label class="form-check border rounded-3 p-3">
+        <input class="form-check-input" type="checkbox" name="enabled" {% if status.enabled %}checked{% endif %}>
+        <span class="ms-2">Activar respaldo diario</span>
+      </label>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+      <label class="form-label">Hora local</label>
+      <input class="form-control" type="time" name="backup_time" value="{{ status.time }}" required>
+      <small class="text-secondary">Zona horaria: {{ status.timezone }}</small>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+      <label class="form-label">Retención (días)</label>
+      <input class="form-control" type="number" name="retention_days" min="1" max="365" value="{{ status.retention_days }}" required>
+      <small class="text-secondary">Predeterminado: 14 días.</small>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+      <label class="form-label">Máximo de copias</label>
+      <input class="form-control" type="number" name="max_files" min="1" max="200" value="{{ status.max_files }}" required>
+      <small class="text-secondary">Predeterminado: 30 archivos.</small>
+    </div>
+
+    <div class="col-12">
+      <button class="btn btn-dark">Guardar política</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel-card">
+  <div class="panel-header">
+    <div>
+      <h2>Copias disponibles</h2>
+      <p>Archivos guardados actualmente en el directorio persistente de backups.</p>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead>
+        <tr><th>Archivo</th><th>Fecha</th><th>Tamaño</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for backup in backups %}
+      <tr>
+        <td><code>{{ backup.name }}</code></td>
+        <td>{{ backup.modified.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td>{{ backup.size_mb }} MB</td>
+        <td><a class="btn btn-sm btn-light border" href="{{ url_for('data_hub.backup_download', file_name=backup.name) }}">Descargar</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-center text-secondary py-4">Todavía no hay copias disponibles.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="alert alert-light border mb-0">
+    <strong>Protección contra duplicados:</strong>
+    Nexora usa un lock distribuido de MySQL y un lock adicional sobre el volumen. Aunque Gunicorn ejecute varios workers, solo un proceso puede generar la copia programada.
+  </div>
+</section>
+{% endblock %}
