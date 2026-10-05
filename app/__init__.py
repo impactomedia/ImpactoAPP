@@ -7,6 +7,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 from app.access_control import init_access_control
 from app.backup_scheduler import init_backup_scheduler
+from app.critical_flows import init_critical_flow_guards
 from app.security_controls import init_security_controls
 from app.catalog_runtime import init_catalog_runtime
 from app.extensions import csrf, db, login_manager, migrate
@@ -59,6 +60,7 @@ def create_app(config_object=Config):
     from app.blueprints.data_hub import bp as data_hub_bp
     from app.blueprints.backup_admin import bp as backup_admin_bp
     from app.blueprints.planning import bp as planning_bp
+    from app.blueprints.quality import bp as quality_bp
 
     for blueprint in [
         auth_bp,
@@ -82,6 +84,7 @@ def create_app(config_object=Config):
         data_hub_bp,
         backup_admin_bp,
         planning_bp,
+        quality_bp,
     ]:
         app.register_blueprint(blueprint)
 
@@ -89,6 +92,7 @@ def create_app(config_object=Config):
     init_security_controls(app)
     init_access_control(app)
     init_backup_scheduler(app)
+    init_critical_flow_guards(app)
 
     @app.before_request
     def protect_uploaded_static_files():

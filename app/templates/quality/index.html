@@ -1,0 +1,100 @@
+{% extends "app_base.html" %}
+{% block title %}Auditoría de Flujos | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Impacto Nexora · Bloque 14</span>
+    <h1>Auditoría de Flujos Críticos</h1>
+    <p>Validación de coherencia entre CRM, ventas, operaciones, jerarquía, vacaciones e imprenta.</p>
+  </div>
+  <a class="btn btn-dark" href="{{ url_for('quality.index') }}"><i class="bi bi-arrow-clockwise"></i> Ejecutar auditoría</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="metric-card h-100">
+      <span>Validaciones correctas</span>
+      <strong>{{ audit.passed }}/{{ audit.total_checks }}</strong>
+      <small>Controles sin hallazgos.</small>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="metric-card h-100">
+      <span>Hallazgos críticos</span>
+      <strong>{{ audit.critical }}</strong>
+      <small>Deben corregirse antes de la aceptación final.</small>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="metric-card h-100">
+      <span>Advertencias</span>
+      <strong>{{ audit.warnings }}</strong>
+      <small>Requieren revisión o decisión administrativa.</small>
+    </div>
+  </div>
+</div>
+
+{% if audit.ready %}
+<div class="alert alert-success">
+  <strong>Sin inconsistencias críticas detectadas.</strong>
+  Las advertencias restantes pueden corresponder a configuración pendiente o registros históricos que deben revisarse.
+</div>
+{% else %}
+<div class="alert alert-danger">
+  <strong>La auditoría detectó inconsistencias críticas.</strong>
+  Corrígelas antes de considerar aprobado el flujo integral de producción.
+</div>
+{% endif %}
+
+{% for section in audit.sections %}
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div>
+      <h2>{{ section.name }}</h2>
+      <p>Reglas y consistencia del flujo {{ section.name|lower }}.</p>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    {% for item in section.items %}
+    <div class="col-12">
+      <div class="border rounded-4 p-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+          <div>
+            <h3 class="h6 mb-1">{{ item.title }}</h3>
+            <p class="text-secondary mb-0">{{ item.description }}</p>
+          </div>
+          {% if item.ok %}
+          <span class="badge-soft success">Correcto</span>
+          {% elif item.severity == 'critical' %}
+          <span class="badge-soft danger">{{ item.count }} crítico(s)</span>
+          {% else %}
+          <span class="badge-soft warning">{{ item.count }} advertencia(s)</span>
+          {% endif %}
+        </div>
+
+        {% if item.examples %}
+        <div class="mt-3">
+          <small class="text-secondary d-block mb-1">Ejemplos detectados:</small>
+          <ul class="mb-0">
+            {% for example in item.examples %}
+            <li>{{ example }}</li>
+            {% endfor %}
+          </ul>
+          {% if item.count > item.examples|length %}
+          <small class="text-secondary d-block mt-1">Se muestran los primeros {{ item.examples|length }} de {{ item.count }}.</small>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+<div class="alert alert-light border">
+  <strong>Importante:</strong>
+  este centro no modifica registros automáticamente. Su objetivo es identificar datos o flujos que requieren corrección antes de la entrega final. Las reglas preventivas nuevas sí bloquean operaciones futuras que incumplan requisitos críticos.
+</div>
+{% endblock %}
