@@ -1,0 +1,58 @@
+{% extends "app_base.html" %}
+{% block title %}Incidencias de asistencia | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">RR. HH. · Incidencias</span>
+    <h1>Incidencias de asistencia</h1>
+    <p>Las incidencias se calculan desde las marcaciones reales; justificarlas no borra ni altera el registro original.</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('planning.index') }}">Planificación</a>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a class="btn btn-light border" href="{{ url_for('planning.hr_incidents', period=period.previous) }}">← Mes anterior</a>
+  <span class="btn btn-dark disabled">{{ period.label }}</span>
+  <a class="btn btn-light border" href="{{ url_for('planning.hr_incidents', period=period.next) }}">Mes siguiente →</a>
+</div>
+
+<section class="panel-card">
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Fecha</th><th>Colaborador</th><th>Incidencia</th><th>Detalle</th><th>Estado</th><th>Resolución</th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.day.strftime('%d/%m/%Y') }}</td>
+        <td><strong>{{ row.collaborator.user.name }}</strong></td>
+        <td>{{ row.kind|label }}</td>
+        <td>{{ row.detail }}</td>
+        <td><span class="badge-soft {{ 'success' if row.state in ['justificada','resuelta'] else 'warning' }}">{{ row.state|label }}</span>{% if row.reason %}<small class="d-block text-secondary">{{ row.reason }}</small>{% endif %}</td>
+        <td style="min-width:320px">
+          {% if can_manage %}
+          <form method="post" action="{{ url_for('planning.resolve_hr_incident') }}" class="row g-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="collaborator_id" value="{{ row.collaborator.id }}">
+            <input type="hidden" name="day" value="{{ row.day.isoformat() }}">
+            <input type="hidden" name="kind" value="{{ row.kind }}">
+            <div class="col-4">
+              <select class="form-select form-select-sm" name="status">
+                <option value="justificada">Justificada</option>
+                <option value="resuelta">Resuelta</option>
+                <option value="pendiente">Reabrir</option>
+              </select>
+            </div>
+            <div class="col-5"><input class="form-control form-control-sm" name="reason" placeholder="Motivo"></div>
+            <div class="col-3"><button class="btn btn-sm btn-dark w-100">Guardar</button></div>
+          </form>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center py-4 text-secondary">No hay incidencias detectadas en este período.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

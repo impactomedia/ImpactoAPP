@@ -58,6 +58,7 @@ def create_app(config_object=Config):
     from app.blueprints.reports import bp as reports_bp
     from app.blueprints.data_hub import bp as data_hub_bp
     from app.blueprints.backup_admin import bp as backup_admin_bp
+    from app.blueprints.planning import bp as planning_bp
 
     for blueprint in [
         auth_bp,
@@ -80,6 +81,7 @@ def create_app(config_object=Config):
         reports_bp,
         data_hub_bp,
         backup_admin_bp,
+        planning_bp,
     ]:
         app.register_blueprint(blueprint)
 

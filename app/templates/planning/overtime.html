@@ -1,0 +1,58 @@
+{% extends "app_base.html" %}
+{% block title %}Horas extra | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">RR. HH. · Horas extra</span>
+    <h1>Tiempo adicional</h1>
+    <p>El sistema detecta tiempo posterior al horario, pero solo una aprobación administrativa lo convierte en horas extra aprobadas.</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('planning.index') }}">Planificación</a>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a class="btn btn-light border" href="{{ url_for('planning.overtime', period=period.previous) }}">← Mes anterior</a>
+  <span class="btn btn-dark disabled">{{ period.label }}</span>
+  <a class="btn btn-light border" href="{{ url_for('planning.overtime', period=period.next) }}">Mes siguiente →</a>
+</div>
+
+<section class="panel-card">
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Fecha</th><th>Colaborador</th><th>Detectado</th><th>Aprobado</th><th>Estado</th><th>Validación</th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.day.strftime('%d/%m/%Y') }}</td>
+        <td><strong>{{ row.collaborator.user.name }}</strong></td>
+        <td>{{ row.detected_minutes }} min</td>
+        <td>{{ row.approved_minutes or 0 }} min</td>
+        <td><span class="badge-soft {{ 'success' if row.status=='aprobada' else 'danger' if row.status=='rechazada' else 'warning' }}">{{ row.status|label }}</span>{% if row.reason %}<small class="d-block text-secondary">{{ row.reason }}</small>{% endif %}</td>
+        <td style="min-width:380px">
+          {% if can_manage %}
+          <form method="post" action="{{ url_for('planning.overtime_decision') }}" class="row g-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="collaborator_id" value="{{ row.collaborator.id }}">
+            <input type="hidden" name="day" value="{{ row.day.isoformat() }}">
+            <div class="col-3">
+              <select class="form-select form-select-sm" name="status">
+                <option value="aprobada">Aprobar</option>
+                <option value="rechazada">Rechazar</option>
+                <option value="pendiente">Reabrir</option>
+              </select>
+            </div>
+            <div class="col-2"><input class="form-control form-control-sm" type="number" min="0" name="approved_minutes" value="{{ row.detected_minutes }}"></div>
+            <div class="col-4"><input class="form-control form-control-sm" name="reason" placeholder="Motivo"></div>
+            <div class="col-3"><button class="btn btn-sm btn-dark w-100">Guardar</button></div>
+          </form>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center py-4 text-secondary">No se detectó tiempo adicional en este período.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

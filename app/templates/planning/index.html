@@ -1,0 +1,70 @@
+{% extends "app_base.html" %}
+{% block title %}Planificación y control | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Impacto Nexora · Bloque 13</span>
+    <h1>Planificación y control</h1>
+    <p>Pantallas complementarias requeridas por la especificación funcional.</p>
+  </div>
+</div>
+
+<div class="row g-4">
+  {% if can_crm %}
+  <div class="col-md-6 col-xl-4">
+    <a class="panel-card d-block h-100" href="{{ url_for('planning.crm_agenda') }}">
+      <h2 class="h5"><i class="bi bi-calendar-check"></i> Agenda CRM</h2>
+      <p>Próximos seguimientos, vencidos y contactos programados.</p>
+    </a>
+  </div>
+  {% endif %}
+
+  {% if can_goals %}
+  <div class="col-md-6 col-xl-4">
+    <a class="panel-card d-block h-100" href="{{ url_for('planning.sales_goals') }}">
+      <h2 class="h5"><i class="bi bi-bullseye"></i> Metas comerciales</h2>
+      <p>Meta mensual por asesor y avance de ventas confirmadas en USD.</p>
+    </a>
+  </div>
+  {% endif %}
+
+  {% if can_hr %}
+  <div class="col-md-6 col-xl-4">
+    <a class="panel-card d-block h-100" href="{{ url_for('planning.hr_calendar') }}">
+      <h2 class="h5"><i class="bi bi-calendar3"></i> Calendario RR. HH.</h2>
+      <p>Vacaciones, permisos y ausencias según tu alcance.</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-4">
+    <a class="panel-card d-block h-100" href="{{ url_for('planning.hr_incidents') }}">
+      <h2 class="h5"><i class="bi bi-exclamation-triangle"></i> Incidencias</h2>
+      <p>Tardanzas, marcaciones incompletas, pausas excesivas y ausencias.</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-4">
+    <a class="panel-card d-block h-100" href="{{ url_for('planning.overtime') }}">
+      <h2 class="h5"><i class="bi bi-clock-history"></i> Horas extra</h2>
+      <p>Tiempo adicional detectado y validación administrativa.</p>
+    </a>
+  </div>
+  {% endif %}
+
+  {% if can_finance %}
+  <div class="col-md-6 col-xl-4">
+    <a class="panel-card d-block h-100" href="{{ url_for('planning.recurring_expenses') }}">
+      <h2 class="h5"><i class="bi bi-arrow-repeat"></i> Gastos recurrentes</h2>
+      <p>Egresos y cuentas por pagar marcadas como recurrentes.</p>
+    </a>
+  </div>
+  {% endif %}
+
+  {% if can_operations %}
+  <div class="col-md-6 col-xl-4">
+    <a class="panel-card d-block h-100" href="{{ url_for('planning.operations_calendar') }}">
+      <h2 class="h5"><i class="bi bi-calendar-event"></i> Calendario de entregas</h2>
+      <p>Vencimientos de proyectos y tareas según tu alcance.</p>
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

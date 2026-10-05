@@ -71,6 +71,10 @@
       <a class="nav-item {% if request.endpoint == 'hr.my_day' %}active{% endif %}" href="{{ url_for('hr.my_day') }}"><i class="bi bi-clock"></i> Mi jornada</a>
       {% endif %}
 
+      {% if current_user.collaborator or current_user.has_permission('crm.view') or current_user.has_permission('projects.view') or current_user.has_permission('tasks.view') or current_user.has_permission('finance.view') %}
+      <a class="nav-item {% if request.blueprint == 'planning' %}active{% endif %}" href="{{ url_for('planning.index') }}"><i class="bi bi-calendar3"></i> Planificación</a>
+      {% endif %}
+
       {% if current_user.has_permission('reports.view') %}
       <a class="nav-item {% if request.blueprint == 'reports' %}active{% endif %}" href="{{ url_for('reports.index') }}"><i class="bi bi-bar-chart"></i> Reportes</a>
       {% endif %}

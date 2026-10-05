@@ -1,0 +1,42 @@
+{% extends "app_base.html" %}
+{% block title %}Agenda CRM | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">CRM · Agenda</span>
+    <h1>Próximos seguimientos</h1>
+    <p>Contactos programados dentro de tu cartera o equipo autorizado.</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('planning.index') }}">Planificación</a>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a class="btn btn-light border" href="{{ url_for('planning.crm_agenda', period=period.previous) }}">← Mes anterior</a>
+  <span class="btn btn-dark disabled">{{ period.label }}</span>
+  <a class="btn btn-light border" href="{{ url_for('planning.crm_agenda', period=period.next) }}">Mes siguiente →</a>
+</div>
+
+<section class="panel-card">
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Fecha</th><th>Negocio</th><th>Contacto</th><th>Tipo</th><th>Asunto / resultado</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+      {% set item = row.interaction %}
+      <tr>
+        <td><strong>{{ item.next_followup_at.strftime('%d/%m/%Y') }}</strong><small class="d-block text-secondary">{{ item.next_followup_at.strftime('%H:%M') }}</small></td>
+        <td>{{ item.client.business_name }}</td>
+        <td>{{ item.client.contact_name }}<small class="d-block text-secondary">{{ item.client.phone or item.client.email or '—' }}</small></td>
+        <td>{{ item.interaction_type|label }}</td>
+        <td>{{ item.subject or item.result or item.notes or '—' }}</td>
+        <td><span class="badge-soft {{ 'danger' if row.state=='vencido' else 'warning' if row.state=='hoy' else 'info' }}">{{ row.state|label }}</span></td>
+        <td><a class="btn btn-sm btn-light border" href="{{ url_for('crm.detail', client_id=item.client_id) }}">Abrir</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="text-center py-4 text-secondary">No hay seguimientos programados en este mes.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "app_base.html" %}
+{% block title %}Gastos recurrentes | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Finanzas · Recurrentes</span>
+    <h1>Gastos recurrentes</h1>
+    <p>Vista consolidada de egresos y obligaciones recurrentes.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-light border" href="{{ url_for('planning.index') }}">Planificación</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('finance.expenses') }}">Egresos</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('finance.payables') }}">Cuentas por pagar</a>
+  </div>
+</div>
+
+<section class="panel-card">
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Origen</th><th>Proveedor / beneficiario</th><th>Concepto</th><th>Monto</th><th>Próximo vencimiento</th><th>Estado</th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.source }}</td>
+        <td><strong>{{ row.name }}</strong></td>
+        <td>{{ row.concept }}</td>
+        <td>{{ row.amount|money }} {{ row.currency }}</td>
+        <td>{{ row.due.strftime('%d/%m/%Y') if row.due else 'Sin fecha' }}</td>
+        <td><span class="badge-soft {{ 'success' if row.status in ['pagado','activo'] else 'warning' }}">{{ row.status|label }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center py-4 text-secondary">No hay gastos recurrentes configurados.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

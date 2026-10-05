@@ -1,0 +1,44 @@
+{% extends "app_base.html" %}
+{% block title %}Calendario RR. HH. | Impacto Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">RR. HH. · Calendario</span>
+    <h1>Calendario de personal</h1>
+    <p>Vacaciones, permisos y ausencias dentro de tu alcance.</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('planning.index') }}">Planificación</a>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a class="btn btn-light border" href="{{ url_for('planning.hr_calendar', period=period.previous) }}">← Mes anterior</a>
+  <span class="btn btn-dark disabled">{{ period.label }}</span>
+  <a class="btn btn-light border" href="{{ url_for('planning.hr_calendar', period=period.next) }}">Mes siguiente →</a>
+</div>
+
+<section class="panel-card">
+  <div class="table-responsive">
+    <table class="table table-bordered align-middle calendar-table">
+      <thead><tr>{% for label in ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'] %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for week in period.weeks %}
+      <tr>
+        {% for day in week %}
+        <td style="min-width:150px;height:120px;vertical-align:top;opacity:{{ '1' if day.month==period.start.month else '.45' }}">
+          <strong>{{ day.day }}</strong>
+          {% for event in events.get(day.isoformat(), []) %}
+          <div class="border rounded-3 p-1 mt-1 small">
+            <strong>{{ event.title }}</strong>
+            <span class="d-block">{{ event.type|label }}</span>
+            <span class="badge-soft {{ 'success' if event.status=='aprobada' else 'warning' }}">{{ event.status|label }}</span>
+          </div>
+          {% endfor %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
