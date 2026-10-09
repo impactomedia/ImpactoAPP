@@ -7,7 +7,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
       <div class="brand-symbol">NX</div>
-      <div class="brand-meta"><strong>Nexora</strong><span>Plataforma integral de gestión</span><span class="brand-chip"><i class="bi bi-stars"></i> Interfaz renovada</span></div>
+      <div class="brand-meta"><strong>Nexora</strong><span>Plataforma integral de gestión</span></div>
     </div>
 
     <nav class="sidebar-nav">
@@ -252,20 +252,5 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 {% endif %}
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const sidebar = document.getElementById('sidebar');
-  const toggle = document.getElementById('sidebarToggle');
-  if (sidebar && toggle) {
-    toggle.addEventListener('click', () => sidebar.classList.toggle('is-open'));
-    document.addEventListener('click', (event) => {
-      if (window.innerWidth > 991) return;
-      if (!sidebar.classList.contains('is-open')) return;
-      const insideSidebar = sidebar.contains(event.target);
-      const insideToggle = toggle.contains(event.target);
-      if (!insideSidebar && !insideToggle) sidebar.classList.remove('is-open');
-    });
-  }
-});
-</script>
+
 {% endblock %}
