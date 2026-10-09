@@ -1,11 +1,11 @@
 {% extends "app_base.html" %}
-{% block title %}Inicio | Impacto Nexora{% endblock %}
+{% block title %}Inicio | Nexora{% endblock %}
 {% block app_content %}
 {% set role_name = current_user.role.name if current_user.role else '' %}
 
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Impacto Nexora · Bloque 8</span>
+    <span class="eyebrow">Panel principal</span>
     <h1>{{ role_dashboard.title if role_dashboard else 'Resumen de operación' }}</h1>
     <p>{{ role_dashboard.subtitle if role_dashboard else 'Información disponible según tu rol y permisos.' }}</p>
   </div>

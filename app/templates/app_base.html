@@ -6,8 +6,8 @@
 <div class="app-shell">
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-      <div class="brand-symbol">IM</div>
-      <div><strong>Impacto</strong><span>Manager</span></div>
+      <div class="brand-symbol">NX</div>
+      <div class="brand-meta"><strong>Nexora</strong><span>Plataforma integral de gestión</span><span class="brand-chip"><i class="bi bi-stars"></i> Interfaz renovada</span></div>
     </div>
 
     <nav class="sidebar-nav">
@@ -98,12 +98,12 @@
 
   <main class="main-area">
     <header class="topbar">
-      <button class="btn d-lg-none" id="sidebarToggle"><i class="bi bi-list"></i></button>
+      <button class="btn btn-light border d-lg-none" id="sidebarToggle" type="button"><i class="bi bi-list"></i></button>
       <form class="global-search d-none d-md-flex" action="{{ url_for('dashboard.search') }}" method="get">
         <i class="bi bi-search"></i>
-        <input class="border-0 bg-transparent" name="q" placeholder="Buscar información disponible..." style="min-width:320px;outline:none">
+        <input class="border-0 bg-transparent flex-grow-1" name="q" placeholder="Buscar clientes, ventas, proyectos, tickets..." style="min-width:320px;outline:none">
       </form>
-      <div class="top-actions ms-auto">
+      <div class="top-actions ms-auto d-flex align-items-center gap-2">
         <a class="btn btn-light border position-relative" href="{{ url_for('notifications.index') }}" title="Centro de Notificaciones"><i class="bi bi-bell"></i>{% if unread_notifications %}<span class="notif-badge">{{ unread_notifications }}</span>{% endif %}</a>
         <a class="btn btn-light border" href="{{ url_for('auth.profile') }}"><i class="bi bi-person-circle"></i></a>
         <form method="post" action="{{ url_for('auth.logout') }}" class="d-inline">
@@ -251,4 +251,21 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 {% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const sidebar = document.getElementById('sidebar');
+  const toggle = document.getElementById('sidebarToggle');
+  if (sidebar && toggle) {
+    toggle.addEventListener('click', () => sidebar.classList.toggle('is-open'));
+    document.addEventListener('click', (event) => {
+      if (window.innerWidth > 991) return;
+      if (!sidebar.classList.contains('is-open')) return;
+      const insideSidebar = sidebar.contains(event.target);
+      const insideToggle = toggle.contains(event.target);
+      if (!insideSidebar && !insideToggle) sidebar.classList.remove('is-open');
+    });
+  }
+});
+</script>
 {% endblock %}
