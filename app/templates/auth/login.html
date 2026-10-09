@@ -1,21 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Acceso | Nexora{% endblock %}
+{% block title %}Acceso | Impacto Nexora{% endblock %}
 {% block content %}
 <div class="login-shell">
   <section class="login-brand">
-    <div>
-      <span class="eyebrow">Plataforma empresarial</span>
-      <h1>Nexora</h1>
+    <div class="nexora-login-identity">
+      <img class="nexora-login-orbit" src="{{ url_for('static', filename='img/impacto-nexora-icon.png') }}" alt="" width="126" height="126">
+      <span class="eyebrow">IMPACTO MEDIA AGENCY</span>
+      <h1>Impacto <span>Nexora</span></h1>
       <p>
-        Sistema integral para CRM, clientes, ventas, proyectos, imprenta, finanzas,
-        operaciones y gestión de colaboradores, con una experiencia más moderna,
-        clara y profesional.
+        Un ecosistema donde los clientes, las personas y los procesos se conectan.
+        Gestiona CRM, ventas, proyectos, operaciones y finanzas desde un solo lugar.
       </p>
     </div>
   </section>
 
   <section class="login-form">
     <div class="login-card">
+      <img class="nexora-login-wordmark" src="{{ url_for('static', filename='img/impacto-nexora-logo.png') }}" alt="Impacto Nexora" width="330" height="110">
       <span class="eyebrow">Acceso seguro</span>
       <h2 class="mt-3">Bienvenido</h2>
       <p class="text-secondary mb-4">Ingresa con tus credenciales para acceder a tu panel de trabajo.</p>
