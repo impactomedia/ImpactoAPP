@@ -47,6 +47,7 @@ def create_app(config_object=Config):
     from app.blueprints.dashboard import bp as dashboard_bp
     from app.blueprints.crm import bp as crm_bp
     from app.blueprints.clients import bp as clients_bp
+    from app.blueprints.client_identity import bp as client_identity_bp, primary_client_logo
     from app.blueprints.clients_v3 import bp as clients_v3_bp
     from app.blueprints.clients_import import bp as clients_import_bp
     from app.blueprints.sales import bp as sales_bp
@@ -72,6 +73,7 @@ def create_app(config_object=Config):
         dashboard_bp,
         crm_bp,
         clients_bp,
+        client_identity_bp,
         clients_v3_bp,
         clients_import_bp,
         sales_bp,
@@ -93,6 +95,8 @@ def create_app(config_object=Config):
         acceptance_bp,
     ]:
         app.register_blueprint(blueprint)
+
+    app.jinja_env.globals["primary_client_logo"] = primary_client_logo
 
     init_production_hardening(app)
     init_catalog_runtime(app)

@@ -120,6 +120,9 @@
     </header>
     <div class="page-content">
       {% block app_content %}{% endblock %}
+      {% if client is defined and request.endpoint in ['clients.detail', 'clients_v3.coordination'] %}
+        {% include 'clients/_identity_overview.html' %}
+      {% endif %}
       {% if pagination is defined and pagination %}
         {% include "_pagination.html" %}
       {% endif %}
