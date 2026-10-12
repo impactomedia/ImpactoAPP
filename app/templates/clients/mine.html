@@ -1,14 +1,14 @@
 {% extends "app_base.html" %}
-{% block title %}Mis clientes | Impacto Manager{% endblock %}
+{% block title %}Clientes asignados | Impacto Nexora{% endblock %}
 {% block app_content %}
 {% set role_name = current_user.role.name if current_user.role else '' %}
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Clientes V2 · Fase 3</span>
-    <h1>{{ 'Clientes de Desarrollo' if role_name == 'development_coordinator' else 'Mis clientes' }}</h1>
-    <p>{{ 'Clientes vinculados a proyectos y asignaciones del equipo de Desarrollo.' if role_name == 'development_coordinator' else 'Clientes vinculados a tu cartera comercial o a tu equipo operativo activo.' }}</p>
+    <span class="eyebrow">Cartera y asignaciones</span>
+    <h1>{{ 'Clientes de Desarrollo' if role_name == 'development_coordinator' else ('Clientes asignados (consulta)' if role_name == 'developer' else 'Mis clientes') }}</h1>
+    <p>{{ 'Clientes vinculados a proyectos y asignaciones del equipo de Desarrollo.' if role_name == 'development_coordinator' else ('Acceso de solo lectura a los datos de clientes vinculados a tus tareas y asignaciones.' if role_name == 'developer' else 'Clientes vinculados a tu cartera comercial o a tu equipo operativo activo.') }}</p>
   </div>
-  {% if role_name not in ['production','development_coordinator'] %}
+  {% if role_name not in ['production','developer','development_coordinator'] %}
   <div class="d-flex gap-2"><a class="btn btn-light border" href="{{ url_for('clients.index') }}">Todos los clientes</a></div>
   {% endif %}
 </div>
@@ -37,7 +37,7 @@
           </td>
           <td>{{ c.contracts|selectattr('status','equalto','activo')|list|length }}</td>
           <td>{% if alert_count_map.get(c.id, 0) %}<span class="badge-soft warning">{{ alert_count_map.get(c.id) }} pendiente(s)</span>{% else %}<span class="badge-soft success">Sin alertas</span>{% endif %}</td>
-          <td><div class="d-flex flex-wrap gap-1">{% if c.id in full_detail_ids %}<a class="btn btn-sm btn-light border" href="{{ url_for('clients.detail', client_id=c.id) }}">Ficha</a>{% endif %}<a class="btn btn-sm btn-brand" href="{{ url_for('clients_v3.coordination', client_id=c.id) }}">Coordinar</a></div></td>
+          <td><div class="d-flex flex-wrap gap-1">{% if c.id in full_detail_ids %}<a class="btn btn-sm btn-light border" href="{{ url_for('clients.detail', client_id=c.id) }}">Ficha</a>{% endif %}<a class="btn btn-sm btn-brand" href="{{ url_for('clients_v3.coordination', client_id=c.id) }}">{{ 'Consultar' if role_name == 'developer' else 'Coordinar' }}</a></div></td>
         </tr>
       {% else %}<tr><td colspan="6" class="text-center text-secondary py-5">No tienes clientes asignados actualmente.</td></tr>{% endfor %}
       </tbody>

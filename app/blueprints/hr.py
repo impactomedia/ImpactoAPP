@@ -27,6 +27,22 @@ bp = Blueprint("hr", __name__, url_prefix="/hr")
 MARK_TYPES = ["entrada", "break_inicio", "break_fin", "almuerzo_inicio", "almuerzo_fin", "salida"]
 LEAVE_TYPES = {"vacaciones", "permiso", "ausencia"}
 
+# Perfil profesional predeterminado: cargo y área se derivan del rol del usuario.
+ROLE_PROFILES = {
+    "superadmin": ("Superadministrador", "Administración"),
+    "admin": ("Administración", "Administración"),
+    "manager": ("Gerencia", "Gerencia"),
+    "hr": ("Recursos Humanos", "Recursos Humanos"),
+    "supervisor": ("Supervisor / Coordinador", "Coordinación Comercial"),
+    "advisor": ("Asesor(a) de Ventas", "Ventas"),
+    "developer": ("Desarrollador", "Desarrollo"),
+    "development_coordinator": ("Coordinador de Desarrollo", "Desarrollo"),
+    "production": ("Operaciones / Producción", "Operaciones"),
+    "finance": ("Contabilidad / Finanzas", "Finanzas"),
+    "audit": ("Consulta / Auditoría", "Auditoría"),
+}
+
+
 
 def _role_name():
     return current_user.role.name if current_user.role else ""
@@ -113,6 +129,9 @@ def collaborators():
         if not role or not role.active:
             flash("Selecciona un rol válido y activo.", "danger")
             return redirect(url_for("hr.collaborators"))
+        # Nadie puede ascenderse a roles críticos mediante un POST manual.
+        if role.name in {"superadmin", "admin", "manager"} and not current_user.is_superadmin:
+            abort(403)
         if len(password) < 8:
             flash("La contraseña inicial debe tener al menos 8 caracteres.", "danger")
             return redirect(url_for("hr.collaborators"))
@@ -120,7 +139,7 @@ def collaborators():
             flash("Ya existe un usuario con ese correo.", "danger")
             return redirect(url_for("hr.collaborators"))
 
-        advisor_project_id = request.form.get("advisor_project_id", type=int)
+        advisor_project_id = request.form.get("advisor_project_id", type=int) if role.name == "advisor" else None
         if role.name == "advisor" and not advisor_project_id:
             flash("Los asesores deben pertenecer al proyecto IMPACTO o NOVAX.", "warning")
             return redirect(url_for("hr.collaborators"))
@@ -140,6 +159,8 @@ def collaborators():
             flash("El salario base no puede ser negativo.", "danger")
             return redirect(url_for("hr.collaborators"))
 
+        # Cargo y departamento nunca se confían al navegador.
+        job_title, department = ROLE_PROFILES.get(role.name, (role.label or "Colaborador", "General"))
         user = User(name=name, email=email, role=role, active=True)
         user.set_password(password)
         db.session.add(user)
@@ -150,8 +171,8 @@ def collaborators():
             code=next_code("COL", Collaborator),
             phone=request.form.get("phone"),
             corporate_email=email,
-            job_title=(request.form.get("job_title") or "Colaborador").strip(),
-            department=(request.form.get("department") or "").strip() or None,
+            job_title=job_title,
+            department=department,
             advisor_project_id=advisor_project_id,
             supervisor_id=supervisor_id,
             join_date=_parse_date(request.form.get("join_date")) or date.today(),

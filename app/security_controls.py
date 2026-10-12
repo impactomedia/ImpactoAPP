@@ -33,6 +33,7 @@ BUILTIN_ROLES = {
     "supervisor",
     "advisor",
     "development_coordinator",
+    "developer",
     "production",
     "finance",
     "audit",
@@ -177,7 +178,7 @@ def default_permission_scope(role_name, permission_code):
         return "team"
     if role_name == "advisor":
         return "own"
-    if role_name in {"production", "development_coordinator"}:
+    if role_name in {"production", "developer", "development_coordinator"}:
         return "assigned"
     if role_name == "hr":
         return "hr"

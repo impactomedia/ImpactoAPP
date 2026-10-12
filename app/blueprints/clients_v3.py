@@ -112,7 +112,7 @@ def _assignable_collaborators():
 def _full_detail_ids(clients):
     role = _role_name()
     collaborator = current_user.collaborator
-    if role in {"production", DEVELOPMENT_COORDINATOR_ROLE}:
+    if role in {"production", "developer", DEVELOPMENT_COORDINATOR_ROLE}:
         return set()
     if role == "advisor" and collaborator:
         return {client.id for client in clients if client.owner_id == collaborator.id}
@@ -127,7 +127,7 @@ def _visible_assignment_query(client_id, include_active=True):
     role = _role_name()
     collaborator = current_user.collaborator
 
-    if role == "production":
+    if role in {"production", "developer"}:
         if not collaborator:
             return query.filter(ClientTeamAssignment.id == -1)
         query = query.filter(ClientTeamAssignment.collaborator_id == collaborator.id)
@@ -274,7 +274,7 @@ def coordination(client_id):
 
     role = _role_name()
     collaborator = current_user.collaborator
-    if role in {"production", DEVELOPMENT_COORDINATOR_ROLE}:
+    if role in {"production", "developer", DEVELOPMENT_COORDINATOR_ROLE}:
         can_open_full_detail = False
     elif role == "advisor" and collaborator:
         can_open_full_detail = client.owner_id == collaborator.id

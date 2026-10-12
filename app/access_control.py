@@ -271,7 +271,7 @@ def _task_allowed(task):
 
     # Un colaborador de Producción ve únicamente tareas que están asignadas
     # directamente a él o donde participa como colaborador.
-    if role == "production":
+    if role in {"production", "developer"}:
         return False
 
     return False
@@ -290,7 +290,7 @@ def _task_write_allowed(task):
     if role == DEVELOPMENT_COORDINATOR_ROLE:
         return _task_allowed(task)
 
-    if role in {"production", "hr"}:
+    if role in {"production", "developer", "hr"}:
         return task.assignee_id == collaborator.id or collaborator in task.collaborators
 
     return False
@@ -320,7 +320,7 @@ def _enforce_record_scope(endpoint):
 
     # El Coordinador de Desarrollo trabaja desde el Centro de coordinación,
     # nunca desde la ficha comercial completa.
-    if request.blueprint == "clients" and role == DEVELOPMENT_COORDINATOR_ROLE:
+    if request.blueprint == "clients" and role in {DEVELOPMENT_COORDINATOR_ROLE, "developer"}:
         abort(403)
 
     # Clientes: las rutas por ID respetan la misma cartera comercial.

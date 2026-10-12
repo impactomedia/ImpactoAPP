@@ -25,7 +25,7 @@ def _client_scope(query):
         allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
         return query.filter(Client.owner_id.in_(allowed_ids))
 
-    if role in {"production", DEVELOPMENT_COORDINATOR_ROLE}:
+    if role in {"production", "developer", DEVELOPMENT_COORDINATOR_ROLE}:
         allowed_ids = [row[0] for row in my_clients_query().with_entities(Client.id).all()]
         return query.filter(Client.id.in_(allowed_ids or [-1]))
 
@@ -45,6 +45,9 @@ def _task_scope(query):
             (Task.assignee_id.in_(allowed_ids))
             | Task.collaborators.any(Collaborator.id.in_(allowed_ids))
         )
+
+    if role == "developer" and not collaborator:
+        return query.filter(Task.id == -1)
 
     if role not in {"superadmin", "admin", "manager"} and collaborator:
         return query.filter(

@@ -169,12 +169,33 @@ def my_clients_query():
             return query.filter(Client.id == -1)
         return query.filter(or_(*conditions))
 
+    # Un asesor tiene estrictamente su cartera como referencia.
+    if role == "advisor":
+        return query.filter(Client.owner_id == collaborator.id)
+
+    # El desarrollador solo puede consultar clientes con asignación directa
+    # o con tareas donde es responsable/participante. Nunca toda la empresa.
+    if role == "developer":
+        assigned_ids = set(_assignment_client_ids([collaborator.id]))
+        own_task = or_(
+            Task.assignee_id == collaborator.id,
+            Task.collaborators.any(id=collaborator.id),
+        )
+        for direct_id, project_client_id in (
+            db.session.query(Task.client_id, Project.client_id)
+            .select_from(Task)
+            .outerjoin(Project, Project.id == Task.project_id)
+            .filter(own_task)
+            .all()
+        ):
+            if direct_id is not None:
+                assigned_ids.add(direct_id)
+            if project_client_id is not None:
+                assigned_ids.add(project_client_id)
+        return query.filter(Client.id.in_(assigned_ids or {-1}))
+
     assigned = _assignment_client_ids([collaborator.id])
     conditions = []
-
-    if role == "advisor":
-        conditions.append(Client.owner_id == collaborator.id)
-
     if assigned:
         conditions.append(Client.id.in_(assigned))
 
@@ -201,15 +222,7 @@ def client_coordination_allowed(client):
         return False
 
     if role == "advisor":
-        return (
-            client.owner_id == collaborator.id
-            or ClientTeamAssignment.query.filter_by(
-                client_id=client.id,
-                collaborator_id=collaborator.id,
-                status=ACTIVE_TEAM_STATUS,
-            ).first()
-            is not None
-        )
+        return client.owner_id == collaborator.id
 
     if role == "supervisor":
         team_ids = _current_team_ids()
@@ -237,6 +250,9 @@ def client_coordination_allowed(client):
             ).first()
             is not None
         )
+
+    if role == "developer":
+        return my_clients_query().filter(Client.id == client.id).first() is not None
 
     if role == "production":
         assigned = ClientTeamAssignment.query.filter_by(
@@ -433,7 +449,7 @@ def build_client_alerts(client, can_financial=False, visible_tasks=None, visible
 def build_client_timeline(client, can_financial=False):
     events = []
     role = _user_role()
-    operational_only = role in {"production", DEVELOPMENT_COORDINATOR_ROLE}
+    operational_only = role in {"production", "developer", DEVELOPMENT_COORDINATOR_ROLE}
 
     def add(when, kind, title, body=""):
         dt = _as_datetime(when)
@@ -475,7 +491,7 @@ def build_client_timeline(client, can_financial=False):
         )
 
     for assignment in client.team_assignments_v3:
-        if role == "production" and (
+        if role in {"production", "developer"} and (
             not current_user.collaborator
             or assignment.collaborator_id != current_user.collaborator.id
         ):

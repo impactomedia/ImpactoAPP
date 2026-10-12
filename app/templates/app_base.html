@@ -30,7 +30,7 @@
       {% endif %}
 
       {% if current_user.has_permission('clients.view') %}
-        {% if role_name in ['production','development_coordinator'] %}
+        {% if role_name in ['production','developer','development_coordinator'] %}
         <a class="nav-item {% if request.blueprint == 'clients_v3' %}active{% endif %}" href="{{ url_for('clients_v3.mine') }}"><i class="bi bi-buildings"></i> {{ 'Clientes de Desarrollo' if is_development_coordinator else 'Mis clientes' }}</a>
         {% else %}
         <a class="nav-item {% if request.blueprint in ['clients','clients_v3'] %}active{% endif %}" href="{{ url_for('clients.index') }}"><i class="bi bi-buildings"></i> Clientes</a>

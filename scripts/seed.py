@@ -82,7 +82,8 @@ ROLE_MAP = {
     "manager": "Gerencia",
     "hr": "Recursos Humanos",
     "supervisor": "Supervisor / Coordinador",
-    "advisor": "Asesor Comercial",
+    "advisor": "Asesor(a) de Ventas",
+    "developer": "Desarrollador",
     "development_coordinator": "Coordinador de Desarrollo",
     "production": "Operaciones / Producción",
     "finance": "Contabilidad / Finanzas",
@@ -125,6 +126,10 @@ ROLE_PERMISSION_CODES = {
         "printing.view", "printing.edit", "printing.approve",
         "support.view", "support.edit",
         "reports.view",
+    },
+    # Perfil mínimo de Desarrollo: consulta de clientes asignados y actualización de tareas propias.
+    "developer": {
+        "clients.view", "tasks.view", "tasks.update",
     },
     "development_coordinator": {
         "clients.view", "clients.assign", "clients.comment", "clients.files",
