@@ -1,0 +1,11 @@
+Necesitamos que Nexora tenga dos perfiles claramente separados:
+
+ASESOR(A) DE VENTAS: gestiona únicamente su cartera y sus clientes.
+DESARROLLADOR: consulta únicamente clientes asignados y actualiza sus tareas.
+
+Para recibir TODOS LOS ARCHIVOS COMPLETOS listos para GitHub, ejecuta:
+
+    py GENERAR_PARCHE_COMPLETO.py
+
+Este comando crea un segundo ZIP con las rutas y archivos completos actuales
+incluyendo la nueva plantilla y las 5 pruebas de aceptación.
