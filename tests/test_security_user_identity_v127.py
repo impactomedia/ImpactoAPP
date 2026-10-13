@@ -52,6 +52,7 @@ def app():
         db.session.flush()
         db.session.add(Collaborator(
             user_id=employee.id, code="TEST-ADV-001",
+            corporate_email="wrong-address@test.local",
             job_title="Asesor", department="Ventas", status="activo",
             join_date=date.today(),
         ))
