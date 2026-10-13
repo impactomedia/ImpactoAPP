@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
+from app.commercial_plans import contract_end, cortesias, ensure_hosting_annuality, OWNED_PLANS
 from app.extensions import db
 from app.helpers import audit, notify, next_code
 from app.models import (
@@ -429,8 +430,7 @@ def generate_principal_operational_work(sale, product, previous_contract=None, c
         row.status = "inactivo"
 
     starts_on = sale.sale_date or date.today()
-    duration = product.duration_months or 0
-    end_date = starts_on + timedelta(days=duration * 30) if duration else None
+    end_date = contract_end(product, starts_on)
 
     contract = ClientContract(
         client_id=sale.client_id,
@@ -459,7 +459,9 @@ def generate_principal_operational_work(sale, product, previous_contract=None, c
         )
     )
 
-    if product.renewal_required or end_date:
+    if product.name in OWNED_PLANS:
+        ensure_hosting_annuality(sale.client_id, starts_on)
+    if (product.renewal_required or end_date) and product.name not in OWNED_PLANS:
         db.session.add(
             Renewal(
                 client_id=sale.client_id,
