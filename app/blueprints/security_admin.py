@@ -263,7 +263,7 @@ def unlock_user(user_id):
 
 
 # Administración de identidad: confirmaciones verificadas SIEMPRE en backend.
-_ADMIN_EMAIL_PATTERN = re.compile(r"^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
+_ADMIN_EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def _can_manage_user_identity(target):
@@ -348,6 +348,8 @@ def change_user_email(user_id):
 
     old_email = target.email
     target.email = new_email
+    target.failed_attempts = 0
+    target.locked_until = None
     collaborator = Collaborator.query.filter_by(user_id=target.id).first()
     if collaborator and (collaborator.corporate_email or "").strip().lower() == old_email.lower():
         collaborator.corporate_email = new_email
