@@ -221,6 +221,7 @@
             </div>
             <div class="row g-3 mt-1">
               <div class="col-md-3"><small class="text-secondary">Modalidad</small><div>{% set modality = c.v2_detail.modality_snapshot if c.v2_detail and c.v2_detail.modality_snapshot else c.product.modality %}{{ modality_labels.get(modality, modality|label) if modality else '—' }}</div></div>
+              {% if c.principal and maintenance_label(c) %}<div class="col-12"><div class="alert alert-info py-2 mb-0"><strong>Condición de mantenimiento:</strong> {{ maintenance_label(c) }}{% if c.product.name in ["Impacto Golden", "Impacto VIP"] %} · Hosting y dominio: USD 250 anuales desde el primer aniversario.{% endif %}</div></div>{% endif %}
               <div class="col-md-3"><small class="text-secondary">Mantenimiento</small><div>{% set maintenance = c.v2_detail.maintenance_snapshot if c.v2_detail and c.v2_detail.maintenance_snapshot else c.product.maintenance %}{{ maintenance_labels.get(maintenance, maintenance|label) if maintenance else '—' }}</div></div>
               <div class="col-md-6"><small class="text-secondary">Motivo de estado</small><div>{{ c.v2_detail.status_reason if c.v2_detail and c.v2_detail.status_reason else '—' }}</div></div>
               <div class="col-md-6"><small class="text-secondary">Beneficios contratados</small><div class="small" style="white-space:pre-line">{{ c.v2_detail.benefits_snapshot if c.v2_detail and c.v2_detail.benefits_snapshot else (c.product.components or '—') }}</div></div>

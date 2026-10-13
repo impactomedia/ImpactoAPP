@@ -41,6 +41,7 @@
     <div class="col-lg-3"><label class="form-label">Método</label><select name="payment_method" class="form-select">{% for m in ['transferencia','efectivo','Zelle','ACH','Wise','tarjeta','otro'] %}<option value="{{ m }}">{{ m|label }}</option>{% endfor %}</select></div>
     <div class="col-lg-3"><label class="form-label">Fecha del pago</label><input name="initial_payment_date" type="date" class="form-control" value="{{ today }}"></div>
     <div class="col-lg-6"><label class="form-label">Referencia del pago</label><input name="initial_payment_reference" class="form-control" placeholder="Zelle, ACH, transferencia..."></div>
+    <div class="col-lg-6" id="vipComboWrap" style="display:none"><label class="form-label">Combo de imprenta VIP *</label><select name="vip_combo" id="vipCombo" class="form-select"><option value="">Seleccionar combo</option><option value="uniformes">6 playeras y 6 gorras</option><option value="imprenta">2,500 business cards y 2 magnetos (18x24)</option></select></div>
     <div class="col-lg-6"><label class="form-label">Cortesías acordadas</label><textarea name="courtesies" class="form-control" rows="2" placeholder="Ej. Business Cards, QR, portada..."></textarea></div>
   </div>
 
@@ -132,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
     refresh();
   }
   mode.addEventListener('change',togglePayment);
-  plan.addEventListener('change',refresh);
+  plan.addEventListener('change',()=>{refresh();const vip=plan.options[plan.selectedIndex]?.textContent.includes("Impacto VIP");document.getElementById("vipComboWrap").style.display=vip?"":"none";document.getElementById("vipCombo").required=!!vip;});
   initial.addEventListener('input',refresh);
   togglePayment();
 });
