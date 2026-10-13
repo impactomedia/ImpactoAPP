@@ -530,6 +530,36 @@ def generate_operational_work(sale):
     for item in sale.items:
         product = item.product
 
+        # Contratos de mantenimiento y Community Manager: renovaciones mensuales
+        # independientes, sin reemplazar el plan principal del cliente.
+        if product and product.category in {"community_manager", "mantenimiento"}:
+            begins = sale.sale_date or date.today()
+            expires = contract_end(product, begins)
+            contract = ClientContract(
+                client_id=sale.client_id, product_id=product.id,
+                sale_id=sale.id, status="activo", starts_on=begins,
+                ends_on=expires, agreed_price=item.total, principal=False,
+                notes="Servicio mensual adicional contratado.",
+            )
+            db.session.add(contract)
+            db.session.flush()
+            db.session.add(ClientContractDetail(
+                contract_id=contract.id,
+                modality_snapshot=product.modality,
+                maintenance_snapshot=product.maintenance,
+                benefits_snapshot=product.components,
+            ))
+            if expires:
+                db.session.add(Renewal(
+                    client_id=sale.client_id, contract_id=contract.id,
+                    renewal_type=product.name, due_date=expires,
+                    status="pendiente",
+                ))
+
+        # Crear una anualidad separada al contratar una website individual.
+        if product and product.name in {"Website - Creación", "Website + GBP - Creación"}:
+            ensure_hosting_annuality(sale.client_id, sale.sale_date or date.today())
+
         if product and product.is_physical:
             order = PrintOrder(
                 order_no=next_code("IMP", PrintOrder),
