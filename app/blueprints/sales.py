@@ -6,6 +6,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 from werkzeug.exceptions import HTTPException
 
+from app.commercial_plans import cortesias, VIP_CHOICES
 from app.extensions import db
 from app.helpers import audit, next_code
 from app.models import (
@@ -785,7 +786,7 @@ def principal_service(client_id):
             sale,
             plan,
             previous_contract=current_contract,
-            courtesies=request.form.get("courtesies"),
+            courtesies=cortesias(plan, request.form.get("courtesies"), request.form.get("vip_combo")) ,
         )
         recalc_sale(sale)
         _refresh_receivable_due_date(sale)

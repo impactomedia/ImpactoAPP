@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
+from app.commercial_plans import HOSTING_TYPE, HOSTING_FEE, OWNED_PLANS, add_months
 from app.client_v2_models import ClientContractDetail, ClientInstallment, ClientOperationalProfile
 from app.extensions import db
 from app.helpers import audit, next_code
@@ -59,6 +60,8 @@ def renewal_alert_days():
 
 def _ensure_contract_renewal(contract):
     product = contract.product
+    if product and product.name in OWNED_PLANS:
+        return None
     due_date = contract.ends_on
     if not due_date and product and product.renewal_required and contract.starts_on:
         due_date = contract.starts_on + timedelta(days=365)
@@ -146,6 +149,13 @@ def sync_renewal_sources():
             _ensure_contract_renewal(contract)
 
     for profile in ClientOperationalProfile.query.all():
+        # No duplicar avisos individuales si existe anualidad combinada.
+        combined = Renewal.query.filter_by(
+            client_id=profile.client_id, contract_id=None,
+            renewal_type=HOSTING_TYPE,
+        ).filter(Renewal.status.in_(OPEN_RENEWAL_STATUSES)).first()
+        if combined:
+            continue
         _ensure_external_renewal(profile.client_id, "Dominio", profile.domain_renews_on)
         _ensure_external_renewal(profile.client_id, "Hosting", profile.hosting_renews_on)
 
@@ -300,6 +310,8 @@ def _close_renewal_tasks(renewal, *, cancelled=False):
 
 def renewal_amount(renewal):
     contract = renewal.contract
+    if renewal.renewal_type == HOSTING_TYPE:
+        return HOSTING_FEE
     if not contract:
         return Decimal("0")
     if contract.agreed_price is not None:
@@ -515,6 +527,8 @@ def complete_contract_renewal(
     contract = renewal.contract
     if not contract or not contract.product:
         raise ValueError("Esta renovación no está vinculada a un contrato renovable.")
+    if contract.product.name in OWNED_PLANS:
+        raise ValueError("Golden y VIP no renuevan el plan comercial; solo hosting y dominio.")
 
     price = amount if amount not in (None, "") else renewal_amount(renewal)
     was_principal = bool(contract.principal or contract.product.category == "paquete")
@@ -639,7 +653,7 @@ def complete_external_renewal(
         raise ValueError("Esta renovación ya fue cerrada.")
     if renewal.contract_id:
         raise ValueError("Esta renovación debe procesarse como contrato.")
-    if renewal.renewal_type not in {"Dominio", "Hosting"}:
+    if renewal.renewal_type not in {"Dominio", "Hosting", HOSTING_TYPE}:
         raise ValueError("El vencimiento externo no es compatible con este flujo.")
     if not next_due_date or next_due_date <= renewal.due_date:
         raise ValueError("La próxima fecha debe ser posterior al vencimiento actual.")
@@ -650,13 +664,18 @@ def complete_external_renewal(
         db.session.add(profile)
         db.session.flush()
 
-    if renewal.renewal_type == "Dominio":
+    if renewal.renewal_type == HOSTING_TYPE:
+        profile.domain_renews_on = next_due_date
+        profile.hosting_renews_on = next_due_date
+    elif renewal.renewal_type == "Dominio":
         profile.domain_renews_on = next_due_date
     else:
         profile.hosting_renews_on = next_due_date
 
     total = _money(amount)
     sale = None
+    if renewal.renewal_type == HOSTING_TYPE and total != HOSTING_FEE:
+        raise ValueError("La anualidad oficial combinada de hosting y dominio es USD 250.")
     if total > 0:
         sale = _create_renewal_sale(
             renewal,

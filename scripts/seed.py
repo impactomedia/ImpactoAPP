@@ -258,4 +258,6 @@ def seed_all():
         admin.set_password(os.getenv("ADMIN_PASSWORD", "ChangeMe123!"))
         db.session.add(admin)
 
+    from app.commercial_plans import seed_official
+    seed_official()
     db.session.commit()
