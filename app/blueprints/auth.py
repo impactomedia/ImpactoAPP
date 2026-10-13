@@ -364,6 +364,39 @@ def profile():
     )
 
 
+
+@bp.route("/profile/password", methods=["POST"])
+@login_required
+def profile_password():
+    """Cada usuario puede reemplazar su clave inicial verificando la actual."""
+    current_password = request.form.get("current_password") or ""
+    new_password = request.form.get("new_password") or ""
+    confirm_password = request.form.get("confirm_password") or ""
+
+    if not current_user.check_password(current_password):
+        flash("La contraseña actual es incorrecta. No se realizaron cambios.", "danger")
+        return redirect(url_for("auth.profile", _anchor="password"))
+    if len(new_password) < 8:
+        flash("La nueva contraseña debe tener al menos 8 caracteres.", "danger")
+        return redirect(url_for("auth.profile", _anchor="password"))
+    if new_password != confirm_password:
+        flash("Las contraseñas nuevas no coinciden.", "danger")
+        return redirect(url_for("auth.profile", _anchor="password"))
+    if current_password == new_password:
+        flash("La contraseña nueva debe ser diferente de la actual.", "warning")
+        return redirect(url_for("auth.profile", _anchor="password"))
+
+    current_user.set_password(new_password)
+    PasswordReset.query.filter(
+        PasswordReset.user_id == current_user.id,
+        PasswordReset.used_at.is_(None),
+    ).update({"used_at": datetime.utcnow()}, synchronize_session=False)
+    audit("cambiar_contrasena_propia", "User", current_user.id)
+    db.session.commit()
+    flash("Tu contraseña se actualizó. Úsala en tu próximo inicio de sesión.", "success")
+    return redirect(url_for("auth.profile", _anchor="password"))
+
+
 @bp.route("/profile/2fa", methods=["POST"])
 @login_required
 def profile_2fa():
