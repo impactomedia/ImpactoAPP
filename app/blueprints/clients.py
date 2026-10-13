@@ -936,7 +936,7 @@ def index():
         )
 
     if commercial_plan_id:
-        q = q.filter(Client.contracts.any(ClientContract.product_id == commercial_plan_id, ClientContract.principal.is_(True), ClientContract.status == "activo"))
+        q = q.filter(Client.contracts.any((ClientContract.product_id == commercial_plan_id) & (ClientContract.principal.is_(True)) & (ClientContract.status == "activo")))
     clients = q.order_by(Client.updated_at.desc()).all()
     advisor_projects = AdvisorProject.query.filter_by(active=True).order_by(AdvisorProject.name).all()
     pending_followups = 0
