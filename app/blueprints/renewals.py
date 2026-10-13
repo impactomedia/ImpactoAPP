@@ -6,6 +6,7 @@ from flask_login import current_user, login_required
 
 from app.client_v2_models import ClientInstallment
 from app.decorators import permission_required
+from app.commercial_plans import HOSTING_TYPE, add_months
 from app.extensions import db
 from app.models import Client, Renewal
 from app.renewal_services import (
@@ -179,6 +180,8 @@ def complete(renewal_id):
             )
         else:
             next_due_date = _parse_date(request.form.get("next_due_date"))
+            if renewal.renewal_type == HOSTING_TYPE and not next_due_date:
+                next_due_date = add_months(renewal.due_date, 12)
             sale = complete_external_renewal(
                 renewal,
                 next_due_date=next_due_date,
