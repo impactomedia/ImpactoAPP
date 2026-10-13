@@ -303,6 +303,8 @@ def _close_renewal_tasks(renewal, *, cancelled=False):
 
 def renewal_amount(renewal):
     contract = renewal.contract
+    if renewal.renewal_type == HOSTING_TYPE:
+        return HOSTING_FEE
     if not contract:
         return Decimal("0")
     if contract.agreed_price is not None:
@@ -518,6 +520,8 @@ def complete_contract_renewal(
     contract = renewal.contract
     if not contract or not contract.product:
         raise ValueError("Esta renovación no está vinculada a un contrato renovable.")
+    if contract.product.name in OWNED_PLANS:
+        raise ValueError("Golden y VIP no renuevan el plan comercial; solo hosting y dominio.")
 
     price = amount if amount not in (None, "") else renewal_amount(renewal)
     was_principal = bool(contract.principal or contract.product.category == "paquete")
