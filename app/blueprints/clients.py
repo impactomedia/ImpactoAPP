@@ -10,6 +10,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from sqlalchemy import or_
 
+from app.commercial_plans import maintenance_label
 from app.extensions import db
 from app.decorators import permission_required, roles_required
 from app.access_control import _commercial_client_allowed, _project_allowed, _task_allowed
@@ -912,6 +913,7 @@ def index():
     search = request.args.get("q", "").strip()
     status = request.args.get("status", "").strip()
     advisor_project_id = request.args.get("advisor_project_id", type=int)
+    commercial_plan_id = request.args.get("commercial_plan_id", type=int)
 
     if search:
         like = f"%{search}%"
@@ -933,6 +935,8 @@ def index():
             Collaborator.advisor_project_id == advisor_project_id
         )
 
+    if commercial_plan_id:
+        q = q.filter(Client.contracts.any(ClientContract.product_id == commercial_plan_id, ClientContract.principal.is_(True), ClientContract.status == "activo"))
     clients = q.order_by(Client.updated_at.desc()).all()
     advisor_projects = AdvisorProject.query.filter_by(active=True).order_by(AdvisorProject.name).all()
     pending_followups = 0
@@ -947,6 +951,8 @@ def index():
         advisor_project_id=advisor_project_id,
         advisor_projects=advisor_projects,
         pending_followups=pending_followups,
+        commercial_plan_id=commercial_plan_id,
+        commercial_plans=ProductService.query.filter_by(category="paquete", active=True).order_by(ProductService.name).all(),
     )
 
 
