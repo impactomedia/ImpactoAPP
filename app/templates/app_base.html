@@ -99,6 +99,9 @@
       <small>Sesión activa</small>
       <strong>{{ current_user.name }}</strong>
       <small>{{ current_user.role.label if current_user.role else 'Sin rol' }}</small>
+      <a class="btn btn-light border btn-sm mt-2" href="{{ url_for('auth.profile') }}" style="width:100%;text-align:left">
+        <i class="bi bi-shield-lock me-1"></i> Mi perfil y contraseña
+      </a>
     </div>
   </aside>
 
@@ -111,7 +114,7 @@
       </form>
       <div class="top-actions ms-auto d-flex align-items-center gap-2">
         <a class="btn btn-light border position-relative" href="{{ url_for('notifications.index') }}" title="Centro de Notificaciones"><i class="bi bi-bell"></i>{% if unread_notifications %}<span class="notif-badge">{{ unread_notifications }}</span>{% endif %}</a>
-        <a class="btn btn-light border" href="{{ url_for('auth.profile') }}"><i class="bi bi-person-circle"></i></a>
+        <a class="btn btn-light border d-inline-flex align-items-center gap-2" href="{{ url_for('auth.profile') }}" title="Mi perfil y contraseña" aria-label="Abrir mi perfil y cambiar contraseña"><i class="bi bi-person-circle"></i><span class="d-none d-xl-inline">Mi cuenta</span></a>
         <form method="post" action="{{ url_for('auth.logout') }}" class="d-inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-light border" title="Cerrar sesión"><i class="bi bi-box-arrow-right"></i></button>
