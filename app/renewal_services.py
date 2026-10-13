@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
+from app.commercial_plans import HOSTING_TYPE, HOSTING_FEE, OWNED_PLANS, add_months
 from app.client_v2_models import ClientContractDetail, ClientInstallment, ClientOperationalProfile
 from app.extensions import db
 from app.helpers import audit, next_code
@@ -59,6 +60,8 @@ def renewal_alert_days():
 
 def _ensure_contract_renewal(contract):
     product = contract.product
+    if product and product.name in OWNED_PLANS:
+        return None
     due_date = contract.ends_on
     if not due_date and product and product.renewal_required and contract.starts_on:
         due_date = contract.starts_on + timedelta(days=365)
@@ -639,7 +642,7 @@ def complete_external_renewal(
         raise ValueError("Esta renovación ya fue cerrada.")
     if renewal.contract_id:
         raise ValueError("Esta renovación debe procesarse como contrato.")
-    if renewal.renewal_type not in {"Dominio", "Hosting"}:
+    if renewal.renewal_type not in {"Dominio", "Hosting", HOSTING_TYPE}:
         raise ValueError("El vencimiento externo no es compatible con este flujo.")
     if not next_due_date or next_due_date <= renewal.due_date:
         raise ValueError("La próxima fecha debe ser posterior al vencimiento actual.")
@@ -650,13 +653,18 @@ def complete_external_renewal(
         db.session.add(profile)
         db.session.flush()
 
-    if renewal.renewal_type == "Dominio":
+    if renewal.renewal_type == HOSTING_TYPE:
+        profile.domain_renews_on = next_due_date
+        profile.hosting_renews_on = next_due_date
+    elif renewal.renewal_type == "Dominio":
         profile.domain_renews_on = next_due_date
     else:
         profile.hosting_renews_on = next_due_date
 
     total = _money(amount)
     sale = None
+    if renewal.renewal_type == HOSTING_TYPE and total != HOSTING_FEE:
+        raise ValueError("La anualidad oficial combinada de hosting y dominio es USD 250.")
     if total > 0:
         sale = _create_renewal_sale(
             renewal,
