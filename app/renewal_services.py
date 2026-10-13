@@ -149,6 +149,13 @@ def sync_renewal_sources():
             _ensure_contract_renewal(contract)
 
     for profile in ClientOperationalProfile.query.all():
+        # No duplicar avisos individuales si existe anualidad combinada.
+        combined = Renewal.query.filter_by(
+            client_id=profile.client_id, contract_id=None,
+            renewal_type=HOSTING_TYPE,
+        ).filter(Renewal.status.in_(OPEN_RENEWAL_STATUSES)).first()
+        if combined:
+            continue
         _ensure_external_renewal(profile.client_id, "Dominio", profile.domain_renews_on)
         _ensure_external_renewal(profile.client_id, "Hosting", profile.hosting_renews_on)
 
