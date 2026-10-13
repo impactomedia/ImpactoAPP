@@ -70,7 +70,60 @@
               <button class="btn btn-sm btn-light border">Quitar 2FA</button>
             </form>
             {% endif %}
+            {% if current_user.role and current_user.role.name in ['superadmin', 'admin'] and u.id != current_user.id and not u.is_superadmin and (current_user.is_superadmin or not u.role or u.role.name not in ['admin', 'manager']) %}
+              <button type="button" class="btn btn-sm btn-outline-primary"
+                      data-bs-toggle="collapse" data-bs-target="#emailEditUser{{ u.id }}"
+                      aria-controls="emailEditUser{{ u.id }}" aria-expanded="false">Editar correo</button>
+              <button type="button" class="btn btn-sm btn-outline-danger"
+                      data-bs-toggle="collapse" data-bs-target="#userDelete{{ u.id }}"
+                      aria-controls="userDelete{{ u.id }}" aria-expanded="false">Eliminar</button>
+            {% endif %}
           </div>
+          {% if current_user.role and current_user.role.name in ['superadmin', 'admin'] and u.id != current_user.id and not u.is_superadmin and (current_user.is_superadmin or not u.role or u.role.name not in ['admin', 'manager']) %}
+          <div class="collapse mt-3" id="emailEditUser{{ u.id }}">
+            <form method="post" action="{{ url_for('security_admin.change_user_email', user_id=u.id) }}" class="border rounded-3 p-3 bg-light">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <strong class="d-block mb-2">Corregir correo de acceso</strong>
+              <div class="mb-2"><label class="form-label">Nuevo correo</label>
+                <input type="email" class="form-control form-control-sm" name="new_email" maxlength="190"
+                       value="{{ u.email }}" autocomplete="off" required></div>
+              <div class="mb-2"><label class="form-label">Motivo</label>
+                <input type="text" class="form-control form-control-sm" name="reason"
+                       maxlength="255" placeholder="Ej. Error al registrar el correo"></div>
+              <div class="mb-2"><label class="form-label">Contraseña de tu cuenta administradora</label>
+                <input type="password" class="form-control form-control-sm" name="admin_password"
+                       autocomplete="current-password" required></div>
+              <button class="btn btn-sm btn-primary">Guardar correo</button>
+              <small class="d-block text-secondary mt-2">No cambia la contraseña ni el historial del usuario.</small>
+            </form>
+          </div>
+          <div class="collapse mt-3" id="userDelete{{ u.id }}">
+            <form method="post" action="{{ url_for('security_admin.delete_user_safely', user_id=u.id) }}"
+                  class="border border-danger rounded-3 p-3"
+                  onsubmit="return window.confirm('¿Confirmas la eliminación PERMANENTE de esta cuenta? Esta operación no se puede deshacer.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <strong class="d-block mb-2 text-danger">Eliminar cuenta definitivamente</strong>
+              <p class="small text-secondary">Solo se permite borrar usuarios sin accesos anteriores ni historial asociado. Si existen registros, la operación se rechazará y podrás desactivar la cuenta.</p>
+              <div class="mb-2"><label class="form-label">Escribe el correo exacto: <strong>{{ u.email }}</strong></label>
+                <input type="text" class="form-control form-control-sm" name="confirm_email"
+                       autocomplete="off" autocapitalize="none" required></div>
+              <div class="mb-2"><label class="form-label">Escribe <strong>ELIMINAR</strong> en mayúsculas</label>
+                <input type="text" class="form-control form-control-sm" name="confirm_word"
+                       autocomplete="off" autocapitalize="none" required></div>
+              <div class="mb-2"><label class="form-label">Motivo de eliminación</label>
+                <textarea class="form-control form-control-sm" name="reason" minlength="10"
+                          maxlength="255" rows="2" required placeholder="Al menos 10 caracteres"></textarea></div>
+              <div class="mb-2"><label class="form-label">Tu contraseña administrativa</label>
+                <input type="password" class="form-control form-control-sm" name="admin_password"
+                       autocomplete="current-password" required></div>
+              <label class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="understand_history" value="yes" required>
+                <span class="form-check-label small">Comprendo que es irreversible y que Nexora rechazará la operación si hay historial.</span>
+              </label>
+              <button class="btn btn-sm btn-danger">Confirmar eliminación definitiva</button>
+            </form>
+          </div>
+          {% endif %}
         </td>
       </tr>
       {% else %}<tr><td colspan="7" class="text-center text-secondary py-4">Sin usuarios.</td></tr>{% endfor %}

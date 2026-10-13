@@ -1,15 +1,17 @@
 import csv
 import io
+import re
 from datetime import date, datetime
 
 from flask import Blueprint, Response, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
 from app.decorators import roles_required
 from app.extensions import db
 from app.helpers import audit
-from app.models import AuditLog, Client, Permission, Role, User
+from app.models import AuditLog, Client, Collaborator, PasswordReset, Permission, Role, User
 from app.security_controls import (
     BUILTIN_ROLES,
     DATA_SCOPES,
@@ -256,6 +258,186 @@ def unlock_user(user_id):
     )
     db.session.commit()
     flash("Bloqueo del usuario restablecido.", "success")
+    return redirect(url_for("security_admin.index") + "#users")
+
+
+
+# Administración de identidad: confirmaciones verificadas SIEMPRE en backend.
+_ADMIN_EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+def _can_manage_user_identity(target):
+    if target.id == current_user.id:
+        return False, "Por seguridad no puedes gestionar tu propia cuenta desde aquí."
+    if target.is_superadmin:
+        return False, "Las cuentas Superadministrador están protegidas."
+    if target.role and target.role.name in {"admin", "manager"} and not current_user.is_superadmin:
+        return False, "Solo el Superadministrador puede gestionar administradores y gerentes."
+    return True, None
+
+
+def _administrative_password_valid():
+    password = request.form.get("admin_password") or ""
+    return bool(password and current_user.check_password(password))
+
+
+def _referenced_in_business_tables(target):
+    """No borrar usuarios o colaboradores con referencias: preserva el historial.
+
+    Comprueba todas las FK registradas por SQLAlchemy, incluyendo tablas de
+    asociaciones. Solo se permite la FK del registro de colaborador y
+    los tokens de recuperación, que se eliminan explícitamente.
+    """
+    collaborator = Collaborator.query.filter_by(user_id=target.id).first()
+    linked_ids = {"users": target.id}
+    if collaborator:
+        linked_ids["collaborators"] = collaborator.id
+
+    for table in db.metadata.tables.values():
+        for col in table.columns:
+            for fk in col.foreign_keys:
+                referenced_table = fk.column.table.name
+                if referenced_table not in linked_ids:
+                    continue
+                if referenced_table == "users":
+                    if table.name == "collaborators" and col.name == "user_id":
+                        continue
+                    if table.name == "password_resets" and col.name == "user_id":
+                        continue
+                exists = (
+                    db.session.query(db.literal(1))
+                    .select_from(table)
+                    .filter(col == linked_ids[referenced_table])
+                    .limit(1)
+                    .first()
+                )
+                if exists:
+                    return True
+    return False
+
+
+@bp.route("/users/<int:user_id>/email", methods=["POST"])
+@login_required
+@roles_required("superadmin", "admin")
+def change_user_email(user_id):
+    target = db.get_or_404(User, user_id)
+    allowed, message = _can_manage_user_identity(target)
+    if not allowed:
+        flash(message, "danger")
+        return redirect(url_for("security_admin.index") + "#users")
+
+    if not _administrative_password_valid():
+        flash("La contraseña del administrador no es correcta.", "danger")
+        return redirect(url_for("security_admin.index") + "#users")
+
+    new_email = (request.form.get("new_email") or "").strip().lower()
+    if len(new_email) > 190 or not _ADMIN_EMAIL_PATTERN.fullmatch(new_email):
+        flash("Introduce un correo electrónico válido (máximo 190 caracteres).", "danger")
+        return redirect(url_for("security_admin.index") + "#users")
+
+    if new_email == target.email.lower():
+        flash("El correo ingresado es el mismo que ya tiene la cuenta.", "info")
+        return redirect(url_for("security_admin.index") + "#users")
+
+    duplicated = User.query.filter(
+        db.func.lower(User.email) == new_email, User.id != target.id
+    ).first()
+    if duplicated:
+        flash("Ese correo ya pertenece a otro usuario.", "danger")
+        return redirect(url_for("security_admin.index") + "#users")
+
+    old_email = target.email
+    target.email = new_email
+    target.failed_attempts = 0
+    target.locked_until = None
+    collaborator = Collaborator.query.filter_by(user_id=target.id).first()
+    if collaborator and (collaborator.corporate_email or "").strip().lower() == old_email.lower():
+        collaborator.corporate_email = new_email
+
+    # Los enlaces enviados al antiguo correo dejan de ser válidos.
+    PasswordReset.query.filter_by(user_id=target.id, used_at=None).update(
+        {"used_at": datetime.utcnow()}, synchronize_session=False
+    )
+    audit(
+        "editar_correo_usuario", "User", target.id,
+        before={"email": old_email}, after={"email": new_email},
+        reason=(request.form.get("reason") or "Corrección administrativa de correo").strip()[:255],
+    )
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        flash("No se pudo guardar: verifica que el correo no esté registrado.", "danger")
+        return redirect(url_for("security_admin.index") + "#users")
+    flash("Correo de acceso actualizado. El usuario ya puede usar el correo correcto.", "success")
+    return redirect(url_for("security_admin.index") + "#users")
+
+
+@bp.route("/users/<int:user_id>/delete", methods=["POST"])
+@login_required
+@roles_required("superadmin", "admin")
+def delete_user_safely(user_id):
+    target = db.get_or_404(User, user_id)
+    allowed, message = _can_manage_user_identity(target)
+    if not allowed:
+        flash(message, "danger")
+        return redirect(url_for("security_admin.index") + "#users")
+
+    # Triple confirmación, identidad y motivo, siempre verificadas en servidor.
+    if not _administrative_password_valid():
+        flash("Contraseña administrativa incorrecta; eliminación cancelada.", "danger")
+        return redirect(url_for("security_admin.index") + "#users")
+    if request.form.get("confirm_word", "").strip() != "ELIMINAR":
+        flash('Escribe exactamente ELIMINAR para confirmar.', "danger")
+        return redirect(url_for("security_admin.index") + "#users")
+    if request.form.get("confirm_email", "").strip().lower() != target.email.lower():
+        flash("El correo de confirmación no coincide con el del usuario.", "danger")
+        return redirect(url_for("security_admin.index") + "#users")
+    if request.form.get("understand_history") != "yes":
+        flash("Confirma que comprendes que esta operación es irreversible.", "danger")
+        return redirect(url_for("security_admin.index") + "#users")
+    reason = (request.form.get("reason") or "").strip()
+    if len(reason) < 10:
+        flash("Escribe el motivo de eliminación (al menos 10 caracteres).", "danger")
+        return redirect(url_for("security_admin.index") + "#users")
+
+    # Cuentas utilizadas o con relaciones no se eliminan físicamente.
+    # Se preservan ventas, asignaciones, auditoría y cualquier historial.
+    if target.last_login_at is not None or _referenced_in_business_tables(target):
+        flash(
+            "No es seguro eliminar este usuario porque ya tiene accesos o registros asociados. "
+            "Puedes desactivarlo; su historial quedará intacto.",
+            "warning",
+        )
+        return redirect(url_for("security_admin.index") + "#users")
+
+    actor_id = current_user.id
+    old_info = {"id": target.id, "name": target.name, "email": target.email}
+    collaborator = Collaborator.query.filter_by(user_id=target.id).first()
+
+    # Los tokens de recuperación no son historial comercial.
+    PasswordReset.query.filter_by(user_id=target.id).delete(synchronize_session=False)
+    if collaborator:
+        db.session.delete(collaborator)
+        db.session.flush()
+    db.session.delete(target)
+    audit(
+        "eliminar_usuario_sin_historial", "User", user_id,
+        before=old_info, after={"deleted": True, "performed_by": actor_id},
+        reason=reason[:255],
+    )
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        flash(
+            "El usuario tiene relaciones adicionales en la base de datos. "
+            "No se eliminó ningún registro: utiliza Desactivar.",
+            "danger",
+        )
+        return redirect(url_for("security_admin.index") + "#users")
+
+    flash("Usuario sin historial eliminado. La acción quedó registrada en auditoría.", "success")
     return redirect(url_for("security_admin.index") + "#users")
 
 
