@@ -4,36 +4,76 @@ from app.models import Client, ClientContract, PrintOrder, ProductService, Sale,
 
 
 PLAN_TYPES = {
-    "paquete": "Planes principales",
+    "esencial": "Esencial",
+    "golden": "Golden",
+    "vip": "VIP",
+    "premium": "Premium",
     "community_manager": "Community Manager",
-    "servicio": "Servicios individuales",
-    "mantenimiento": "Mantenimiento",
-    "imprenta": "Imprenta personalizada",
-    "sin_plan": "Sin plan o servicio identificado",
+    "imprenta": "Imprenta",
+    "servicio_digital": "Servicio digital",
+    "otros_planes": "Otros planes",
 }
 
 
-def plan_condition(category):
-    """Expresión EXISTS correlacionada para filtrar ANTES de paginar."""
-    if category == "sin_plan":
-        return ~or_(*(
-            plan_condition(name) for name in PLAN_TYPES if name != "sin_plan"
-        ))
-    if category not in PLAN_TYPES:
-        return None
-    active = Client.contracts.any(and_(
+def _active_contract(product_filter):
+    return Client.contracts.any(and_(
         ClientContract.status == "activo",
-        ClientContract.product.has(ProductService.category == category),
+        ClientContract.product.has(product_filter),
     ))
-    if category == "paquete":
-        return active
-    bought = Client.sales.any(and_(
+
+
+def _valid_purchase(product_filter):
+    return Client.sales.any(and_(
         Sale.status != "cancelada",
-        Sale.items.any(SaleItem.product.has(ProductService.category == category)),
+        Sale.items.any(SaleItem.product.has(product_filter)),
     ))
+
+
+def plan_condition(category):
+    """Clasifica por el nombre real del plan y sus servicios sin duplicar datos."""
+    # Compatibilidad con enlaces y filtros históricos.
+    if category == "paquete":
+        return _active_contract(ProductService.category == "paquete")
+    if category == "sin_plan":
+        return ~or_(*(plan_condition(key) for key in PLAN_TYPES))
+    if category in {"servicio", "mantenimiento"}:
+        rule = ProductService.category == category
+        return or_(_active_contract(rule), _valid_purchase(rule))
+
+    if category in {"esencial", "golden", "vip", "premium", "otros_planes"}:
+        keywords = ("esencial", "golden", "vip", "premium")
+        if category == "otros_planes":
+            rule = and_(
+                ProductService.category == "paquete",
+                *(~ProductService.name.ilike(f"%{word}%") for word in keywords),
+            )
+        else:
+            rule = and_(
+                ProductService.category == "paquete",
+                ProductService.name.ilike(f"%{category}%"),
+            )
+        return _active_contract(rule)
+
+    if category == "community_manager":
+        rule = or_(
+            ProductService.category == "community_manager",
+            ProductService.name.ilike("%community manager%"),
+        )
+        return or_(_active_contract(rule), _valid_purchase(rule))
+
     if category == "imprenta":
-        return or_(active, bought, Client.print_orders.any(PrintOrder.status != "cancelado"))
-    return or_(active, bought)
+        rule = ProductService.category == "imprenta"
+        return or_(
+            _active_contract(rule),
+            _valid_purchase(rule),
+            Client.print_orders.any(PrintOrder.status != "cancelado"),
+        )
+
+    if category == "servicio_digital":
+        rule = ProductService.category.in_(["servicio", "mantenimiento"])
+        return or_(_active_contract(rule), _valid_purchase(rule))
+
+    return None
 
 
 def specific_plan_condition(product_id):

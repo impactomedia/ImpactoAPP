@@ -108,7 +108,9 @@ def test_client_index_lists_plan_names_and_filters_by_type(browser, app):
     html = browser.get("/clients/").get_data(as_text=True)
     assert "Clientes por plan contratado" in html
     assert "Impacto Esencial - 6 Meses" in html
-    assert "Imprenta personalizada" in html
+    assert '<option value="imprenta"' in html
+    assert 'Clasificación por tipo de plan' not in html
+    assert 'Plan / producto específico' not in html
     assert "Sin plan activo registrado" in html
     page = browser.get("/clients/?plan_type=paquete").get_data(as_text=True)
     assert "Cliente Esencial" in page

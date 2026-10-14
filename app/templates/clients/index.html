@@ -24,29 +24,9 @@
 </div>
 {% endif %}
 
-<section class="panel-card mb-4">
-  <div class="panel-header mb-3">
-    <div><h2 class="h5">Clasificación por tipo de plan</h2>
-      <p>Selecciona una categoría para ver los clientes relacionados. Una empresa puede pertenecer a varias categorías.</p>
-    </div>
-  </div>
-  <div class="d-flex flex-wrap gap-2">
-    <a href="{{ url_for('clients.index', q=search, status=status, advisor_project_id=advisor_project_id) }}"
-       class="btn {{ 'btn-dark' if not plan_type and not commercial_plan_id else 'btn-light border' }}">
-      Todos <span class="badge bg-light text-dark ms-1">{{ all_visible_count }}</span>
-    </a>
-    {% for code, title in plan_types.items() %}
-    <a href="{{ url_for('clients.index', q=search, status=status, advisor_project_id=advisor_project_id, plan_type=code) }}"
-       class="btn {{ 'btn-primary' if plan_type==code and not commercial_plan_id else 'btn-light border' }}">
-      {{ title }} <span class="badge bg-light text-dark ms-1">{{ type_counts.get(code, 0) }}</span>
-    </a>
-    {% endfor %}
-  </div>
-</section>
-
 <section class="panel-card">
   <form class="row g-2 align-items-end mb-3" method="get">
-    <div class="col-lg-3 col-md-6">
+    <div class="col-lg-4 col-md-6">
       <label class="form-label small fw-semibold">Buscar</label>
       <input class="form-control" name="q" value="{{ search }}" placeholder="Empresa, contacto, teléfono o código">
     </div>
@@ -68,21 +48,12 @@
         {% endfor %}
       </select>
     </div>
-    <div class="col-lg-2 col-md-6">
+    <div class="col-lg-3 col-md-6">
       <label class="form-label small fw-semibold">Tipo de plan</label>
       <select name="plan_type" class="form-select">
-        <option value="">Todos los tipos</option>
+        <option value="">Todos los planes</option>
         {% for code, title in plan_types.items() %}
         <option value="{{ code }}" {% if plan_type==code %}selected{% endif %}>{{ title }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-lg-2 col-md-4">
-      <label class="form-label small fw-semibold">Plan / producto específico</label>
-      <select name="commercial_plan_id" class="form-select">
-        <option value="">Todos los planes</option>
-        {% for plan in commercial_plans %}
-        <option value="{{ plan.id }}" {% if commercial_plan_id==plan.id %}selected{% endif %}>{{ plan.name }}</option>
         {% endfor %}
       </select>
     </div>
@@ -92,7 +63,7 @@
   </form>
   <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
     <span class="text-secondary small">{{ clients|length }} cliente(s) encontrados</span>
-    {% if search or status or advisor_project_id or plan_type or commercial_plan_id %}
+    {% if search or status or advisor_project_id or plan_type %}
     <a href="{{ url_for('clients.index') }}" class="btn btn-sm btn-light border">Limpiar filtros</a>
     {% endif %}
   </div>
@@ -152,7 +123,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="{{ 8 if can_financial else 7 }}" class="text-center py-4">No hay clientes con estos filtros. Puedes cambiar la categoría o limpiar los filtros.</td></tr>
+      <tr><td colspan="{{ 8 if can_financial else 7 }}" class="text-center py-4">No hay clientes con estos filtros. Selecciona otro plan o limpia los filtros.</td></tr>
       {% endfor %}
       </tbody>
     </table>

@@ -232,7 +232,7 @@ def _clients_index():
     advisor_project_id = request.args.get("advisor_project_id", type=int)
     commercial_plan_id = request.args.get("commercial_plan_id", type=int)
     plan_type = (request.args.get("plan_type") or "").strip().lower()
-    if plan_type not in PLAN_TYPES:
+    if plan_type not in set(PLAN_TYPES) | {"paquete", "sin_plan", "servicio", "mantenimiento"}:
         plan_type = ""
 
     if search:
@@ -253,11 +253,6 @@ def _clients_index():
             Collaborator, Client.owner_id == Collaborator.id
         ).filter(Collaborator.advisor_project_id == advisor_project_id)
 
-    all_visible_count = query.count()
-    type_counts = {
-        code: query.filter(plan_condition(code)).count()
-        for code in PLAN_TYPES
-    }
     if plan_type:
         query = query.filter(plan_condition(plan_type))
     if commercial_plan_id:
@@ -281,13 +276,6 @@ def _clients_index():
             record_type="seguimiento"
         ).count()
 
-    commercial_plans = ProductService.query.filter(
-        ProductService.active.is_(True),
-        ProductService.category.in_([
-            "paquete", "community_manager", "servicio", "mantenimiento", "imprenta",
-        ]),
-    ).order_by(ProductService.category, ProductService.name).all()
-
     return render_template(
         "clients/index.html",
         clients=pagination.items,
@@ -298,12 +286,9 @@ def _clients_index():
         advisor_projects=advisor_projects,
         pending_followups=pending_followups,
         commercial_plan_id=commercial_plan_id,
-        commercial_plans=commercial_plans,
         plan_type=plan_type,
         plan_types=PLAN_TYPES,
-        type_counts=type_counts,
         plans_by_client=plans_by_client,
-        all_visible_count=all_visible_count,
     )
 
 def _crm_prospects():
