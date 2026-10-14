@@ -63,7 +63,15 @@
       <h2 class="h5">Actividad reciente</h2>
       <div class="timeline">
         {% for i in interactions %}
-        <div class="timeline-item"><strong>{{ i.interaction_type|label }} — {{ i.subject or 'Sin asunto' }}</strong><small class="d-block text-secondary">{{ i.occurred_at.strftime('%d/%m/%Y %H:%M') }}</small><p class="mb-0">{{ i.notes or '' }}</p></div>
+        <div class="timeline-item">
+          <strong>{{ i.interaction_type|label }} — {{ i.subject or 'Sin asunto' }}</strong>
+          {% if note_edits.get(i.id) %}<span class="badge text-bg-warning ms-2">Editado</span>{% endif %}
+          <small class="d-block text-secondary">{{ i.occurred_at.strftime('%d/%m/%Y %H:%M') }} · Por {{ i.user.name if i.user else 'Usuario no disponible' }}</small>
+          <p class="mb-0 mt-2" style="white-space:pre-line">{{ i.notes or '' }}</p>
+          {% if note_edits.get(i.id) %}
+          <small class="text-secondary d-block">Modificado por {{ note_edits[i.id].by }} · {{ note_edits[i.id].at.strftime('%d/%m/%Y %H:%M') }}</small>
+          {% endif %}
+        </div>
         {% else %}<p>Sin actividad.</p>{% endfor %}
       </div>
     </section>
