@@ -1,0 +1,200 @@
+{# Historial accesible desde el encabezado, compartido por Seguimientos y Clientes. #}
+{% set nx_is_prospect = client.record_type != 'cliente' %}
+{% set nx_can_write_history = current_user.has_permission('crm.edit') if nx_is_prospect else can_edit %}
+
+<div class="offcanvas offcanvas-end nx-history-drawer" tabindex="-1" id="clientHistoryDrawer"
+     aria-labelledby="clientHistoryDrawerTitle"
+     style="--bs-offcanvas-width:min(800px, 100vw);">
+  <div class="offcanvas-header border-bottom px-4 py-3" style="background:linear-gradient(110deg,#f1f4ff,#eaf8ff);">
+    <div class="me-3">
+      <div class="small text-primary fw-bold text-uppercase mb-1"><i class="bi bi-clock-history me-1"></i>Expediente de actividad</div>
+      <h2 class="offcanvas-title h4 mb-1" id="clientHistoryDrawerTitle">Historial y seguimiento</h2>
+      <p class="text-secondary small mb-0">{{ client.business_name }} · {{ client.code or 'Sin código' }}</p>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar historial"></button>
+  </div>
+  <div class="px-4 pt-3 border-bottom bg-white">
+    <ul class="nav nav-pills gap-2 mb-3" role="tablist" aria-label="Secciones del historial">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" type="button" id="historyCommentsButton"
+                data-bs-toggle="pill" data-bs-target="#historyCommentsPane"
+                role="tab" aria-controls="historyCommentsPane" aria-selected="true">
+          <i class="bi bi-chat-left-text me-1"></i>Comentarios internos
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" type="button" id="historyActivityButton"
+                data-bs-toggle="pill" data-bs-target="#historyActivityPane"
+                role="tab" aria-controls="historyActivityPane" aria-selected="false">
+          <i class="bi bi-activity me-1"></i>Timeline automático
+          <span class="badge text-bg-light ms-1">{{ timeline_count }}</span>
+        </button>
+      </li>
+    </ul>
+  </div>
+  <div class="offcanvas-body px-4 py-3">
+    <div class="tab-content">
+      <div class="tab-pane fade show active" id="historyCommentsPane" role="tabpanel"
+           aria-labelledby="historyCommentsButton" tabindex="0">
+        <p class="text-secondary small mb-3">Observaciones y acuerdos registrados por el equipo, del más reciente al más antiguo.</p>
+        {% if nx_is_prospect %}
+          {% if nx_can_write_history %}
+          <form method="post" action="{{ url_for('crm.add_interaction', client_id=client.id) }}"
+                class="border rounded-4 p-3 mb-4 bg-light">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="interaction_type" value="nota">
+            <input type="hidden" name="from_history" value="1">
+            <label class="form-label fw-semibold" for="nxHistorySubject">Asunto o referencia</label>
+            <input id="nxHistorySubject" name="subject" class="form-control mb-2" maxlength="180"
+                   placeholder="Ej. Próxima llamada, objeción, acuerdo">
+            <label class="form-label fw-semibold" for="nxHistoryProspectNote">Comentario interno</label>
+            <textarea id="nxHistoryProspectNote" name="notes" class="form-control" rows="3"
+                      placeholder="Escribe lo importante para el próximo seguimiento..." required></textarea>
+            <button class="btn btn-primary mt-3"><i class="bi bi-plus-circle me-1"></i>Guardar comentario</button>
+          </form>
+          {% endif %}
+          {% set nx_internal_notes = interactions|selectattr('interaction_type', 'equalto', 'nota')|list %}
+          <div class="timeline">
+            {% for note in nx_internal_notes %}
+              <div class="timeline-item">
+                <div class="d-flex flex-wrap justify-content-between gap-2">
+                  <strong>{{ note.user.name if note.user else 'Equipo' }}</strong>
+                  <small class="text-secondary">{{ (note.occurred_at or note.created_at).strftime('%d/%m/%Y %H:%M') }}</small>
+                </div>
+                <div class="mt-1"><span class="badge-soft info">{{ note.subject or 'Nota de seguimiento' }}</span></div>
+                <p class="mb-0 mt-2" style="white-space:pre-line">{{ note.notes or 'Sin detalle adicional' }}</p>
+              </div>
+            {% else %}
+              <p class="text-secondary">Todavía no hay notas internas. Registra la primera observación para este seguimiento.</p>
+            {% endfor %}
+          </div>
+        {% else %}
+          {% if nx_can_write_history %}
+          <form method="post" action="{{ url_for('clients.add_comment', client_id=client.id) }}"
+                class="border rounded-4 p-3 mb-4 bg-light">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-2">
+              <div class="col-sm-5">
+                <label class="form-label fw-semibold" for="nxHistoryProcess">Proceso</label>
+                <select id="nxHistoryProcess" name="process_type" class="form-select" required>
+                  <option>Seguimiento / CRM</option><option>Cotización / Venta</option>
+                  <option>Pago / Finanzas</option><option>Onboarding</option><option>Diseño</option>
+                  <option>Desarrollo web</option><option>Google Business</option><option>Redes sociales</option>
+                  <option>SEO</option><option>Imprenta</option><option>Soporte</option>
+                  <option>Renovación</option><option>Otro</option>
+                </select>
+              </div>
+              <div class="col-sm-7">
+                <label class="form-label fw-semibold" for="nxHistoryDetail">Detalle del proceso</label>
+                <input id="nxHistoryDetail" name="process_detail" class="form-control" maxlength="180"
+                       placeholder="Ej. Pendiente de aprobación">
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold" for="nxHistoryBody">Comentario interno</label>
+                <textarea id="nxHistoryBody" name="body" class="form-control" rows="3"
+                          placeholder="Registra acuerdos, pendientes o decisiones..." required></textarea>
+              </div>
+            </div>
+            <button class="btn btn-primary mt-3"><i class="bi bi-plus-circle me-1"></i>Agregar comentario</button>
+          </form>
+          {% endif %}
+          <div class="timeline">
+            {% for comment in comments %}
+              <div class="timeline-item">
+                <div class="d-flex flex-wrap justify-content-between gap-2">
+                  <strong>{{ comment.user.name if comment.user else 'Equipo' }}</strong>
+                  <small class="text-secondary">{{ comment.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+                </div>
+                <div class="mt-1">
+                  <span class="badge-soft info">{{ comment.process_type }}</span>
+                  {% if comment.department_snapshot %}<span class="badge-soft muted">{{ comment.department_snapshot }}</span>{% endif %}
+                </div>
+                {% if comment.process_detail %}<small class="d-block text-secondary mt-2">{{ comment.process_detail }}</small>{% endif %}
+                <p class="mb-0 mt-2" style="white-space:pre-line">{{ comment.body }}</p>
+              </div>
+            {% else %}
+              <p class="text-secondary">Todavía no hay comentarios internos para este cliente.</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="tab-pane fade" id="historyActivityPane" role="tabpanel"
+           aria-labelledby="historyActivityButton" tabindex="0">
+        <p class="text-secondary small">{{ timeline_count }} evento(s) del expediente, ordenados del más reciente al más antiguo. Se muestran según tus permisos.</p>
+        <div class="d-flex flex-wrap gap-2 mb-3" id="nxHistoryFilters">
+          <button type="button" class="btn btn-sm btn-dark" data-nx-history-filter="all">Todos</button>
+          {% if current_user.has_permission('crm.view') %}
+          <button type="button" class="btn btn-sm btn-light border" data-nx-history-filter="crm">CRM</button>
+          {% endif %}
+          {% if not nx_is_prospect and can_financial %}
+          <button type="button" class="btn btn-sm btn-light border" data-nx-history-filter="comercial">Comercial</button>
+          <button type="button" class="btn btn-sm btn-light border" data-nx-history-filter="finanzas">Finanzas</button>
+          {% endif %}
+          {% if current_user.has_permission('projects.view') or current_user.has_permission('tasks.view') %}
+          <button type="button" class="btn btn-sm btn-light border" data-nx-history-filter="desarrollo">Desarrollo</button>
+          {% endif %}
+          {% if current_user.has_permission('support.view') %}
+          <button type="button" class="btn btn-sm btn-light border" data-nx-history-filter="soporte">Soporte</button>
+          {% endif %}
+          <button type="button" class="btn btn-sm btn-light border" data-nx-history-filter="interno">Interno</button>
+        </div>
+        <div class="timeline" id="nxHistoryTimeline">
+          {% for event in timeline %}
+            <div class="timeline-item" data-nx-history-category="{{ event.category }}">
+              <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                  <div class="mb-1">
+                    <span class="badge-soft info">{{ event.kind }}</span>
+                    <small class="text-secondary ms-1">{{ event.category|label }}</small>
+                  </div>
+                  <strong>{{ event.title }}</strong>
+                </div>
+                <small class="text-secondary text-nowrap">{{ event.dt.strftime('%d/%m/%Y %H:%M') }}</small>
+              </div>
+              {% if event.actor %}<small class="d-block text-secondary mt-1">Por {{ event.actor }}</small>{% endif %}
+              {% if event.body %}<p class="mb-1 mt-2" style="white-space:pre-line">{{ event.body }}</p>{% endif %}
+              {% if event.link %}<a class="small" href="{{ event.link }}">Abrir registro</a>{% endif %}
+            </div>
+          {% else %}
+            <p class="text-secondary">Todavía no hay eventos registrados en el expediente.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const drawer = document.getElementById('clientHistoryDrawer');
+  if (!drawer) return;
+  const showDrawerForHash = function () {
+    if (['#historial', '#comentarios', '#actividad'].includes(window.location.hash) && window.bootstrap) {
+      bootstrap.Offcanvas.getOrCreateInstance(drawer).show();
+      if (window.location.hash === '#actividad') {
+        const tab = document.getElementById('historyActivityButton');
+        if (tab) bootstrap.Tab.getOrCreateInstance(tab).show();
+      }
+    }
+  };
+  showDrawerForHash();
+  window.addEventListener('hashchange', showDrawerForHash);
+
+  const buttons = drawer.querySelectorAll('[data-nx-history-filter]');
+  const items = drawer.querySelectorAll('[data-nx-history-category]');
+  buttons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      const selected = button.getAttribute('data-nx-history-filter');
+      buttons.forEach(function (item) {
+        item.classList.remove('btn-dark');
+        item.classList.add('btn-light', 'border');
+      });
+      button.classList.remove('btn-light', 'border');
+      button.classList.add('btn-dark');
+      items.forEach(function (item) {
+        item.classList.toggle('d-none', selected !== 'all' && item.getAttribute('data-nx-history-category') !== selected);
+      });
+    });
+  });
+});
+</script>
