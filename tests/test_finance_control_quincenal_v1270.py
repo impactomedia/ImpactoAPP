@@ -179,7 +179,7 @@ def test_superadmin_only_can_approve_exception(app):
     assert client.post(f"/finance-control/movements/{movement_id}/decision", data={
         "decision": "aprobar", "reason": "Cliente urgente",
     }).status_code == 403
-    client.get("/auth/logout")
+    client.post("/auth/logout")
     login(client, "chief")
     response = client.post(f"/finance-control/movements/{movement_id}/decision", data={
         "decision": "aprobar", "reason": "Autorización especial",
@@ -265,7 +265,7 @@ def test_finance_dashboard_and_advisor_home_pages_render(app):
     assert client.get("/finance-control/goals").status_code == 200
     assert client.get("/finance-control/movements").status_code == 200
     assert client.get("/finance-control/payouts").status_code == 200
-    client.get("/auth/logout")
+    client.post("/auth/logout")
     login(client, "advisor")
     response = client.get("/dashboard/")
     assert response.status_code == 200
