@@ -13,7 +13,7 @@ from app.models import (
 )
 from app.finance_control_models import AdvisorFortnightGoal, AdvisorFortnightPayout, FinanceProjectMovement
 from app.finance_control_service import (
-    fortnight_bounds, fortnight_summary, local_today, monthly_ledger,
+    available_payout, fortnight_bounds, fortnight_summary, local_today, monthly_ledger,
 )
 from scripts.seed import seed_all
 
@@ -275,3 +275,74 @@ def test_finance_dashboard_and_advisor_home_pages_render(app):
     response = client.get("/dashboard/")
     assert response.status_code == 200
     assert b"Mi Meta Total" in response.data
+
+
+
+def test_tip_only_does_not_count_and_individual_video_does(app):
+    with app.app_context():
+        adviser = User.query.filter_by(email="advisor1270@test.local").one().collaborator
+        for index, (description, amount) in enumerate([("Propina", 25), ("Video corto", 65)], 1):
+            customer = Client(
+                code=f"FC-EXTRA-{index}", business_name=f"Cliente Extra {index}",
+                contact_name="Persona", record_type="cliente", owner_id=adviser.id,
+            )
+            db.session.add(customer)
+            db.session.flush()
+            sale = Sale(
+                sale_no=f"FC-EXTRA-VEN-{index}", client_id=customer.id,
+                advisor_id=adviser.id, sale_date=local_today(),
+                status="confirmada", total=amount, amount_paid=amount, balance=0,
+            )
+            db.session.add(sale)
+            db.session.flush()
+            db.session.add(SaleItem(sale_id=sale.id, description=description,
+                                    quantity=1, total=amount))
+            db.session.add(Payment(
+                client_id=customer.id, sale_id=sale.id, effective_date=local_today(),
+                amount=amount, currency="USD", status="confirmado",
+            ))
+        db.session.commit()
+        metrics = fortnight_summary(adviser)
+        assert metrics["new_clients"] == 2
+        assert metrics["new_accessories"] == 1
+        assert metrics["new_memberships"] == 1
+        assert metrics["tip_only_clients"] == 1
+
+
+def test_later_execution_reduces_only_current_quincena_and_creates_future_adjustment(app):
+    with app.app_context():
+        adviser = User.query.filter_by(email="advisor1270@test.local").one().collaborator
+        sale = Sale.query.filter_by(sale_no="FC-VEN-1270").one()
+        starts, ends = fortnight_bounds(local_today())
+        db.session.add(AdvisorFortnightPayout(
+            advisor_id=adviser.id, project_id=adviser.advisor_project_id,
+            period_start=starts, amount=40, paid_on=local_today(),
+            paid_by_id=adviser.user_id,
+        ))
+        db.session.add(FinanceProjectMovement(
+            project_id=adviser.advisor_project_id, sale_id=sale.id,
+            category="meta_ads", description="Campaña iniciada después del abono",
+            amount=150, status="ejecutado", requested_by_id=adviser.user_id,
+            executed_on=local_today(),
+        ))
+        db.session.commit()
+        first = fortnight_summary(adviser, starts)
+        assert first["gross"] == Decimal("400.00")
+        assert first["net"] == Decimal("250.00")
+        assert first["earned"] == Decimal("0.00")
+        next_day = ends + timedelta(days=1)
+        next_starts, _ = fortnight_bounds(next_day)
+        db.session.add(AdvisorFortnightGoal(
+            advisor_id=adviser.id, project_id=adviser.advisor_project_id,
+            period_start=next_starts, total_goal=500, net_goal=300,
+            percentage=10, updated_by_id=adviser.user_id,
+        ))
+        db.session.add(Payment(
+            client_id=sale.client_id, sale_id=sale.id,
+            effective_date=next_starts, amount=600,
+            currency="USD", status="confirmado",
+        ))
+        db.session.commit()
+        second = fortnight_summary(adviser, next_starts)
+        assert second["earned"] == Decimal("60.00")
+        assert available_payout(second) == Decimal("20.00")
