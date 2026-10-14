@@ -87,7 +87,7 @@
   <div class="metric-card"><span>Días restantes</span><strong>{{ fortnight.days_remaining }}</strong><small>Hasta terminar la quincena</small></div>
   <div class="metric-card"><span>Ingreso diario requerido</span><strong>USD {{ fortnight.daily_required|money }}</strong><small>Para llegar a Meta Total</small></div>
   <div class="metric-card"><span>Comisión de la quincena</span><strong>USD {{ fortnight.earned|money }}</strong><small>{{ fortnight.percentage }}% si cumple Meta Neta</small></div>
-  <div class="metric-card"><span>Clientes nuevos</span><strong>{{ fortnight.new_clients }}</strong><small>Excluye propinas sin servicio</small></div>
+  <div class="metric-card"><span>Clientes nuevos</span><strong>{{ fortnight.new_clients }}</strong><small>Membresías: {{ fortnight.new_memberships }} · Accesorios: {{ fortnight.new_accessories }} · Propinas excluidas: {{ fortnight.tip_only_clients }}</small></div>
 </div>
 {% endif %}
 <div class="metric-grid mb-4">
