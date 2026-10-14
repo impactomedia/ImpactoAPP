@@ -260,3 +260,13 @@ def monthly_ledger(year, month):
     for row in result.values():
         row["result"] = row["income"] - row["expenses"]
     return result, entries, unconverted_nio
+
+
+def legacy_allocation_context():
+    projects = AdvisorProject.query.order_by(AdvisorProject.name).all()
+    lookup = {p.id: p for p in projects}
+    allocations = {
+        (a.record_type, a.record_id): lookup.get(a.project_id)
+        for a in FinanceProjectAllocation.query.all()
+    }
+    return {"finance_projects": projects, "allocations": allocations}
