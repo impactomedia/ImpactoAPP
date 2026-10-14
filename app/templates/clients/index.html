@@ -3,29 +3,159 @@
 {% set role_name = current_user.role.name if current_user.role else '' %}
 {% set can_financial = current_user.has_permission('sales.view') or current_user.has_permission('finance.view') %}
 <div class="page-heading">
-  <div><span class="eyebrow">Impacto Nexora · Clientes</span><h1>Control de clientes</h1><p>Un registro aparece aquí después de confirmar su primera compra.</p></div>
+  <div><span class="eyebrow">Nexora · Clientes</span><h1>Clientes por plan contratado</h1>
+    <p>Identifica cada empresa por sus planes principales, Community Manager, servicios individuales e imprenta.</p>
+  </div>
   <div class="d-flex flex-wrap gap-2">
     <a class="btn btn-outline-secondary" href="{{ url_for('clients_v3.mine') }}">Mis clientes</a>
     {% if role_name in ['superadmin','admin','manager'] and current_user.has_permission('clients.create') %}
-      <a class="btn btn-outline-primary" href="{{ url_for('clients_import.index') }}">Importar Excel Operativo</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('clients_import.index') }}">Importar Excel Operativo</a>
     {% endif %}
     {% if current_user.has_permission('clients.create') %}<a class="btn btn-light border" href="{{ url_for('data_hub.index') }}#import">Importar CSV / XLSX</a>{% endif %}
     {% if current_user.has_permission('crm.create') %}<a class="btn btn-brand" href="{{ url_for('crm.new_prospect') }}">Nuevo seguimiento</a>{% endif %}
     {% if current_user.has_permission('clients.export') %}<a class="btn btn-outline-secondary" href="{{ url_for('data_hub.export_clients', q=search, status=status, advisor_project_id=advisor_project_id) }}">Exportar filtrado</a>{% endif %}
   </div>
 </div>
-{% if pending_followups and current_user.has_permission('crm.view') %}<div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2"><div><strong>{{ pending_followups }} registro(s) siguen clasificados como seguimiento.</strong> <span>Estos registros permanecen en CRM hasta que confirmen una compra.</span></div><a class="btn btn-sm btn-outline-dark" href="{{ url_for('crm.prospects') }}">Revisar CRM</a></div>{% endif %}
+
+{% if pending_followups and current_user.has_permission('crm.view') %}
+<div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2">
+  <div><strong>{{ pending_followups }} seguimiento(s) pendientes de convertirse en cliente.</strong> Solo aparecen aquí tras confirmar la primera compra.</div>
+  <a class="btn btn-sm btn-outline-dark" href="{{ url_for('crm.prospects') }}">Ver seguimientos</a>
+</div>
+{% endif %}
+
+<section class="panel-card mb-4">
+  <div class="panel-header mb-3">
+    <div><h2 class="h5">Clasificación por tipo de plan</h2>
+      <p>Selecciona una categoría para ver los clientes relacionados. Una empresa puede pertenecer a varias categorías.</p>
+    </div>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{{ url_for('clients.index', q=search, status=status, advisor_project_id=advisor_project_id) }}"
+       class="btn {{ 'btn-dark' if not plan_type and not commercial_plan_id else 'btn-light border' }}">
+      Todos <span class="badge bg-light text-dark ms-1">{{ all_visible_count }}</span>
+    </a>
+    {% for code, title in plan_types.items() %}
+    <a href="{{ url_for('clients.index', q=search, status=status, advisor_project_id=advisor_project_id, plan_type=code) }}"
+       class="btn {{ 'btn-primary' if plan_type==code and not commercial_plan_id else 'btn-light border' }}">
+      {{ title }} <span class="badge bg-light text-dark ms-1">{{ type_counts.get(code, 0) }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
 <section class="panel-card">
-  <form class="row g-2 mb-3">
-    <div class="col-md-3"><input class="form-control" name="q" value="{{ search }}" placeholder="Buscar cliente, contacto, teléfono, correo o código"></div>
-    <div class="col-md-2"><select name="status" class="form-select"><option value="">Activos y vigentes</option><option value="activo" {% if status=='activo' %}selected{% endif %}>Activo</option><option value="inactivo" {% if status=='inactivo' %}selected{% endif %}>Inactivo</option><option value="caducado" {% if status=='caducado' %}selected{% endif %}>Caducado</option><option value="archivado" {% if status=='archivado' %}selected{% endif %}>Archivado</option></select></div>
-    <div class="col-md-2"><select name="advisor_project_id" class="form-select"><option value="">IMPACTO + NOVAX</option>{% for p in advisor_projects %}<option value="{{ p.id }}" {% if advisor_project_id==p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
-    <div class="col-md-3"><select name="commercial_plan_id" class="form-select"><option value="">Todos los planes</option>{% for plan in commercial_plans %}<option value="{{ plan.id }}" {% if commercial_plan_id==plan.id %}selected{% endif %}>{{ plan.name }}</option>{% endfor %}</select></div>
-    <div class="col-md-2"><button class="btn btn-dark w-100">Filtrar</button></div>
+  <form class="row g-2 align-items-end mb-3" method="get">
+    <div class="col-lg-3 col-md-6">
+      <label class="form-label small fw-semibold">Buscar</label>
+      <input class="form-control" name="q" value="{{ search }}" placeholder="Empresa, contacto, teléfono o código">
+    </div>
+    <div class="col-lg-2 col-md-3">
+      <label class="form-label small fw-semibold">Estado</label>
+      <select name="status" class="form-select">
+        <option value="">No archivados</option>
+        {% for option in ['activo','inactivo','caducado','archivado'] %}
+        <option value="{{ option }}" {% if status==option %}selected{% endif %}>{{ option|label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-2 col-md-3">
+      <label class="form-label small fw-semibold">Proyecto comercial</label>
+      <select name="advisor_project_id" class="form-select">
+        <option value="">Todos los proyectos</option>
+        {% for project in advisor_projects %}
+        <option value="{{ project.id }}" {% if advisor_project_id==project.id %}selected{% endif %}>{{ project.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-2 col-md-6">
+      <label class="form-label small fw-semibold">Tipo de plan</label>
+      <select name="plan_type" class="form-select">
+        <option value="">Todos los tipos</option>
+        {% for code, title in plan_types.items() %}
+        <option value="{{ code }}" {% if plan_type==code %}selected{% endif %}>{{ title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-2 col-md-4">
+      <label class="form-label small fw-semibold">Plan / producto específico</label>
+      <select name="commercial_plan_id" class="form-select">
+        <option value="">Todos los planes</option>
+        {% for plan in commercial_plans %}
+        <option value="{{ plan.id }}" {% if commercial_plan_id==plan.id %}selected{% endif %}>{{ plan.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-1 col-md-2">
+      <button class="btn btn-dark w-100">Filtrar</button>
+    </div>
   </form>
-  <div class="table-responsive"><table class="table modern-table align-middle"><thead><tr><th>Negocio</th><th>Contacto</th><th>Estado</th><th>Asesor</th><th>Proyecto</th><th>Servicios</th>{% if can_financial %}<th>Saldo</th>{% endif %}<th style="min-width:290px">Acciones</th></tr></thead><tbody>
-  {% for c in clients %}<tr><td><strong>{{ c.business_name }}</strong><small class="d-block text-secondary">{{ c.code or 'Sin código' }}</small></td><td>{{ c.contact_name }}<small class="d-block text-secondary">{{ c.phone or c.email or '—' }}</small></td><td><span class="badge-soft {{ 'success' if c.client_status=='activo' else 'warning' if c.client_status=='caducado' else 'muted' }}">{{ c.client_status|label }}</span></td><td>{{ c.owner.user.name if c.owner else '—' }}</td><td>{{ c.owner.advisor_project.name if c.owner and c.owner.advisor_project else '—' }}</td><td>{{ c.contracts|length }}</td>{% if can_financial %}<td>{{ c.outstanding_balance|money }}</td>{% endif %}<td><div class="d-flex flex-wrap gap-1"><a class="btn btn-sm btn-light border" href="{{ url_for('clients.detail', client_id=c.id) }}">Ficha</a><a class="btn btn-sm btn-outline-primary" href="{{ url_for('clients_v3.coordination', client_id=c.id) }}">Coordinar</a>{% if current_user.has_permission('clients.edit') %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.edit', client_id=c.id) }}">Editar</a>{% if c.client_status == 'archivado' %}<form method="post" action="{{ url_for('clients.restore', client_id=c.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-success">Restaurar</button></form>{% else %}<form method="post" action="{{ url_for('clients.archive', client_id=c.id) }}" onsubmit="return confirm('¿Archivar este cliente? El historial se conservará.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-warning">Archivar</button></form>{% endif %}{% endif %}{% if current_user.is_superadmin or role_name == 'admin' %}<form method="post" action="{{ url_for('clients.delete_client', client_id=c.id) }}" onsubmit="return confirm('¿Eliminar definitivamente este cliente? Solo se eliminará si no tiene historial relacionado.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger">Eliminar</button></form>{% endif %}</div></td></tr>
-  {% else %}<tr><td colspan="{{ 8 if can_financial else 7 }}" class="text-center py-4">No hay clientes con estos filtros.</td></tr>{% endfor %}
-  </tbody></table></div>
+  <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+    <span class="text-secondary small">{{ clients|length }} cliente(s) encontrados</span>
+    {% if search or status or advisor_project_id or plan_type or commercial_plan_id %}
+    <a href="{{ url_for('clients.index') }}" class="btn btn-sm btn-light border">Limpiar filtros</a>
+    {% endif %}
+  </div>
+
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr>
+        <th>Negocio</th><th>Contacto</th><th>Estado</th><th>Asesor</th><th>Proyecto</th>
+        <th style="min-width:230px">Planes y servicios</th>
+        {% if can_financial %}<th>Saldo</th>{% endif %}
+        <th style="min-width:260px">Acciones</th>
+      </tr></thead>
+      <tbody>
+      {% for c in clients %}
+      <tr>
+        <td><strong>{{ c.business_name }}</strong><small class="d-block text-secondary">{{ c.code or 'Sin código' }}</small></td>
+        <td>{{ c.contact_name }}<small class="d-block text-secondary">{{ c.phone or c.email or '—' }}</small></td>
+        <td><span class="badge-soft {{ 'success' if c.client_status=='activo' else 'warning' if c.client_status=='caducado' else 'muted' }}">{{ c.client_status|label }}</span></td>
+        <td>{{ c.owner.user.name if c.owner and c.owner.user else '—' }}</td>
+        <td>{{ c.owner.advisor_project.name if c.owner and c.owner.advisor_project else '—' }}</td>
+        <td>
+          {% for name in plans_by_client.get(c.id, [])[:3] %}
+          <span class="badge-soft {{ 'info' if loop.first else 'muted' }} d-inline-block me-1 mb-1">{{ name }}</span>
+          {% else %}
+          <span class="badge-soft muted">{{ 'Imprenta personalizada' if c.print_orders else 'Sin plan activo registrado' }}</span>
+          {% endfor %}
+          {% set additional = plans_by_client.get(c.id, [])|length - 3 %}
+          {% if additional > 0 %}<small class="d-block text-secondary">+{{ additional }} servicio(s) adicional(es)</small>{% endif %}
+        </td>
+        {% if can_financial %}<td>{{ c.outstanding_balance|money }}</td>{% endif %}
+        <td>
+          <div class="d-flex flex-wrap gap-1">
+            <a class="btn btn-sm btn-light border" href="{{ url_for('clients.detail', client_id=c.id) }}">Ficha</a>
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('clients_v3.coordination', client_id=c.id) }}">Coordinar</a>
+            {% if current_user.has_permission('clients.edit') %}
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.edit', client_id=c.id) }}">Editar</a>
+            {% if c.client_status == 'archivado' %}
+            <form method="post" action="{{ url_for('clients.restore', client_id=c.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-success">Restaurar</button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('clients.archive', client_id=c.id) }}" onsubmit="return confirm('¿Archivar este cliente? El historial se conservará.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-warning">Archivar</button>
+            </form>
+            {% endif %}
+            {% endif %}
+            {% if current_user.is_superadmin or role_name == 'admin' %}
+            <form method="post" action="{{ url_for('clients.delete_client', client_id=c.id) }}"
+                  onsubmit="return confirm('¿Eliminar definitivamente este cliente? Solo se eliminará si no tiene historial relacionado.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="{{ 8 if can_financial else 7 }}" class="text-center py-4">No hay clientes con estos filtros. Puedes cambiar la categoría o limpiar los filtros.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}

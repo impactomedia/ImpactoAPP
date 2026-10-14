@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, current_app, send_from_directory, abort
 from flask_login import login_required, current_user
 from sqlalchemy import or_, and_
+from sqlalchemy.orm import selectinload
 
 from app.commercial_plans import maintenance_label
 from app.extensions import db
@@ -31,6 +32,7 @@ from app.models import (
     Interaction,
     Quote,
     Sale,
+    SaleItem,
     Payment,
     AccountReceivable,
     Project,
@@ -989,11 +991,23 @@ def _client_has_history(client_id):
 @bp.route("/")
 @login_required
 def index():
+    # Agrupa clientes por planes contratados; no modifica ni reasigna contratos.
     q = _visible_client_query(Client.query).filter(Client.record_type == "cliente")
     search = request.args.get("q", "").strip()
     status = request.args.get("status", "").strip()
     advisor_project_id = request.args.get("advisor_project_id", type=int)
     commercial_plan_id = request.args.get("commercial_plan_id", type=int)
+    plan_type = (request.args.get("plan_type") or "").strip().lower()
+    plan_types = {
+        "paquete": "Planes principales",
+        "community_manager": "Community Manager",
+        "servicio": "Servicios individuales",
+        "mantenimiento": "Mantenimiento",
+        "imprenta": "Imprenta personalizada",
+        "sin_plan": "Sin plan o servicio identificado",
+    }
+    if plan_type not in plan_types:
+        plan_type = ""
 
     if search:
         like = f"%{search}%"
@@ -1004,37 +1018,93 @@ def index():
             Client.email.ilike(like),
             Client.code.ilike(like),
         ))
-
     if status:
         q = q.filter_by(client_status=status)
     else:
         q = q.filter(Client.client_status != "archivado")
-
     if advisor_project_id:
         q = q.join(Collaborator, Client.owner_id == Collaborator.id).filter(
             Collaborator.advisor_project_id == advisor_project_id
         )
 
-    if commercial_plan_id:
-        q = q.filter(Client.contracts.any((ClientContract.product_id == commercial_plan_id) & (ClientContract.principal.is_(True)) & (ClientContract.status == "activo")))
-    clients = q.order_by(Client.updated_at.desc()).all()
+    base_clients = q.options(
+        selectinload(Client.contracts).selectinload(ClientContract.product),
+        selectinload(Client.sales).selectinload(Sale.items).selectinload(SaleItem.product),
+        selectinload(Client.print_orders).selectinload(PrintOrder.items),
+    ).order_by(Client.updated_at.desc()).all()
+    plans_by_client = {}
+    types_by_client = {}
+    ids_by_client = {}
+    type_counts = {key: 0 for key in plan_types}
+
+    for client in base_clients:
+        names, seen, categories, product_ids = [], set(), set(), set()
+
+        def add_product(product):
+            if not product or not product.name:
+                return
+            category = (product.category or "servicio").strip()
+            if category not in plan_types:
+                category = "servicio"
+            categories.add(category)
+            product_ids.add(product.id)
+            if product.name not in seen:
+                names.append(product.name)
+                seen.add(product.name)
+
+        # Solamente los contratos vigentes cuentan como plan contratado actual.
+        for contract in client.contracts:
+            if contract.status == "activo":
+                add_product(contract.product)
+
+        # Compras independientes de imprenta/servicios: cuentan si tienen catálogo.
+        for sale in client.sales:
+            if sale.status == "cancelada":
+                continue
+            for item in sale.items:
+                if item.product and item.product.category in {"imprenta", "servicio", "mantenimiento", "community_manager"}:
+                    add_product(item.product)
+
+        # También muestra imprenta creada a medida directamente como una orden.
+        print_orders = [order for order in client.print_orders if order.status != "cancelado"]
+        if print_orders:
+            categories.add("imprenta")
+            for order in print_orders:
+                for item in order.items:
+                    if item.name and item.name not in seen:
+                        names.append(item.name)
+                        seen.add(item.name)
+
+        if not categories:
+            categories.add("sin_plan")
+        for category in categories:
+            type_counts[category] += 1
+        plans_by_client[client.id] = names
+        types_by_client[client.id] = categories
+        ids_by_client[client.id] = product_ids
+
+    clients = [
+        client for client in base_clients
+        if (not plan_type or plan_type in types_by_client[client.id])
+        and (not commercial_plan_id or commercial_plan_id in ids_by_client[client.id])
+    ]
     advisor_projects = AdvisorProject.query.filter_by(active=True).order_by(AdvisorProject.name).all()
     pending_followups = 0
     if current_user.has_permission("crm.view"):
         pending_followups = _visible_client_query(Client.query).filter_by(record_type="seguimiento").count()
 
+    commercial_plans = ProductService.query.filter(
+        ProductService.active.is_(True),
+        ProductService.category.in_(["paquete", "community_manager", "servicio", "mantenimiento", "imprenta"]),
+    ).order_by(ProductService.category, ProductService.name).all()
     return render_template(
-        "clients/index.html",
-        clients=clients,
-        search=search,
-        status=status,
-        advisor_project_id=advisor_project_id,
-        advisor_projects=advisor_projects,
-        pending_followups=pending_followups,
-        commercial_plan_id=commercial_plan_id,
-        commercial_plans=ProductService.query.filter_by(category="paquete", active=True).order_by(ProductService.name).all(),
+        "clients/index.html", clients=clients,
+        search=search, status=status, advisor_project_id=advisor_project_id,
+        advisor_projects=advisor_projects, pending_followups=pending_followups,
+        commercial_plan_id=commercial_plan_id, commercial_plans=commercial_plans,
+        plan_type=plan_type, plan_types=plan_types, type_counts=type_counts,
+        plans_by_client=plans_by_client, all_visible_count=len(base_clients),
     )
-
 
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
