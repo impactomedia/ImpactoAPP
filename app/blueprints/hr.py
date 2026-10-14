@@ -217,9 +217,23 @@ def collaborator_detail(collaborator_id):
         if status not in {"activo", "inactivo", "suspendido"}:
             status = collaborator.status
 
+        new_project_id = request.form.get("advisor_project_id", type=int)
+        if collaborator.user and collaborator.user.role and collaborator.user.role.name == "advisor":
+            from app.finance_control_models import AdvisorFortnightGoal, AdvisorFortnightPayout
+            if not new_project_id:
+                flash("Los asesores deben pertenecer a un proyecto comercial.", "danger")
+                return redirect(url_for("hr.collaborator_detail", collaborator_id=collaborator.id))
+            if new_project_id != collaborator.advisor_project_id:
+                historical_finance = (
+                    AdvisorFortnightGoal.query.filter_by(advisor_id=collaborator.id).first()
+                    or AdvisorFortnightPayout.query.filter_by(advisor_id=collaborator.id).first()
+                )
+                if historical_finance:
+                    flash("No puedes cambiar de proyecto a un asesor que ya tiene metas o pagos quincenales. Su historial debe mantenerse en el mismo proyecto.", "danger")
+                    return redirect(url_for("hr.collaborator_detail", collaborator_id=collaborator.id))
         collaborator.job_title = (request.form.get("job_title") or collaborator.job_title).strip()
         collaborator.department = (request.form.get("department") or "").strip() or None
-        collaborator.advisor_project_id = request.form.get("advisor_project_id", type=int)
+        collaborator.advisor_project_id = new_project_id
         collaborator.status = status
 
         if current_user.has_permission("hr.sensitive"):

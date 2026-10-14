@@ -57,6 +57,7 @@ def create_app(config_object=Config):
     from app.blueprints.operations import bp as operations_bp
     from app.blueprints.printing import bp as printing_bp
     from app.blueprints.finance import bp as finance_bp
+    from app.blueprints.finance_control import bp as finance_control_bp
     from app.blueprints.hr import bp as hr_bp
     from app.blueprints.support import bp as support_bp
     from app.blueprints.settings import bp as settings_bp
@@ -83,6 +84,7 @@ def create_app(config_object=Config):
         operations_bp,
         printing_bp,
         finance_bp,
+        finance_control_bp,
         hr_bp,
         support_bp,
         settings_bp,

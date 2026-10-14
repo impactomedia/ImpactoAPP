@@ -873,6 +873,13 @@ def payment(sale_id):
 @login_required
 def deduction(sale_id):
     sale = db.get_or_404(Sale, sale_id)
+    from app.finance_control_models import AdvisorFortnightGoal
+    from app.finance_control_service import fortnight_bounds, local_today
+    if sale.advisor_id:
+        period_start, _ = fortnight_bounds(local_today())
+        if AdvisorFortnightGoal.query.filter_by(advisor_id=sale.advisor_id, period_start=period_start).first():
+            flash("Los gastos ejecutados de Imprenta y Meta Ads de este asesor se gestionan en Finanzas por proyecto, no como deducciones de venta anteriores.", "danger")
+            return redirect(url_for("sales.detail", sale_id=sale.id))
     if sale.commission and sale.commission.status == "pagada":
         flash("No se puede modificar la base comisionable después de pagar la comisión.", "danger")
         return redirect(url_for("sales.detail", sale_id=sale.id))
@@ -913,6 +920,13 @@ def deduction(sale_id):
 def reverse_payment(payment_id):
     payment_row = db.get_or_404(Payment, payment_id)
     sale = payment_row.sale
+    from app.finance_control_models import AdvisorFortnightPayout
+    from app.finance_control_service import fortnight_bounds
+    if sale.advisor_id:
+        starts, _ = fortnight_bounds(payment_row.effective_date)
+        if AdvisorFortnightPayout.query.filter_by(advisor_id=sale.advisor_id, period_start=starts).first():
+            flash("El cobro pertenece a una quincena con comisiones ya pagadas. Solicita una corrección financiera auditada; no se permite reescribir ese pago.", "danger")
+            return redirect(url_for("sales.detail", sale_id=sale.id))
 
     if payment_row.status != "confirmado":
         flash("Este pago ya no está confirmado y no puede reversarse nuevamente.", "warning")

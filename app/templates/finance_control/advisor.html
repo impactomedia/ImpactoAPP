@@ -1,0 +1,36 @@
+{% extends "app_base.html" %}
+{% block title %}Mi quincena | Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div><span class="eyebrow">Mi proyecto · {{ summary.advisor.advisor_project.name }}</span>
+    <h1>Mi rendimiento quincenal</h1>
+    <p>Del {{ summary.starts.strftime('%d/%m/%Y') }} al {{ summary.ends.strftime('%d/%m/%Y') }} · Se consideran únicamente cobros confirmados.</p>
+  </div>
+</div>
+<section class="panel-card mb-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div><h2 class="h5 mb-1">Meta Total · Ingresos brutos</h2><p class="text-secondary mb-0">Objetivo comercial quincenal, sin deducciones.</p></div>
+    <strong class="fs-4">USD {{ summary.gross|money }} / {{ summary.total_goal|money }}</strong>
+  </div>
+  <div class="progress" role="progressbar" aria-label="Avance de meta total" aria-valuenow="{{ summary.gross_progress }}" aria-valuemin="0" aria-valuemax="100" style="height:18px">
+    <div class="progress-bar bg-primary" style="width:{{ summary.gross_progress }}%">{{ summary.gross_progress|round(1) }}%</div>
+  </div>
+  <p class="text-secondary small mt-2 mb-0">Faltan USD {{ summary.gross_left|money }} para cumplir la Meta Total.</p>
+</section>
+{% if not summary.goal %}<div class="alert alert-warning">Administración aún no ha configurado tus metas para esta quincena. Los cobros aparecen registrados, pero la comisión no se habilitará hasta asignar una meta neta.</div>{% endif %}
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Meta Neta para comisionar</span><strong>USD {{ summary.net_goal|money }}</strong><small>Ingresos netos actuales: USD {{ summary.net|money }}</small></div>
+  <div class="metric-card"><span>Pendiente de Meta Neta</span><strong>USD {{ summary.net_left|money }}</strong><small>{{ 'Comisión habilitada' if summary.eligible else 'Meta neta pendiente' }}</small></div>
+  <div class="metric-card"><span>Deducciones ejecutadas</span><strong>USD {{ summary.deductions|money }}</strong><small>Imprenta {{ summary.print_deductions|money }} · Meta Ads {{ summary.ads_deductions|money }}</small></div>
+  <div class="metric-card"><span>Días disponibles</span><strong>{{ summary.days_remaining }}</strong><small>Incluye hoy cuando la quincena está en curso</small></div>
+  <div class="metric-card"><span>Ingreso diario necesario</span><strong>USD {{ summary.daily_required|money }}</strong><small>Para completar la Meta Total</small></div>
+  <div class="metric-card"><span>Comisión del período</span><strong>USD {{ summary.earned|money }}</strong><small>{{ summary.percentage }}% de la base neta al alcanzar la meta</small></div>
+  <div class="metric-card"><span>Comisión ya pagada</span><strong>USD {{ summary.paid|money }}</strong><small>Pagos de esta quincena</small></div>
+  <div class="metric-card"><span>Clientes nuevos</span><strong>{{ summary.new_clients }}</strong><small>Membresías: {{ summary.new_memberships }} · Accesorios: {{ summary.new_accessories }} · Propinas excluidas: {{ summary.tip_only_clients }}</small></div>
+</div>
+<section class="panel-card">
+  <h2 class="h5">Cómo se calcula</h2>
+  <p class="mb-2">Ingresos brutos confirmados <strong>{{ summary.gross|money }}</strong> − Imprenta y Meta Ads ejecutados <strong>{{ summary.deductions|money }}</strong> = base neta <strong>{{ summary.net|money }}</strong>.</p>
+  <p class="text-secondary small mb-0">Cumplir la Meta Neta habilita la comisión, aunque la Meta Total siga pendiente. Las metas se reinician cada quincena. No se muestran datos privados de otros asesores.</p>
+</section>
+{% endblock %}
