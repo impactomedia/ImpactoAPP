@@ -7,6 +7,7 @@
     <p>{{ client.contact_name }} · {{ client.phone or '' }} · {{ client.email or '' }}</p>
   </div>
   <div class="d-flex flex-wrap gap-2">
+    <a href="#historial" class="btn btn-outline-primary d-inline-flex align-items-center gap-2" title="Notas y modificaciones del seguimiento"><i class="bi bi-clock-history"></i>Historial y comentarios <span class="badge bg-primary-subtle text-primary rounded-pill">{{ timeline_count }}</span></a>
     {% if current_user.has_permission('clients.edit') %}
     {% if current_user.has_permission('sales.create') %}<a class="btn btn-outline-success" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Registrar compra</a>{% endif %}
     {% endif %}
@@ -66,4 +67,87 @@
     </section>
   </div>
 </div>
+
+<section id="historial" class="panel-card mt-4 mb-4" style="scroll-margin-top:90px">
+  <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div><h2 class="h4 mb-1"><i class="bi bi-clock-history me-2"></i>Historial y comentarios internos</h2><p class="text-secondary mb-0">{{ timeline_count }} evento(s) del seguimiento, ordenados del más reciente al más antiguo.</p></div>
+    <button type="button" class="btn btn-sm btn-light border" onclick="window.scrollTo({top:0,behavior:'smooth'})"><i class="bi bi-arrow-up me-1"></i>Volver arriba</button>
+  </div>
+  <div class="row g-4">
+    <div class="col-xl-5">
+      <section class="border rounded-4 p-3 h-100">
+        <h3 class="h5"><i class="bi bi-chat-left-text me-2"></i>Comentarios internos</h3>
+        <p class="text-secondary small">Información del equipo vinculada a este seguimiento.</p>
+        {% if current_user.has_permission('crm.edit') %}
+        <form method="post" action="{{ url_for('crm.add_internal_comment', client_id=client.id) }}" class="mb-4">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="form-label" for="commentProcess">Proceso</label>
+          <select id="commentProcess" class="form-select mb-2" name="process_type" required>
+            <option>Seguimiento / CRM</option><option>Cotización / Venta</option>
+            <option>Contacto</option><option>Onboarding</option><option>Otro</option>
+          </select>
+          <label class="form-label" for="commentDetail">Detalle (opcional)</label>
+          <input id="commentDetail" name="process_detail" class="form-control mb-2" maxlength="240" placeholder="Ej. Propuesta enviada">
+          <label class="form-label" for="commentText">Comentario</label>
+          <textarea id="commentText" name="body" class="form-control mb-2" rows="3" maxlength="5000" required placeholder="Actualización para el equipo"></textarea>
+          <button type="submit" class="btn btn-brand"><i class="bi bi-plus-circle me-1"></i>Guardar comentario</button>
+        </form>
+        {% endif %}
+        <div class="timeline">
+          {% for comment in comments %}
+          <div class="timeline-item">
+            <div class="d-flex justify-content-between flex-wrap gap-2"><strong>{{ comment.user.name if comment.user else 'Usuario' }}</strong><small class="text-secondary">{{ comment.created_at.strftime('%d/%m/%Y %H:%M') }}</small></div>
+            <span class="badge-soft info">{{ comment.process_type }}</span>
+            {% if comment.process_detail %}<small class="d-block text-secondary mt-2">{{ comment.process_detail }}</small>{% endif %}
+            <p class="mt-2 mb-0" style="white-space:pre-line">{{ comment.body }}</p>
+          </div>
+          {% else %}<p class="text-secondary">Todavía no hay comentarios internos.</p>{% endfor %}
+        </div>
+      </section>
+    </div>
+    <div class="col-xl-7">
+      <section class="border rounded-4 p-3 h-100">
+        <h3 class="h5"><i class="bi bi-clock-history me-2"></i>Timeline automático</h3>
+        <p class="text-secondary small">Interacciones y modificaciones registradas automáticamente.</p>
+        <div id="crmHistoryFilters" class="d-flex flex-wrap gap-2 mb-3">
+          <button type="button" class="btn btn-sm btn-dark" data-history-filter="all">Todo</button>
+          <button type="button" class="btn btn-sm btn-light border" data-history-filter="crm">CRM</button>
+          <button type="button" class="btn btn-sm btn-light border" data-history-filter="interno">Interno</button>
+          <button type="button" class="btn btn-sm btn-light border" data-history-filter="comercial">Comercial</button>
+        </div>
+        <div id="crmAutomaticTimeline" class="timeline">
+          {% for event in timeline %}
+          <div class="timeline-item" data-history-category="{{ event.category }}">
+            <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start">
+              <div><span class="badge-soft">{{ event.kind }}</span><small class="text-secondary ms-2">{{ event.category|label }}</small><strong class="d-block mt-1">{{ event.title }}</strong></div>
+              <small class="text-secondary text-nowrap">{{ event.dt.strftime('%d/%m/%Y %H:%M') }}</small>
+            </div>
+            {% if event.actor %}<small class="d-block text-secondary mt-1">Por {{ event.actor }}</small>{% endif %}
+            {% if event.body %}<p class="mt-2 mb-0" style="white-space:pre-line">{{ event.body }}</p>{% endif %}
+          </div>
+          {% else %}<p class="text-secondary">Todavía no hay eventos.</p>{% endfor %}
+        </div>
+        <p id="crmEmptyFilter" class="text-secondary d-none">Sin eventos de esa categoría.</p>
+      </section>
+    </div>
+  </div>
+</section>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const buttons = document.querySelectorAll('#crmHistoryFilters [data-history-filter]');
+  const events = document.querySelectorAll('#crmAutomaticTimeline [data-history-category]');
+  const empty = document.getElementById('crmEmptyFilter');
+  buttons.forEach(button => button.addEventListener('click', () => {
+    const category = button.dataset.historyFilter;
+    buttons.forEach(b => { b.classList.remove('btn-dark'); b.classList.add('btn-light', 'border'); });
+    button.classList.remove('btn-light', 'border'); button.classList.add('btn-dark');
+    let n = 0;
+    events.forEach(ev => {
+      const show = category === 'all' || ev.dataset.historyCategory === category;
+      ev.classList.toggle('d-none', !show); if (show) n++;
+    });
+    if (empty) empty.classList.toggle('d-none', n !== 0);
+  }));
+});
+</script>
 {% endblock %}
