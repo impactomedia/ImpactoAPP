@@ -5,12 +5,13 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, u
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 
-from app.decorators import roles_required
+from app.decorators import permission_required, roles_required
 from app.extensions import db
 from app.helpers import audit, next_code
 from app.models import (
     AdvisorProject,
     Client,
+    ClientComment,
     Collaborator,
     Interaction,
     OwnershipHistory,
@@ -254,12 +255,64 @@ def new_prospect():
 @bp.route("/<int:client_id>")
 @login_required
 def detail(client_id):
-    client = db.get_or_404(Client, client_id)
+    client = visible_clients().filter(Client.id == client_id).first_or_404()
     if client.record_type == "cliente":
         return redirect(url_for("clients.detail", client_id=client.id))
     interactions = Interaction.query.filter_by(client_id=client.id).order_by(Interaction.occurred_at.desc()).all()
     quotes = Quote.query.filter_by(client_id=client.id).order_by(Quote.created_at.desc()).all()
-    return render_template("crm/detail.html", client=client, interactions=interactions, quotes=quotes, stages=STAGES)
+    comments = ClientComment.query.filter_by(client_id=client.id).order_by(ClientComment.created_at.desc()).all()
+    # Reutiliza el mismo generador de historial automático que la ficha de clientes:
+    # cambios auditados, interacciones, notas y cotizaciones, según permisos.
+    from app.blueprints.clients import _build_client_timeline
+    timeline = _build_client_timeline(
+        client, attachments=[], visible_projects=[], visible_tasks=[], can_financial=False
+    )
+    return render_template(
+        "crm/detail.html", client=client, interactions=interactions,
+        quotes=quotes, comments=comments, timeline=timeline,
+        timeline_count=len(timeline), stages=STAGES,
+    )
+
+
+@bp.route("/<int:client_id>/internal-comment", methods=["POST"])
+@login_required
+@permission_required("crm.edit")
+def add_internal_comment(client_id):
+    """Nota del equipo para un seguimiento; no altera llamadas ni registros históricos."""
+    client = visible_clients().filter(
+        Client.id == client_id, Client.record_type == "seguimiento"
+    ).first_or_404()
+    body = (request.form.get("body") or "").strip()
+    if not body or len(body) > 5000:
+        flash("Escribe un comentario de hasta 5000 caracteres.", "warning")
+        return redirect(url_for("crm.detail", client_id=client.id, _anchor="historial"))
+
+    process_types = {"Seguimiento / CRM", "Cotización / Venta", "Contacto", "Onboarding", "Otro"}
+    process_type = (request.form.get("process_type") or "Seguimiento / CRM").strip()
+    if process_type not in process_types:
+        process_type = "Seguimiento / CRM"
+    detail = (request.form.get("process_detail") or "").strip()[:240]
+    collaborator = current_user.collaborator
+    comment = ClientComment(
+        client_id=client.id,
+        user_id=current_user.id,
+        process_type=process_type,
+        process_detail=detail or None,
+        department_snapshot=(
+            collaborator.department if collaborator
+            else current_user.role.label if current_user.role else None
+        ),
+        advisor_project_snapshot=(
+            collaborator.advisor_project.name
+            if collaborator and collaborator.advisor_project else None
+        ),
+        body=body,
+    )
+    db.session.add(comment)
+    audit("comentario_cliente", "Client", client.id, after={"process_type": process_type})
+    db.session.commit()
+    flash("Comentario interno registrado en el historial.", "success")
+    return redirect(url_for("crm.detail", client_id=client.id, _anchor="historial"))
 
 
 @bp.route("/<int:client_id>/stage", methods=["POST"])

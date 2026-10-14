@@ -880,6 +880,31 @@ def _build_client_timeline(
             actor=log.user.name if log.user else None,
         )
 
+    # Cambios de etapa del seguimiento comercial, preservados en AuditLog.
+    if can_crm:
+        stage_logs = (
+            AuditLog.query
+            .filter(
+                AuditLog.entity == "Client",
+                AuditLog.entity_id == str(client.id),
+                AuditLog.action == "cambiar_etapa",
+            )
+            .order_by(AuditLog.created_at.desc())
+            .all()
+        )
+        for log in stage_logs:
+            previous = _json_dict(log.before_json).get("stage")
+            current = _json_dict(log.after_json).get("stage")
+            description = (
+                f"{str(previous or 'Sin etapa').replace('_', ' ').title()} → "
+                f"{str(current or 'Sin etapa').replace('_', ' ').title()}"
+            )
+            _timeline_event(
+                events, log.created_at, "crm", "Cambio de etapa",
+                "Etapa comercial", description,
+                actor=log.user.name if log.user else None,
+            )
+
     events.sort(key=lambda item: item["dt"], reverse=True)
     return events
 
@@ -1502,7 +1527,7 @@ def add_comment(client_id):
     body = (request.form.get("body") or "").strip()
     if not body:
         flash("Escribe un comentario antes de guardar.", "warning")
-        return redirect(url_for("clients.detail", client_id=client.id))
+        return redirect(url_for("clients.detail", client_id=client.id, _anchor="historial"))
 
     collaborator = current_user.collaborator
     department = collaborator.department if collaborator else (current_user.role.label if current_user.role else None)
@@ -1520,7 +1545,7 @@ def add_comment(client_id):
     audit("comentario_cliente", "Client", client.id, after={"process_type": comment.process_type})
     db.session.commit()
     flash("Comentario agregado al historial del cliente.", "success")
-    return redirect(url_for("clients.detail", client_id=client.id))
+    return redirect(url_for("clients.detail", client_id=client.id, _anchor="historial"))
 
 
 @bp.route("/export.csv")
