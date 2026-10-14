@@ -233,7 +233,7 @@ def monthly_ledger(year, month):
     ).all():
         entries.append({
             "on": payment.effective_date, "type": "ingreso", "source": "Cobro",
-            "project_id": allocations.get(("sale", payment.sale_id)) or project_of_sale(payment.sale),
+            "project_id": project_of_sale(payment.sale),
             "record_type": "sale", "record_id": payment.sale_id,
             "description": payment.sale.sale_no if payment.sale else "Cobro",
             "amount": money(payment.amount), "currency": payment.currency,
