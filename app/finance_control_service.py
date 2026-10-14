@@ -14,7 +14,7 @@ from sqlalchemy import and_, or_
 
 from app.extensions import db
 from app.models import (
-    AdvisorProject, Client, Collaborator, Expense, Income, Payment, Sale,
+    AdvisorProject, Client, Collaborator, Expense, Income, Payment, Sale, PayrollLine, PayrollPeriod,
 )
 from app.finance_control_models import (
     AdvisorFortnightGoal, AdvisorFortnightPayout,
@@ -234,6 +234,34 @@ def monthly_ledger(year, month):
             "source": movement.category.replace("_", " ").title(),
             "project_id": movement.project_id, "description": movement.description,
             "amount": money(movement.amount), "currency": movement.currency,
+        })
+    # Comisiones desembolsadas, sin registrar otro Expense duplicado.
+    for payout in AdvisorFortnightPayout.query.filter(
+        AdvisorFortnightPayout.paid_on >= start,
+        AdvisorFortnightPayout.paid_on <= end,
+    ).all():
+        entries.append({
+            "on": payout.paid_on, "type": "egreso", "source": "Comisión quincenal pagada",
+            "project_id": payout.project_id,
+            "description": payout.advisor.user.name if payout.advisor and payout.advisor.user else "Asesor",
+            "amount": money(payout.amount), "currency": "USD",
+        })
+    # La planilla se contabiliza únicamente cuando aparece como pagada.
+    # Los movimientos de personal no adscrito a un proyecto quedan sin asignar.
+    for line in PayrollLine.query.join(
+        PayrollPeriod, PayrollLine.period_id == PayrollPeriod.id
+    ).filter(
+        PayrollPeriod.status == "pagada",
+        PayrollPeriod.paid_at.is_not(None),
+        PayrollPeriod.paid_at >= datetime.combine(start, datetime.min.time()),
+        PayrollPeriod.paid_at <= datetime.combine(end, datetime.max.time()),
+    ).all():
+        entries.append({
+            "on": line.period.paid_at.date(), "type": "egreso", "source": "Planilla pagada",
+            "project_id": allocations.get(("payroll_line", line.id))
+                or (line.collaborator.advisor_project_id if line.collaborator else None),
+            "description": line.collaborator.user.name if line.collaborator and line.collaborator.user else "Colaborador",
+            "amount": money(line.total), "currency": "USD",
         })
     entries.sort(key=lambda row: row["on"], reverse=True)
     result = {}
