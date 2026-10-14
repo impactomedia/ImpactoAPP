@@ -1,0 +1,45 @@
+PARCHE NEXORA v1.27.0 — FINANZAS POR PROYECTO Y QUINCENA
+
+INSTALACION SIN PYTHON EN TU PC:
+1. Haz un respaldo completo de la base de datos de Railway/MySQL y del codigo GitHub.
+2. Extrae este ZIP de GitHub con "Extraer todo" en Windows.
+3. Copia UNICAMENTE la carpeta app/ descomprimida a la carpeta raiz
+   de tu copia del proyecto, aceptando reemplazar los archivos existentes
+   y conservar los archivos nuevos.
+4. Opcional: agrega los archivos de tests/ a tu proyecto.
+5. Sube los archivos modificados de tu carpeta del proyecto a la rama main.
+   NO fusiones esta rama de descarga con main. Esta rama contiene SOLO el parche.
+6. El Dockerfile que tenias ejecuta "python -m scripts.init_db" en Railway;
+   db.create_all() crea automaticamente LAS 4 TABLAS NUEVAS cuando se reinicie.
+   Si la configuracion de arranque cambio, verifica que se ejecute init_db.
+7. Accede con Superadmin o Admin a Finanzas por proyecto;
+   configura las metas de cada asesor y cada quincena.
+8. Revisa y asigna proyecto a movimientos anteriores "Sin asignar".
+9. Registra gastos de imprenta y Meta Ads vinculados a ventas desde
+   Finanzas por proyecto > Gastos y autorizaciones. NO los dupliques en
+   los egresos historicos, pues contarian dos veces en el resultado.
+10. Autorizar NO significa ejecutar. La Superadministradora autoriza
+    anticipos; solo al registrar la fecha real de ejecucion afecta
+    las comisiones y los gastos de la quincena.
+11. Las comisiones nuevas se desembolsan en el modulo quincenal.
+    El modulo historico por venta se conserva para consulta.
+12. Prueba con un cliente y asesor de ejemplo antes de usar en produccion.
+
+CONCEPTOS:
+- Meta Total: ingresos brutos cobrados en la quincena.
+- Meta Neta: ingresos cobrados menos solo Imprenta y Meta Ads ejecutados
+  en esa MISMA quincena. Al alcanzar la meta neta se habilita la comision
+  sobre toda la base neta (aunque no cumpla la Meta Total).
+- Cada asesor tiene su meta individual y solo pertenece a Impacto o Novax.
+- Propina sin servicio nunca cuenta como cliente nuevo.
+- Los abonos cuentan cuando se cobran realmente; la deduccion se hace
+  al ejecutar el gasto, normalmente tras la completacion total.
+- Pagos de comisiones y planilla pagada se contabilizan como egresos.
+- Los registros antiguos sin proyecto NO se asignan automaticamente;
+  aparecen Sin asignar y pueden clasificarse.
+- Los movimientos en NIO se muestran por separado y no se convierten
+  sin un tipo de cambio establecido. No se duplican ingresos espejos.
+
+ESTADO:
+Este ZIP no cambia tu produccion por si mismo. Para instalarlo debes
+subir los archivos a tu repositorio principal. No requiere Python local.

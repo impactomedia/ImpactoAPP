@@ -20,7 +20,9 @@ from app.models import (
     PayrollLine,
     PayrollPeriod,
     ProductService,
+    AdvisorProject,
 )
+from app.finance_control_models import FinanceProjectAllocation, AdvisorFortnightGoal
 
 bp = Blueprint("finance", __name__, url_prefix="/finance")
 
@@ -95,11 +97,23 @@ def expenses():
             notes=request.form.get("notes"),
         )
         db.session.add(expense)
+        db.session.flush()
+        project_id = request.form.get("advisor_project_id", type=int)
+        if project_id:
+            if not db.session.get(AdvisorProject, project_id):
+                db.session.rollback()
+                flash("Selecciona un proyecto comercial válido.", "danger")
+                return redirect(url_for("finance.expenses"))
+            db.session.add(FinanceProjectAllocation(
+                record_type="expense", record_id=expense.id,
+                project_id=project_id, assigned_by_id=current_user.id,
+            ))
         audit("registrar_egreso", "Expense", after={"category": expense.category, "amount": str(expense.amount)})
         db.session.commit()
         flash("Egreso registrado.", "success")
         return redirect(url_for("finance.expenses"))
-    return render_template("finance/expenses.html", expenses=Expense.query.order_by(Expense.expense_date.desc()).all())
+    from app.finance_control_service import legacy_allocation_context
+    return render_template("finance/expenses.html", expenses=Expense.query.order_by(Expense.expense_date.desc()).all(), **legacy_allocation_context())
 
 
 @bp.route("/receivables")
@@ -172,6 +186,11 @@ def payables():
 def commission_rules():
     products = ProductService.query.filter_by(active=True).order_by(ProductService.name).all()
     if request.method == "POST":
+        # Las reglas antiguas no pueden modificarlas Gerencia ni Finanzas.
+        # Supervisor configura porcentajes individuales desde Metas de asesores.
+        from flask import abort
+        if not (current_user.is_superadmin or (current_user.role and current_user.role.name == "admin")):
+            abort(403)
         name = (request.form.get("name") or "").strip()
         percentage = _decimal(request.form.get("percentage"))
         fixed_amount = _decimal(request.form.get("fixed_amount"))
@@ -229,6 +248,12 @@ def commissions():
 @roles_required("superadmin", "admin", "manager", "finance")
 def commission_action(commission_id, action):
     commission = db.get_or_404(Commission, commission_id)
+    first_goal = AdvisorFortnightGoal.query.filter_by(
+        advisor_id=commission.advisor_id
+    ).order_by(AdvisorFortnightGoal.period_start).first()
+    if first_goal and commission.sale and commission.sale.sale_date >= first_goal.period_start:
+        flash("Este asesor usa comisiones quincenales; gestiona sus pagos desde Finanzas por proyecto.", "danger")
+        return redirect(url_for("finance.commissions"))
     allowed = {
         "aprobar": {"generada", "estimada"},
         "pagar": {"aprobada"},
@@ -392,13 +417,25 @@ def incomes():
             notes=request.form.get("notes"),
         )
         db.session.add(row)
+        db.session.flush()
+        project_id = request.form.get("advisor_project_id", type=int)
+        if project_id:
+            if not db.session.get(AdvisorProject, project_id):
+                db.session.rollback()
+                flash("Selecciona un proyecto comercial válido.", "danger")
+                return redirect(url_for("finance.incomes"))
+            db.session.add(FinanceProjectAllocation(
+                record_type="income", record_id=row.id,
+                project_id=project_id, assigned_by_id=current_user.id,
+            ))
         audit("registrar_ingreso", "Income", after={"concept": row.concept, "amount": str(row.amount)})
         db.session.commit()
         flash("Ingreso registrado.", "success")
         return redirect(url_for("finance.incomes"))
 
     rows = Income.query.order_by(Income.effective_date.desc(), Income.id.desc()).all()
-    return render_template("finance/incomes.html", rows=rows)
+    from app.finance_control_service import legacy_allocation_context
+    return render_template("finance/incomes.html", rows=rows, **legacy_allocation_context())
 
 
 @bp.route("/payables/<int:row_id>/payment", methods=["POST"])
