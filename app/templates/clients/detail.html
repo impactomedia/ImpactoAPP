@@ -87,7 +87,7 @@
             <h2 class="h5">Acciones rápidas</h2>
             <div class="d-grid gap-2">
               <a href="#historial" data-client-history-open class="btn btn-outline-primary text-start"><i class="bi bi-clock-history me-2"></i>Revisar historial y comentarios</a>
-              {% if current_user.has_permission('sales.create') %}<a class="btn btn-light border" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Registrar compra adicional</a>{% endif %>
+              {% if current_user.has_permission('sales.create') %}<a class="btn btn-light border" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Registrar compra adicional</a>{% endif %}
               {% if can_financial %}<a class="btn btn-light border" href="{{ url_for('clients.statement', client_id=client.id) }}" target="_blank">Ver estado de cuenta</a>{% endif %}
               {% if current_user.has_permission('tasks.edit') %}<a class="btn btn-light border" href="{{ url_for('operations.new_task') }}">Crear tarea</a>{% endif %}
               {% if current_user.has_permission('support.edit') %}<a class="btn btn-light border" href="{{ url_for('support.index') }}">Abrir ticket</a>{% endif %}
