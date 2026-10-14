@@ -8,6 +8,7 @@ from sqlalchemy import or_
 from app.decorators import roles_required
 from app.extensions import db
 from app.helpers import audit, next_code
+from app.history_edits import edit_history, may_edit_note
 from app.models import (
     AdvisorProject,
     Client,
@@ -258,6 +259,7 @@ def detail(client_id):
     if client.record_type == "cliente":
         return redirect(url_for("clients.detail", client_id=client.id))
     interactions = Interaction.query.filter_by(client_id=client.id).order_by(Interaction.occurred_at.desc()).all()
+    note_edits, _ = edit_history("Interaction", interactions)
     quotes = Quote.query.filter_by(client_id=client.id).order_by(Quote.created_at.desc()).all()
     # Reutiliza los eventos del expediente de Nexora con los permisos del usuario.
     # El seguimiento no presenta información financiera del cliente.
@@ -268,7 +270,7 @@ def detail(client_id):
     return render_template(
         "crm/detail.html", client=client, interactions=interactions,
         quotes=quotes, stages=STAGES, timeline=timeline,
-        timeline_count=len(timeline),
+        note_edits=note_edits, timeline_count=len(timeline),
     )
 
 
@@ -321,6 +323,41 @@ def add_interaction(client_id):
     if request.form.get("from_history") == "1":
         return redirect(url_for("crm.detail", client_id=client.id, _anchor="historial"))
     return redirect(url_for("crm.detail", client_id=client.id))
+
+
+@bp.route("/<int:client_id>/interaction/<int:interaction_id>/edit", methods=["POST"])
+@login_required
+def edit_internal_note(client_id, interaction_id):
+    client = db.get_or_404(Client, client_id)
+    if client.record_type != "seguimiento" or not visible_clients().filter(Client.id == client.id).first():
+        abort(404)
+    note = db.get_or_404(Interaction, interaction_id)
+    if note.client_id != client.id or note.interaction_type != "nota":
+        abort(404)
+    if not may_edit_note(current_user, note.user_id, "crm.edit"):
+        abort(403)
+
+    subject = (request.form.get("subject") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
+    if not notes or len(notes) > 10000 or len(subject) > 180:
+        flash("El comentario no puede quedar vacío ni exceder el tamaño permitido.", "warning")
+        return redirect(url_for("crm.detail", client_id=client.id, _anchor="historial"))
+
+    before = {"subject": note.subject, "notes": note.notes}
+    after = {"subject": subject or None, "notes": notes}
+    if before != after:
+        note.subject = subject or None
+        note.notes = notes
+        audit(
+            "editar_nota_seguimiento", "Interaction", note.id,
+            before=before, after=after,
+            reason="Corrección de comentario de seguimiento",
+        )
+        db.session.commit()
+        flash("Comentario actualizado. Quedó marcado como editado.", "success")
+    else:
+        flash("No se detectaron cambios.", "info")
+    return redirect(url_for("crm.detail", client_id=client.id, _anchor="historial"))
 
 
 @bp.route("/<int:client_id>/transfer", methods=["POST"])

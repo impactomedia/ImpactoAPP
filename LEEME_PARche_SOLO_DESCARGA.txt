@@ -1,0 +1,31 @@
+NEXORA v1.26.5 - DESCARGA DEL PARCHE CORREGIDA
+14 de octubre de 2026
+
+ESTA RAMA ES EXCLUSIVAMENTE PARA DESCARGAR LOS ARCHIVOS DEL PARCHE.
+NO FUSIONAR ESTA RAMA CON main.
+
+ARCHIVOS DE LA APLICACIÓN:
+app/blueprints/clients.py
+app/blueprints/crm.py
+app/history_edits.py
+app/static/css/nexora-theme.css
+app/templates/app_base.html
+app/templates/auth/login.html
+app/templates/base.html
+app/templates/clients/_history_offcanvas.html
+app/templates/crm/detail.html
+
+PRUEBA OPCIONAL:
+tests/test_comment_edits_brand_v1265.py
+
+INSTALACIÓN EN WINDOWS
+1. Descarga el ZIP que genera automáticamente GitHub de esta rama.
+2. En Descargas, haz clic derecho en el ZIP y elige Extraer todo.
+3. Entra a la carpeta extraída ImpactoAPP-descarga-nexora-1265-zip-corregido.
+4. Copia únicamente la carpeta app hacia la carpeta raíz de tu proyecto Nexora; acepta reemplazar los archivos indicados. Se incorporará también app/history_edits.py, que es NUEVO.
+5. Si quieres pruebas automatizadas, copia el archivo tests/test_comment_edits_brand_v1265.py a la carpeta tests de tu proyecto.
+6. Sube SOLAMENTE los archivos modificados a la rama main de tu proyecto desde tu computadora. Railway desplegará la actualización según tu configuración.
+
+HAZ RESPALDO DEL CODIGO ANTES DE REEMPLAZAR.
+Este parche no necesita cambios en la base de datos.
+No intentes subir a main la carpeta extraída entera como un repositorio nuevo.
