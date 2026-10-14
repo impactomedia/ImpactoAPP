@@ -989,52 +989,10 @@ def _client_has_history(client_id):
 @bp.route("/")
 @login_required
 def index():
-    q = _visible_client_query(Client.query).filter(Client.record_type == "cliente")
-    search = request.args.get("q", "").strip()
-    status = request.args.get("status", "").strip()
-    advisor_project_id = request.args.get("advisor_project_id", type=int)
-    commercial_plan_id = request.args.get("commercial_plan_id", type=int)
-
-    if search:
-        like = f"%{search}%"
-        q = q.filter(or_(
-            Client.business_name.ilike(like),
-            Client.contact_name.ilike(like),
-            Client.phone.ilike(like),
-            Client.email.ilike(like),
-            Client.code.ilike(like),
-        ))
-
-    if status:
-        q = q.filter_by(client_status=status)
-    else:
-        q = q.filter(Client.client_status != "archivado")
-
-    if advisor_project_id:
-        q = q.join(Collaborator, Client.owner_id == Collaborator.id).filter(
-            Collaborator.advisor_project_id == advisor_project_id
-        )
-
-    if commercial_plan_id:
-        q = q.filter(Client.contracts.any((ClientContract.product_id == commercial_plan_id) & (ClientContract.principal.is_(True)) & (ClientContract.status == "activo")))
-    clients = q.order_by(Client.updated_at.desc()).all()
-    advisor_projects = AdvisorProject.query.filter_by(active=True).order_by(AdvisorProject.name).all()
-    pending_followups = 0
-    if current_user.has_permission("crm.view"):
-        pending_followups = _visible_client_query(Client.query).filter_by(record_type="seguimiento").count()
-
-    return render_template(
-        "clients/index.html",
-        clients=clients,
-        search=search,
-        status=status,
-        advisor_project_id=advisor_project_id,
-        advisor_projects=advisor_projects,
-        pending_followups=pending_followups,
-        commercial_plan_id=commercial_plan_id,
-        commercial_plans=ProductService.query.filter_by(category="paquete", active=True).order_by(ProductService.name).all(),
-    )
-
+    # El listado de clientes comparte los filtros de planes con la capa
+    # de paginación para mantener resultados idénticos en todas las páginas.
+    from app.production_hardening import _clients_index
+    return _clients_index()
 
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
