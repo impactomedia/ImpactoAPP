@@ -1,36 +1,36 @@
-NEXORA v1.26.6 — CLASIFICACION DE CLIENTES Y PLANES DE IMPRENTA
+NEXORA v1.26.6 - CAMBIO DE PLANES Y PRECIOS DE IMPRENTA
 
-DESCARGA DE ARCHIVOS MODIFICADOS
-Este ZIP es una carpeta temporal que GitHub comprime automaticamente y es compatible con Windows.
+Esta descarga ZIP es generada automaticamente por GitHub para Windows.
+La rama temporal NO debe fusionarse directamente con main.
 
-FUNCIONES NUEVAS
-- En Clientes se muestran los nombres reales de planes/servicios (no solo el numero de contratos).
-- Filtros y conteos por Planes principales, Community Manager, Servicios individuales, Mantenimiento, Imprenta y Sin plan.
-- Filtro por plan especifico; solo se consideran planes activos y compras registradas.
-- En Imprenta > Nueva orden puedes seleccionar un paquete del catalogo o introducir productos personalizados.
-- Cada item registra cantidad, especificaciones y precio unitario acordado.
-- El total de la orden se calcula en el servidor, sin confiar en valores modificables por el navegador.
-- El costo de produccion y el precio pactado de venta se muestran por separado.
-- La orden de imprenta NO registra automaticamente otro pago ni altera facturas/ventas.
-- En Catalogo hay categorias Community Manager, Mantenimiento e Imprenta para asignar precios base.
+INSTRUCCIONES:
+1. Haz copia de seguridad del proyecto actual y de la base de datos.
+2. Descarga el ZIP y utiliza clic derecho > Extraer todo.
+3. Copia la carpeta app dentro de la raiz de tu proyecto, reemplazando solo los archivos del parche.
+4. El archivo de tests puede copiarse opcionalmente a tests.
+5. Sube los cambios a main como de costumbre.
+6. Prueba el listado de Clientes y una nueva orden de Imprenta.
 
-INSTALACION (WINDOWS, SIN PYTHON)
-1. Haz una copia de seguridad de los archivos de la aplicacion y de la base de datos.
-2. Descarga el ZIP de la rama 'descarga-nexora-v1266-planes-imprenta' con el enlace proporcionado.
-3. Clic derecho sobre el ZIP: Extraer todo.
-4. Abre la carpeta extraida, encuentra la carpeta 'app' y copiala sobre la carpeta 'app' de tu proyecto original, reemplazando UNICAMENTE los archivos existentes que vienen en este parche.
-5. El archivo tests/test_client_plan_categories_printing_v1266.py es opcional y sirve para pruebas automatizadas.
-6. Sube los cambios copiados a tu rama main, como acostumbras; Railway desplegara normalmente.
+CAMBIOS:
+- Clasificacion y conteo de clientes por plan principal, Community Manager, mantenimiento, servicios individuales, imprenta y sin plan.
+- Filtro por tipo y por producto especifico, compatible con paginacion del servidor.
+- Plan y productos activos visibles en el listado de clientes.
+- Ordenes de imprenta con paquete del catalogo o articulos personalizados, precio unitario, subtotal y precio total.
+- Precio venta validado en backend y separado del costo interno. No crea cobros adicionales.
+- Precio pactado guardado en especificaciones de cada producto y mostrado en la orden.
+- Catalogo de productos con categorias de Community Manager y Mantenimiento.
+- No cambia la estructura de la base de datos.
 
-ARCHIVOS DE LA APLICACION
+ARCHIVOS:
 app/blueprints/clients.py
-app/templates/clients/index.html
 app/blueprints/printing.py
+app/client_plan_groups.py (NUEVO)
+app/production_hardening.py
+app/templates/clients/index.html
 app/templates/printing/form.html
 app/templates/printing/index.html
 app/templates/printing/detail.html
 app/templates/settings/products.html
+tests/test_client_plan_categories_printing_v1266.py (OPCIONAL)
 
-No ejecutes migraciones: este cambio NO agrega ni modifica columnas.
-No fusiones esta rama temporal directamente con main; es solo para DESCARGAR archivos.
-VERSION PROPUESTA: v1.26.6. El numero de version mostrado en la app no se cambia automaticamente.
+El numero de version mostrado en la app se mantiene hasta que actualices tu configuracion de versiones.
