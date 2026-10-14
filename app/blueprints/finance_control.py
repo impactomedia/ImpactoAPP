@@ -49,7 +49,7 @@ def user_can_manage_advisor(advisor):
         return True
     if role() == "supervisor" and current_user.collaborator:
         supervisor = current_user.collaborator
-        return bool(advisor.supervisor_id == supervisor.id and advisor.advisor_project_id == supervisor.advisor_project_id)
+        return bool(advisor.supervisor_id == supervisor.id and (not supervisor.advisor_project_id or advisor.advisor_project_id == supervisor.advisor_project_id))
     return False
 
 
@@ -64,7 +64,7 @@ def user_can_request_for_sale(sale):
         return owner == actor.id
     if role() == "supervisor":
         person = db.session.get(Collaborator, owner) if owner else None
-        return bool(person and person.supervisor_id == actor.id and person.advisor_project_id == actor.advisor_project_id)
+        return bool(person and person.supervisor_id == actor.id and (not actor.advisor_project_id or person.advisor_project_id == actor.advisor_project_id))
     return False
 
 
