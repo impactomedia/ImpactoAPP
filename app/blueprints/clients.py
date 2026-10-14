@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, current_app, send_from_directory, abort
 from flask_login import login_required, current_user
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 
 from app.commercial_plans import maintenance_label
 from app.extensions import db
@@ -422,7 +422,7 @@ def _build_client_timeline(
         "Renewal": list(client.renewals) if can_sales else [],
     }
     source_filters = [
-        db.and_(AuditLog.entity == entity, AuditLog.entity_id.in_([str(x.id) for x in rows]))
+        and_(AuditLog.entity == entity, AuditLog.entity_id.in_([str(x.id) for x in rows]))
         for entity, rows in source_groups.items() if rows
     ]
     created_by = {}
