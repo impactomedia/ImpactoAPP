@@ -186,6 +186,11 @@ def payables():
 def commission_rules():
     products = ProductService.query.filter_by(active=True).order_by(ProductService.name).all()
     if request.method == "POST":
+        # Las reglas antiguas no pueden modificarlas Gerencia ni Finanzas.
+        # Supervisor configura porcentajes individuales desde Metas de asesores.
+        from flask import abort
+        if not (current_user.is_superadmin or (current_user.role and current_user.role.name == "admin")):
+            abort(403)
         name = (request.form.get("name") or "").strip()
         percentage = _decimal(request.form.get("percentage"))
         fixed_amount = _decimal(request.form.get("fixed_amount"))
