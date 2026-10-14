@@ -8,13 +8,14 @@ from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, current_app, send_from_directory, abort
 from flask_login import login_required, current_user
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 
 from app.commercial_plans import maintenance_label
 from app.extensions import db
 from app.decorators import permission_required, roles_required
 from app.access_control import _commercial_client_allowed, _project_allowed, _task_allowed
 from app.helpers import audit, next_code, save_upload
+from app.history_edits import edit_history, may_edit_note
 from app.services import recalc_sale, active_principal_contract
 from app.models import (
     Client,
@@ -407,6 +408,51 @@ def _build_client_timeline(
     can_support = current_user.has_permission("support.view")
     can_printing = current_user.has_permission("printing.view")
 
+    # Identifica autores reales registrados en auditoría al crear cada registro.
+    # Nunca confunde asignados/responsables con el usuario que ejecutó la acción.
+    source_groups = {
+        "Quote": list(client.quotes) if can_crm else [],
+        "ClientContract": list(client.contracts),
+        "Sale": list(client.sales) if can_financial else [],
+        "Payment": list(client.payments) if can_financial else [],
+        "Project": list(visible_projects) if can_projects else [],
+        "Task": list(visible_tasks) if can_tasks else [],
+        "SupportTicket": list(client.tickets) if can_support else [],
+        "PrintOrder": list(client.print_orders) if can_printing else [],
+        "Renewal": list(client.renewals) if can_sales else [],
+    }
+    source_filters = [
+        and_(AuditLog.entity == entity, AuditLog.entity_id.in_([str(x.id) for x in rows]))
+        for entity, rows in source_groups.items() if rows
+    ]
+    created_by = {}
+    creation_actions = {
+        "Sale": {"crear_compra_adicional", "convertir_cotizacion_venta"},
+        "ClientContract": {"servicio_principal_nuevo", "servicio_principal_upgrade"},
+    }
+    if source_filters:
+        for entry in (
+            AuditLog.query.filter(
+                or_(*source_filters), AuditLog.user_id.isnot(None)
+            ).order_by(AuditLog.created_at.asc(), AuditLog.id.asc()).all()
+        ):
+            allowed = creation_actions.get(entry.entity)
+            is_creation = (
+                entry.action in allowed
+                if allowed is not None
+                else entry.action.startswith(("crear_", "registrar_", "agregar_", "programar_", "generar_", "nueva_", "subir_"))
+            )
+            if is_creation and entry.user:
+                created_by.setdefault((entry.entity, entry.entity_id), entry.user.name)
+
+    def actor_created(entity, row):
+        return created_by.get((entity, str(row.id)))
+
+    interaction_rows = list(client.interactions) if can_crm else []
+    interaction_edits, interaction_edit_logs = edit_history("Interaction", interaction_rows)
+    comment_rows = list(client.comments)
+    comment_edits, comment_edit_logs = edit_history("ClientComment", comment_rows)
+
     # CRM / seguimiento preservado.
     if can_crm:
         for interaction in client.interactions:
@@ -414,7 +460,7 @@ def _build_client_timeline(
                 events,
                 interaction.occurred_at or interaction.created_at,
                 "crm",
-                "Interacción",
+                "Interacción · Editada" if interaction.id in interaction_edits else "Interacción",
                 interaction.subject or interaction.interaction_type.replace("_", " ").title(),
                 interaction.notes or interaction.result,
                 actor=interaction.user.name if interaction.user else None,
@@ -431,6 +477,7 @@ def _build_client_timeline(
                 "Cotización",
                 quote.quote_no,
                 body,
+                actor=actor_created("Quote", quote),
             )
 
     # Servicio principal / contratos: visible como contexto operativo, sin exponer saldo.
@@ -449,6 +496,7 @@ def _build_client_timeline(
             kind,
             product_name,
             body,
+            actor=actor_created("ClientContract", contract),
         )
 
     # Ventas, upgrades, compras y pagos solo con permiso comercial/financiero.
@@ -472,6 +520,7 @@ def _build_client_timeline(
                 sale.sale_no,
                 f"Total USD {sale.total} · Estado: {sale.status.replace('_', ' ').title()}",
                 link=url_for("sales.detail", sale_id=sale.id),
+                actor=actor_created("Sale", sale),
             )
 
         for payment in client.payments:
@@ -487,6 +536,11 @@ def _build_client_timeline(
                     + f" · {payment.status.replace('_', ' ').title()}"
                 ),
                 link=url_for("sales.detail", sale_id=payment.sale_id),
+                actor=(
+                    db.session.get(User, payment.registered_by_id).name
+                    if payment.registered_by_id and db.session.get(User, payment.registered_by_id)
+                    else actor_created("Payment", payment)
+                ),
             )
 
         for note in client.collection_notes:
@@ -539,6 +593,7 @@ def _build_client_timeline(
                 project.name,
                 body,
                 link=url_for("operations.project_detail", project_id=project.id),
+                actor=actor_created("Project", project),
             )
         if project_ids:
             for change in (
@@ -571,6 +626,7 @@ def _build_client_timeline(
                 task.title,
                 f"Estado: {task.status.replace('_', ' ').title()} · Prioridad: {task.priority.title()}",
                 link=url_for("operations.task_detail", task_id=task.id),
+                actor=actor_created("Task", task),
             )
         if task_ids:
             for comment in (
@@ -606,6 +662,7 @@ def _build_client_timeline(
                     f"Prioridad: {ticket.priority.title()}"
                 ),
                 link=url_for("support.detail", ticket_id=ticket.id),
+                actor=actor_created("SupportTicket", ticket),
             )
         ticket_ids = {row.id for row in tickets}
         if ticket_ids:
@@ -644,6 +701,7 @@ def _build_client_timeline(
                 order.order_no,
                 f"Estado: {order.status.replace('_', ' ').title()}",
                 link=url_for("printing.detail", order_id=order.id),
+                actor=actor_created("PrintOrder", order),
             )
 
         if order_ids:
@@ -747,6 +805,11 @@ def _build_client_timeline(
                 client_id=client.id,
                 attachment_id=attachment.id,
             ),
+            actor=(
+                db.session.get(User, attachment.uploaded_by_id).name
+                if attachment.uploaded_by_id and db.session.get(User, attachment.uploaded_by_id)
+                else None
+            ),
         )
 
     # Renovaciones.
@@ -772,6 +835,23 @@ def _build_client_timeline(
                     renewal.renewal_type,
                     renewal.notes or "Seguimiento de renovación.",
                 )
+
+    # Ediciones registradas en auditoría: usuario, fecha y momento exacto.
+    if can_crm:
+        for edit in interaction_edit_logs:
+            _timeline_event(
+                events, edit.created_at, "interno", "Nota de seguimiento editada",
+                "Corrección de comentario interno",
+                "Se modificó una nota de seguimiento.",
+                actor=edit.user.name if edit.user else None,
+            )
+    for edit in comment_edit_logs:
+        _timeline_event(
+            events, edit.created_at, "interno", "Comentario interno editado",
+            "Corrección de comentario",
+            "Se modificó un comentario interno del expediente.",
+            actor=edit.user.name if edit.user else None,
+        )
 
     # Cambios de responsable comercial.
     for row in client.ownership_history:
@@ -1009,6 +1089,7 @@ def detail(client_id):
         .order_by(ClientComment.created_at.desc())
         .all()
     )
+    comment_edits, _ = edit_history("ClientComment", comments)
     operational_profile = (
         ClientOperationalProfile.query
         .filter_by(client_id=client.id)
@@ -1096,6 +1177,7 @@ def detail(client_id):
         timeline_count=len(timeline),
         attachments=attachments,
         comments=comments,
+        comment_edits=comment_edits,
         operational_profile=operational_profile,
         platforms=platforms,
         platform_definitions=PLATFORM_DEFINITIONS,
@@ -1520,6 +1602,51 @@ def add_comment(client_id):
     audit("comentario_cliente", "Client", client.id, after={"process_type": comment.process_type})
     db.session.commit()
     flash("Comentario agregado al historial del cliente.", "success")
+    return redirect(url_for("clients.detail", client_id=client.id, _anchor="historial"))
+
+
+@bp.route("/<int:client_id>/comment/<int:comment_id>/edit", methods=["POST"])
+@login_required
+def edit_comment(client_id, comment_id):
+    client = db.get_or_404(Client, client_id)
+    comment = db.get_or_404(ClientComment, comment_id)
+    if client.record_type != "cliente" or comment.client_id != client.id:
+        abort(404)
+    if not _commercial_client_allowed(client) or not may_edit_note(
+        current_user, comment.user_id, "clients.edit"
+    ):
+        abort(403)
+
+    body = (request.form.get("body") or "").strip()
+    process_type = (request.form.get("process_type") or "").strip()
+    process_detail = (request.form.get("process_detail") or "").strip()
+    if not body or len(body) > 10000 or not process_type or len(process_type) > 80 or len(process_detail) > 180:
+        flash("Revisa el comentario, el proceso y su extensión antes de guardar.", "warning")
+        return redirect(url_for("clients.detail", client_id=client.id, _anchor="historial"))
+
+    before = {
+        "body": comment.body,
+        "process_type": comment.process_type,
+        "process_detail": comment.process_detail,
+    }
+    after = {
+        "body": body,
+        "process_type": process_type,
+        "process_detail": process_detail or None,
+    }
+    if before != after:
+        comment.body = body
+        comment.process_type = process_type
+        comment.process_detail = process_detail or None
+        audit(
+            "editar_comentario_cliente", "ClientComment", comment.id,
+            before=before, after=after,
+            reason="Corrección de comentario interno",
+        )
+        db.session.commit()
+        flash("Comentario actualizado. Quedó marcado como editado.", "success")
+    else:
+        flash("No se detectaron cambios en el comentario.", "info")
     return redirect(url_for("clients.detail", client_id=client.id, _anchor="historial"))
 
 
