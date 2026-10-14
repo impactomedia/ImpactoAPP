@@ -20,7 +20,9 @@ from app.models import (
     PayrollLine,
     PayrollPeriod,
     ProductService,
+    AdvisorProject,
 )
+from app.finance_control_models import FinanceProjectAllocation, AdvisorFortnightGoal
 
 bp = Blueprint("finance", __name__, url_prefix="/finance")
 
@@ -95,6 +97,17 @@ def expenses():
             notes=request.form.get("notes"),
         )
         db.session.add(expense)
+        db.session.flush()
+        project_id = request.form.get("advisor_project_id", type=int)
+        if project_id:
+            if not db.session.get(AdvisorProject, project_id):
+                db.session.rollback()
+                flash("Selecciona un proyecto comercial válido.", "danger")
+                return redirect(url_for("finance.expenses"))
+            db.session.add(FinanceProjectAllocation(
+                record_type="expense", record_id=expense.id,
+                project_id=project_id, assigned_by_id=current_user.id,
+            ))
         audit("registrar_egreso", "Expense", after={"category": expense.category, "amount": str(expense.amount)})
         db.session.commit()
         flash("Egreso registrado.", "success")
@@ -229,6 +242,12 @@ def commissions():
 @roles_required("superadmin", "admin", "manager", "finance")
 def commission_action(commission_id, action):
     commission = db.get_or_404(Commission, commission_id)
+    first_goal = AdvisorFortnightGoal.query.filter_by(
+        advisor_id=commission.advisor_id
+    ).order_by(AdvisorFortnightGoal.period_start).first()
+    if first_goal and commission.sale and commission.sale.sale_date >= first_goal.period_start:
+        flash("Este asesor usa comisiones quincenales; gestiona sus pagos desde Finanzas por proyecto.", "danger")
+        return redirect(url_for("finance.commissions"))
     allowed = {
         "aprobar": {"generada", "estimada"},
         "pagar": {"aprobada"},
@@ -392,6 +411,17 @@ def incomes():
             notes=request.form.get("notes"),
         )
         db.session.add(row)
+        db.session.flush()
+        project_id = request.form.get("advisor_project_id", type=int)
+        if project_id:
+            if not db.session.get(AdvisorProject, project_id):
+                db.session.rollback()
+                flash("Selecciona un proyecto comercial válido.", "danger")
+                return redirect(url_for("finance.incomes"))
+            db.session.add(FinanceProjectAllocation(
+                record_type="income", record_id=row.id,
+                project_id=project_id, assigned_by_id=current_user.id,
+            ))
         audit("registrar_ingreso", "Income", after={"concept": row.concept, "amount": str(row.amount)})
         db.session.commit()
         flash("Ingreso registrado.", "success")
