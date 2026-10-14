@@ -411,12 +411,16 @@ def payouts():
 def allocate():
     from app.models import Expense, Income, PayrollLine
     record_type = request.form.get("record_type")
-    models = {"expense": Expense, "income": Income, "payroll_line": PayrollLine}
+    models = {"expense": Expense, "income": Income, "payroll_line": PayrollLine, "sale": Sale}
     if record_type not in models:
         abort(400)
     model = models[record_type]
     record_id = request.form.get("record_id", type=int)
-    db.get_or_404(model, record_id)
+    source = db.get_or_404(model, record_id)
+    if record_type == "sale":
+        worker = source.advisor or (source.client.owner if source.client else None)
+        if worker and worker.advisor_project_id:
+            abort(409)  # El proyecto del asesor no se modifica manualmente.
     project = db.get_or_404(AdvisorProject, request.form.get("project_id", type=int))
     row = FinanceProjectAllocation.query.filter_by(record_type=record_type, record_id=record_id).first()
     if not row:

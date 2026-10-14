@@ -49,8 +49,16 @@ def is_commercial_advisor(collaborator):
 
 
 def project_of_sale(sale):
+    if not sale:
+        return None
     advisor = sale.advisor or (sale.client.owner if sale.client else None)
-    return advisor.advisor_project_id if advisor else None
+    if advisor and advisor.advisor_project_id:
+        return advisor.advisor_project_id
+    # Ventas administrativas sin asesor pueden asignarse manualmente.
+    assignment = FinanceProjectAllocation.query.filter_by(
+        record_type="sale", record_id=sale.id
+    ).first()
+    return assignment.project_id if assignment else None
 
 
 def payments_for_advisor(advisor_id, starts, ends):
@@ -226,6 +234,7 @@ def monthly_ledger(year, month):
         entries.append({
             "on": payment.effective_date, "type": "ingreso", "source": "Cobro",
             "project_id": project_of_sale(payment.sale),
+            "record_type": "sale", "record_id": payment.sale_id,
             "description": payment.sale.sale_no if payment.sale else "Cobro",
             "amount": money(payment.amount), "currency": payment.currency,
         })
