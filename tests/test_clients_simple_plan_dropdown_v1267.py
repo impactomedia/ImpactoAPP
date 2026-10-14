@@ -53,6 +53,7 @@ def app():
             if not product:
                 product = ProductService(name=product_name, category=category, active=True)
                 db.session.add(product)
+                db.session.flush()
             client = Client(
                 code=f"FILTER-1267-{pos}", business_name=f"Cuenta {label}",
                 contact_name="Persona ejemplo", record_type="cliente",
@@ -119,7 +120,10 @@ def test_each_plan_filters_the_matching_client(browser, plan, expected):
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert expected in body
-    assert "Cuenta Imprenta" not in body if expected != "Cuenta Imprenta" else "Cuenta Digital" not in body
+    if expected == "Cuenta Imprenta":
+        assert "Cuenta Digital" not in body
+    else:
+        assert "Cuenta Imprenta" not in body
 
 
 def test_existing_client_search_and_pagination_still_work(browser):
