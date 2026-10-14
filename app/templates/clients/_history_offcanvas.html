@@ -56,13 +56,46 @@
           {% set nx_internal_notes = interactions|selectattr('interaction_type', 'equalto', 'nota')|list %}
           <div class="timeline">
             {% for note in nx_internal_notes %}
+              {% set edit_info = note_edits.get(note.id) %}
+              {% set can_edit_this = nx_can_write_history and (current_user.id == note.user_id or current_user.is_superadmin or (current_user.role and current_user.role.name == 'admin')) %}
               <div class="timeline-item">
-                <div class="d-flex flex-wrap justify-content-between gap-2">
-                  <strong>{{ note.user.name if note.user else 'Equipo' }}</strong>
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                  <div>
+                    <strong><i class="bi bi-person-circle me-1"></i>{{ note.user.name if note.user else 'Usuario no disponible' }}</strong>
+                    {% if edit_info %}<span class="badge rounded-pill text-bg-warning ms-2">Editado</span>{% endif %}
+                  </div>
                   <small class="text-secondary">{{ (note.occurred_at or note.created_at).strftime('%d/%m/%Y %H:%M') }}</small>
                 </div>
                 <div class="mt-1"><span class="badge-soft info">{{ note.subject or 'Nota de seguimiento' }}</span></div>
                 <p class="mb-0 mt-2" style="white-space:pre-line">{{ note.notes or 'Sin detalle adicional' }}</p>
+                {% if edit_info %}
+                <small class="d-block text-secondary mt-2">
+                  <i class="bi bi-pencil-square me-1"></i>Modificado por {{ edit_info.by }} · {{ edit_info.at.strftime('%d/%m/%Y %H:%M') }}
+                </small>
+                {% endif %}
+                {% if can_edit_this %}
+                <button class="btn btn-sm btn-light border mt-3" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#nxEditProspectNote{{ note.id }}"
+                        aria-expanded="false" aria-controls="nxEditProspectNote{{ note.id }}">
+                  <i class="bi bi-pencil me-1"></i>Editar comentario
+                </button>
+                <div class="collapse mt-2" id="nxEditProspectNote{{ note.id }}">
+                  <form method="post" action="{{ url_for('crm.edit_internal_note', client_id=client.id, interaction_id=note.id) }}"
+                        class="rounded-3 border p-3 bg-light">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="form-label small fw-semibold" for="nxEditNoteSubject{{ note.id }}">Asunto</label>
+                    <input id="nxEditNoteSubject{{ note.id }}" type="text" name="subject" class="form-control mb-2"
+                           value="{{ note.subject or '' }}" maxlength="180">
+                    <label class="form-label small fw-semibold" for="nxEditNoteBody{{ note.id }}">Comentario</label>
+                    <textarea id="nxEditNoteBody{{ note.id }}" name="notes" class="form-control" rows="3"
+                              maxlength="10000" required>{{ note.notes or '' }}</textarea>
+                    <p class="text-secondary small mb-2 mt-2">La corrección quedará identificada con la fecha y el usuario que la realizó.</p>
+                    <button class="btn btn-sm btn-primary"><i class="bi bi-check2 me-1"></i>Guardar edición</button>
+                    <button class="btn btn-sm btn-light border" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#nxEditProspectNote{{ note.id }}">Cancelar</button>
+                  </form>
+                </div>
+                {% endif %}
               </div>
             {% else %}
               <p class="text-secondary">Todavía no hay notas internas. Registra la primera observación para este seguimiento.</p>
@@ -100,9 +133,14 @@
           {% endif %}
           <div class="timeline">
             {% for comment in comments %}
+              {% set edit_info = comment_edits.get(comment.id) %}
+              {% set can_edit_this = nx_can_write_history and (current_user.id == comment.user_id or current_user.is_superadmin or (current_user.role and current_user.role.name == 'admin')) %}
               <div class="timeline-item">
-                <div class="d-flex flex-wrap justify-content-between gap-2">
-                  <strong>{{ comment.user.name if comment.user else 'Equipo' }}</strong>
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                  <div>
+                    <strong><i class="bi bi-person-circle me-1"></i>{{ comment.user.name if comment.user else 'Usuario no disponible' }}</strong>
+                    {% if edit_info %}<span class="badge rounded-pill text-bg-warning ms-2">Editado</span>{% endif %}
+                  </div>
                   <small class="text-secondary">{{ comment.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
                 </div>
                 <div class="mt-1">
@@ -111,6 +149,43 @@
                 </div>
                 {% if comment.process_detail %}<small class="d-block text-secondary mt-2">{{ comment.process_detail }}</small>{% endif %}
                 <p class="mb-0 mt-2" style="white-space:pre-line">{{ comment.body }}</p>
+                {% if edit_info %}
+                <small class="d-block text-secondary mt-2">
+                  <i class="bi bi-pencil-square me-1"></i>Modificado por {{ edit_info.by }} · {{ edit_info.at.strftime('%d/%m/%Y %H:%M') }}
+                </small>
+                {% endif %}
+                {% if can_edit_this %}
+                <button class="btn btn-sm btn-light border mt-3" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#nxEditClientComment{{ comment.id }}"
+                        aria-expanded="false" aria-controls="nxEditClientComment{{ comment.id }}">
+                  <i class="bi bi-pencil me-1"></i>Editar comentario
+                </button>
+                <div class="collapse mt-2" id="nxEditClientComment{{ comment.id }}">
+                  <form method="post" action="{{ url_for('clients.edit_comment', client_id=client.id, comment_id=comment.id) }}"
+                        class="rounded-3 border p-3 bg-light">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-2 mb-2">
+                      <div class="col-sm-6">
+                        <label class="form-label small fw-semibold" for="nxEditProcess{{ comment.id }}">Proceso</label>
+                        <input id="nxEditProcess{{ comment.id }}" type="text" name="process_type" class="form-control"
+                               maxlength="80" value="{{ comment.process_type }}" required>
+                      </div>
+                      <div class="col-sm-6">
+                        <label class="form-label small fw-semibold" for="nxEditDetail{{ comment.id }}">Detalle</label>
+                        <input id="nxEditDetail{{ comment.id }}" type="text" name="process_detail" class="form-control"
+                               maxlength="180" value="{{ comment.process_detail or '' }}">
+                      </div>
+                    </div>
+                    <label class="form-label small fw-semibold" for="nxEditBody{{ comment.id }}">Comentario</label>
+                    <textarea id="nxEditBody{{ comment.id }}" name="body" class="form-control" rows="3"
+                              maxlength="10000" required>{{ comment.body }}</textarea>
+                    <p class="text-secondary small mb-2 mt-2">Se conservará la fecha original y se identificará quién realizó la corrección.</p>
+                    <button class="btn btn-sm btn-primary"><i class="bi bi-check2 me-1"></i>Guardar edición</button>
+                    <button class="btn btn-sm btn-light border" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#nxEditClientComment{{ comment.id }}">Cancelar</button>
+                  </form>
+                </div>
+                {% endif %}
               </div>
             {% else %}
               <p class="text-secondary">Todavía no hay comentarios internos para este cliente.</p>
@@ -152,7 +227,9 @@
                 </div>
                 <small class="text-secondary text-nowrap">{{ event.dt.strftime('%d/%m/%Y %H:%M') }}</small>
               </div>
-              {% if event.actor %}<small class="d-block text-secondary mt-1">Por {{ event.actor }}</small>{% endif %}
+              <small class="d-block text-secondary mt-1">
+                <i class="bi bi-person-badge me-1"></i>Usuario: {{ event.actor or 'No registrado' }}
+              </small>
               {% if event.body %}<p class="mb-1 mt-2" style="white-space:pre-line">{{ event.body }}</p>{% endif %}
               {% if event.link %}<a class="small" href="{{ event.link }}">Abrir registro</a>{% endif %}
             </div>
