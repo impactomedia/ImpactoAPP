@@ -8,6 +8,13 @@
     <p>{{ client.code or 'Sin código' }} · {{ client.contact_name }} · Responsable comercial: {{ client.owner.user.name if client.owner and client.owner.user else 'Sin asignar' }}</p>
   </div>
   <div class="d-flex flex-wrap gap-2">
+    <div class="dropdown">
+      <button class="btn btn-outline-primary dropdown-toggle d-inline-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-clock-history"></i>Historial de actividad</button>
+      <ul class="dropdown-menu shadow-sm">
+        <li><a class="dropdown-item" href="#notas" data-coordination-history="notas"><i class="bi bi-chat-left-text me-2"></i>Comentarios internos</a></li>
+        <li><a class="dropdown-item" href="#timeline" data-coordination-history="timeline"><i class="bi bi-clock-history me-2"></i>Timeline automático</a></li>
+      </ul>
+    </div>
     <a class="btn btn-light border" href="{{ url_for('clients_v3.mine') }}">Mis clientes</a>
     {% if can_open_full_detail %}<a class="btn btn-brand" href="{{ url_for('clients.detail', client_id=client.id) }}">Ficha completa</a>{% endif %}
   </div>
@@ -149,9 +156,24 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const hash = window.location.hash;
-  if (!hash) return;
-  const trigger = document.querySelector(`[data-bs-target="${hash}"]`);
-  if (trigger && window.bootstrap) bootstrap.Tab.getOrCreateInstance(trigger).show();
+  const openHistorySection = (section, scroll) => {
+    const trigger = document.querySelector(`[data-bs-target="#${section}"]`);
+    if (!trigger || !window.bootstrap) return;
+    bootstrap.Tab.getOrCreateInstance(trigger).show();
+    if (scroll) {
+      const tabs = document.querySelector('.panel-card .nav-tabs');
+      if (tabs) tabs.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+  };
+  if (hash) openHistorySection(hash.slice(1), true);
+  document.querySelectorAll('[data-coordination-history]').forEach(link => {
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      const section = link.getAttribute('data-coordination-history');
+      openHistorySection(section,true);
+      window.history.replaceState(null,'','#'+section);
+    });
+  });
 });
 </script>
 {% endblock %}
