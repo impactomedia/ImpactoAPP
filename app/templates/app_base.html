@@ -64,8 +64,16 @@
       <div class="nav-section">Administración</div>
 
       {% if current_user.has_permission('finance.view') %}
-      <a class="nav-item {% if request.blueprint == 'finance' %}active{% endif %}" href="{{ url_for('finance.dashboard') }}"><i class="bi bi-wallet2"></i> Finanzas</a>
+      <a class="nav-item {% if request.blueprint == 'finance_control' %}active{% endif %}" href="{{ url_for('finance_control.index') }}"><i class="bi bi-wallet2"></i> Finanzas por proyecto</a>
+      <a class="nav-item {% if request.blueprint == 'finance' %}active{% endif %}" href="{{ url_for('finance.dashboard') }}"><i class="bi bi-archive"></i> Finanzas anteriores</a>
       <a class="nav-item {% if request.endpoint == 'finance.incomes' %}active{% endif %}" href="{{ url_for('finance.incomes') }}"><i class="bi bi-cash-coin"></i> Ingresos</a>
+      {% endif %}
+
+      {% if role_name in ['superadmin', 'admin', 'supervisor'] %}
+      <a class="nav-item {% if request.endpoint == 'finance_control.goals' %}active{% endif %}" href="{{ url_for('finance_control.goals') }}"><i class="bi bi-bullseye"></i> Metas de asesores</a>
+      {% endif %}
+      {% if role_name == 'advisor' and current_user.collaborator and current_user.collaborator.advisor_project_id %}
+      <a class="nav-item {% if request.endpoint == 'finance_control.advisor' %}active{% endif %}" href="{{ url_for('finance_control.advisor') }}"><i class="bi bi-graph-up-arrow"></i> Mi quincena</a>
       {% endif %}
 
       {% if current_user.has_permission('hr.view') %}
