@@ -880,6 +880,31 @@ def _build_client_timeline(
             actor=log.user.name if log.user else None,
         )
 
+    # Cambios de etapa del seguimiento comercial, preservados en AuditLog.
+    if can_crm:
+        stage_logs = (
+            AuditLog.query
+            .filter(
+                AuditLog.entity == "Client",
+                AuditLog.entity_id == str(client.id),
+                AuditLog.action == "cambiar_etapa",
+            )
+            .order_by(AuditLog.created_at.desc())
+            .all()
+        )
+        for log in stage_logs:
+            previous = _json_dict(log.before_json).get("stage")
+            current = _json_dict(log.after_json).get("stage")
+            description = (
+                f"{str(previous or 'Sin etapa').replace('_', ' ').title()} → "
+                f"{str(current or 'Sin etapa').replace('_', ' ').title()}"
+            )
+            _timeline_event(
+                events, log.created_at, "crm", "Cambio de etapa",
+                "Etapa comercial", description,
+                actor=log.user.name if log.user else None,
+            )
+
     events.sort(key=lambda item: item["dt"], reverse=True)
     return events
 
