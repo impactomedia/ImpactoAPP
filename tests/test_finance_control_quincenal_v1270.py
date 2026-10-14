@@ -102,6 +102,11 @@ def app():
     yield app
 
 
+def today_date(app):
+    with app.app_context():
+        return local_today()
+
+
 def login(client, username):
     response = client.post("/auth/login", data={
         "email": username+"1270@test.local",
@@ -191,7 +196,7 @@ def test_superadmin_only_can_approve_exception(app):
         assert row.authorized_by_id is not None
         assert row.executed_on is None
     response = client.post(f"/finance-control/movements/{movement_id}/execute", data={
-        "executed_on": str(local_today()),
+        "executed_on": str(today_date(app)),
     })
     assert response.status_code == 302
     with app.app_context():
@@ -215,7 +220,7 @@ def test_supervisor_only_manages_subordinates(app):
     with app.app_context():
         other_id = User.query.filter_by(email="other1270@test.local").one().collaborator.id
         own_id = User.query.filter_by(email="advisor1270@test.local").one().collaborator.id
-        today = str(local_today())
+        today = str(today_date(app))
     assert client.post("/finance-control/goals", data={
         "advisor_id": other_id, "period": today,
         "total_goal": "1000", "net_goal": "200", "percentage": "10",
@@ -243,7 +248,7 @@ def test_payout_and_project_reports_do_not_duplicate_mirrored_income(app):
         adviser_id = sale.advisor_id
     assert client.get("/finance-control/").status_code == 200
     paid = client.post("/finance-control/payouts", data={
-        "period": str(local_today()), "advisor_id": adviser_id,
+        "period": str(today_date(app)), "advisor_id": adviser_id,
         "amount": "30",
     })
     assert paid.status_code == 302
@@ -251,7 +256,7 @@ def test_payout_and_project_reports_do_not_duplicate_mirrored_income(app):
         assert AdvisorFortnightPayout.query.count() == 1
         assert AdvisorFortnightPayout.query.one().amount == Decimal("30.00")
     client.post("/finance-control/payouts", data={
-        "period": str(local_today()), "advisor_id": adviser_id,
+        "period": str(today_date(app)), "advisor_id": adviser_id,
         "amount": "20",
     })
     with app.app_context():
