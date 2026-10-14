@@ -112,7 +112,8 @@ def expenses():
         db.session.commit()
         flash("Egreso registrado.", "success")
         return redirect(url_for("finance.expenses"))
-    return render_template("finance/expenses.html", expenses=Expense.query.order_by(Expense.expense_date.desc()).all())
+    from app.finance_control_service import legacy_allocation_context
+    return render_template("finance/expenses.html", expenses=Expense.query.order_by(Expense.expense_date.desc()).all(), **legacy_allocation_context())
 
 
 @bp.route("/receivables")
@@ -428,7 +429,8 @@ def incomes():
         return redirect(url_for("finance.incomes"))
 
     rows = Income.query.order_by(Income.effective_date.desc(), Income.id.desc()).all()
-    return render_template("finance/incomes.html", rows=rows)
+    from app.finance_control_service import legacy_allocation_context
+    return render_template("finance/incomes.html", rows=rows, **legacy_allocation_context())
 
 
 @bp.route("/payables/<int:row_id>/payment", methods=["POST"])
