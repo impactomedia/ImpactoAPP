@@ -250,7 +250,8 @@ def new_order():
 @login_required
 def detail(order_id):
     order = db.get_or_404(PrintOrder, order_id)
-    return render_template("printing/detail.html", order=order)
+    linked_sale = db.session.get(Sale, order.sale_id) if order.sale_id else None
+    return render_template("printing/detail.html", order=order, linked_sale=linked_sale)
 
 
 @bp.route("/items/<int:item_id>/design", methods=["POST"])
