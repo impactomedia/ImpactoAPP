@@ -88,8 +88,11 @@ def commission_expenses(advisor_id, project_id, starts, ends):
     ).all()
 
 
-def qualifying_new_clients(advisor_id, starts, ends):
-    """Cuenta clientes únicos, excluyendo operaciones exclusivamente de propina."""
+def new_client_categories(advisor_id, starts, ends):
+    """Primera compra pagada con servicio: un cliente nuevo, incluso si adquiere un combo.
+
+    Propinas solas no cuentan como clientes nuevos. Una futura compra real sí cuenta.
+    """
     sales = Sale.query.filter(
         Sale.sale_date <= ends,
         or_(
@@ -97,28 +100,47 @@ def qualifying_new_clients(advisor_id, starts, ends):
             and_(Sale.advisor_id.is_(None), Sale.client.has(Client.owner_id == advisor_id)),
         ),
     ).order_by(Sale.sale_date.asc(), Sale.id.asc()).all()
-    first_paid = set()
-    count = 0
+    first_valid, tip_clients = set(), set()
+    counts = {"membresia": 0, "accesorios": 0, "propinas": 0}
     for sale in sales:
-        if sale.status == "cancelada":
+        if sale.status in {"cancelada", "anulada"}:
             continue
-        # Un producto o servicio real, nunca una venta exclusivamente de propina.
-        eligible = any(
-            (item.product and item.product.category not in {"propina"})
-            or ("propina" not in (item.description or "").lower()
-                and "tip" != (item.description or "").strip().lower())
-            for item in sale.items
-        )
-        if not eligible or sale.client_id in first_paid:
-            continue
-        payments = [p for p in sale.payments if p.status == "confirmado" and p.currency == "USD"]
+        payments = [
+            p for p in sale.payments if p.status == "confirmado" and p.currency == "USD"
+        ]
         if not payments:
             continue
         earliest = min(p.effective_date for p in payments)
-        first_paid.add(sale.client_id)
-        if starts <= earliest <= ends:
-            count += 1
-    return count
+        if earliest > ends:
+            continue
+        memberships, accessories, tips = False, False, False
+        for item in sale.items:
+            title = " ".join(filter(None, (
+                getattr(item.product, "name", ""), item.description
+            ))).lower().strip()
+            if "propina" in title or title in {"tip", "tips", "gratuity"}:
+                tips = True
+                continue
+            if item.product and (item.product.category in {
+                "paquete", "community_manager",
+            } or "community manager" in title):
+                memberships = True
+            elif title:
+                accessories = True
+        if memberships or accessories:
+            if sale.client_id not in first_valid:
+                first_valid.add(sale.client_id)
+                if starts <= earliest <= ends:
+                    counts["membresia" if memberships else "accesorios"] += 1
+        elif tips and starts <= earliest <= ends:
+            tip_clients.add(sale.client_id)
+    counts["propinas"] = len(tip_clients)
+    counts["total"] = counts["membresia"] + counts["accesorios"]
+    return counts
+
+
+def qualifying_new_clients(advisor_id, starts, ends):
+    return new_client_categories(advisor_id, starts, ends)["total"]
 
 
 def fortnight_summary(advisor, period_start=None, today=None):
@@ -144,6 +166,7 @@ def fortnight_summary(advisor, period_start=None, today=None):
     remaining_days = max(0, (ends - today).days + 1) if starts <= today <= ends else 0
     gross_left = max(money(0), total_goal - gross)
     net_left = max(money(0), net_goal - net)
+    client_counts = new_client_categories(advisor.id, starts, ends)
     return {
         "advisor": advisor, "project_id": project_id, "goal": goal,
         "starts": starts, "ends": ends, "gross": gross, "net": net,
@@ -156,7 +179,10 @@ def fortnight_summary(advisor, period_start=None, today=None):
         "percentage": percentage, "eligible": eligible, "earned": earned, "paid": paid,
         "days_remaining": remaining_days,
         "daily_required": money((gross_left / remaining_days).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)) if remaining_days else money(0),
-        "new_clients": qualifying_new_clients(advisor.id, starts, ends),
+        "new_clients": client_counts["total"],
+        "new_memberships": client_counts["membresia"],
+        "new_accessories": client_counts["accesorios"],
+        "tip_only_clients": client_counts["propinas"],
     }
 
 
