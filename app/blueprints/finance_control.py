@@ -111,6 +111,53 @@ def index():
     )
 
 
+@bp.route("/export.csv")
+@login_required
+@roles_required(*FINANCE_ROLES)
+def export_csv():
+    """CSV compatible con Excel, limitado al proyecto seleccionado."""
+    import csv
+    from io import StringIO
+    from flask import Response
+
+    today = local_today()
+    year = request.args.get("year", today.year, type=int)
+    month = request.args.get("month", today.month, type=int)
+    if year < 2000 or year > 2100 or month not in range(1, 13):
+        abort(400)
+    requested_id = request.args.get("project_id", type=int)
+    if role() != "superadmin" and not requested_id:
+        abort(403)
+    grouped, entries, _ = monthly_ledger(year, month)
+    if requested_id:
+        if requested_id not in grouped or requested_id is None:
+            abort(404)
+        entries = grouped[requested_id]["entries"]
+    result = StringIO()
+    writer = csv.writer(result)
+    writer.writerow(["Fecha", "Proyecto", "Tipo", "Fuente", "Descripción",
+                     "Importe", "Moneda"])
+    for item in entries:
+        project = grouped[item["project_id"]]["project"]
+        # Evitar que celdas de texto suministradas por usuarios ejecuten
+        # fórmulas cuando se abra el CSV en Excel.
+        description = str(item["description"] or "")
+        if description.lstrip().startswith(("=", "+", "-", "@", "\t", "\r")):
+            description = "'" + description
+        writer.writerow([
+            item["on"].isoformat(), project.name if project else "Sin asignar",
+            item["type"], item["source"], description, str(item["amount"]),
+            item["currency"],
+        ])
+    audit("exportar_finanzas_proyecto", "FinanceProjectMovement",
+          after={"project_id": requested_id, "year": year, "month": month})
+    db.session.commit()
+    return Response(
+        "\ufeff" + result.getvalue(), content_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=finanzas_{year}_{month:02d}.csv"},
+    )
+
+
 @bp.route("/goals", methods=["GET", "POST"])
 @login_required
 @roles_required(*GOAL_ROLES)
