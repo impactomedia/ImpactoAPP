@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -13,6 +14,7 @@ from app.models import (
     PrintIncident,
     PrintItem,
     PrintOrder,
+    ProductService,
     Sale,
     Shipment,
     ShipmentItem,
@@ -103,88 +105,145 @@ def index():
                 changed = True
                 break
     if changed:
-        db.session.commit()
-    return render_template("printing/index.html", orders=orders)
-
-
-@bp.route("/new", methods=["GET", "POST"])
+        db.ses@bp.route("/new", methods=["GET", "POST"])
 @login_required
 def new_order():
     clients = _visible_clients_query().order_by(Client.business_name).all()
     sales = _visible_sales_query().order_by(Sale.id.desc()).all()
     collaborators = Collaborator.query.filter_by(status="activo").order_by(Collaborator.id).all()
-
+    # Tarifario opcional: también admite productos creados específicamente para cada orden.
+    print_catalog = ProductService.query.filter_by(
+        category="imprenta", active=True
+    ).order_by(ProductService.name).all()
+    print_products = {p.id: p for p in print_catalog}
+    context = dict(
+        clients=clients, sales=sales, collaborators=collaborators,
+        print_catalog=print_catalog,
+    )
     client_ids = {client.id for client in clients}
     sale_ids = {sale.id for sale in sales}
+    valid_responsibles = {person.id for person in collaborators}
 
     if request.method == "POST":
         client_id = request.form.get("client_id", type=int)
         sale_id = request.form.get("sale_id", type=int)
+        responsible_id = request.form.get("responsible_id", type=int)
         if not client_id or client_id not in client_ids:
             abort(403)
         if sale_id and sale_id not in sale_ids:
             abort(403)
-
+        if responsible_id and responsible_id not in valid_responsibles:
+            abort(403)
         if sale_id:
             sale = db.session.get(Sale, sale_id)
             if not sale or sale.client_id != client_id:
                 flash("La venta seleccionada no pertenece al cliente indicado.", "danger")
-                return render_template("printing/form.html", clients=clients, sales=sales, collaborators=collaborators)
+                return render_template("printing/form.html", **context)
+
+        names = request.form.getlist("item_name[]")
+        quantities = request.form.getlist("quantity[]")
+        specifications = request.form.getlist("specification[]")
+        unit_prices = request.form.getlist("unit_price[]")
+        catalog_ids = request.form.getlist("catalog_product_id[]")
+        if not names:
+            flash("Agrega al menos un producto o paquete de imprenta.", "danger")
+            return render_template("printing/form.html", **context)
+
+        def price_value(value, required=True):
+            raw = str(value or "").strip()
+            if required and not raw:
+                raise ValueError("Cada producto debe tener un precio unitario acordado.")
+            try:
+                amount = Decimal(raw or "0")
+            except (ValueError, InvalidOperation):
+                raise ValueError("El precio o costo de imprenta no es válido.")
+            if not amount.is_finite() or amount < 0 or amount > Decimal("99999999.99"):
+                raise ValueError("El precio debe ser una cantidad válida y no negativa.")
+            return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        prepared = []
+        total_sale = Decimal("0.00")
+        try:
+            total_cost = price_value(request.form.get("total_cost"), required=False)
+            for index, raw_name in enumerate(names):
+                product_id_raw = catalog_ids[index] if index < len(catalog_ids) else ""
+                catalog_product = None
+                if product_id_raw:
+                    try:
+                        catalog_product = print_products.get(int(product_id_raw))
+                    except (ValueError, TypeError):
+                        catalog_product = None
+                    if catalog_product is None:
+                        raise ValueError("Selecciona un paquete de imprenta válido.")
+
+                name = (raw_name or "").strip() or (
+                    catalog_product.name if catalog_product else ""
+                )
+                if not name or len(name) > 180:
+                    raise ValueError("Todos los artículos necesitan un nombre válido.")
+                try:
+                    quantity = int(quantities[index])
+                except (IndexError, TypeError, ValueError):
+                    raise ValueError("La cantidad debe ser un número entero.")
+                if quantity < 1 or quantity > 1000000:
+                    raise ValueError("La cantidad debe ser mayor que cero.")
+
+                raw_price = unit_prices[index] if index < len(unit_prices) else ""
+                if raw_price == "" and catalog_product and catalog_product.base_price is not None:
+                    raw_price = str(catalog_product.base_price)
+                unit_price = price_value(raw_price)
+                line_total = unit_price * quantity
+                total_sale += line_total
+                if total_sale > Decimal("9999999999.99"):
+                    raise ValueError("El importe de la orden excede el máximo permitido.")
+
+                spec = (specifications[index] if index < len(specifications) else "").strip()
+                price_snapshot = (
+                    f"Precio unitario acordado: USD {unit_price:,.2f} | "
+                    f"Subtotal: USD {line_total:,.2f}"
+                )
+                prepared.append((
+                    name, quantity, (spec + "\n" if spec else "") + price_snapshot
+                ))
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return render_template("printing/form.html", **context)
 
         order = PrintOrder(
             order_no=next_code("IMP", PrintOrder),
             client_id=client_id,
             sale_id=sale_id,
-            responsible_id=request.form.get("responsible_id", type=int),
+            responsible_id=responsible_id,
             provider=(request.form.get("provider") or "").strip() or None,
             status="diseno",
             shipping_address=(request.form.get("shipping_address") or "").strip() or None,
-            total_cost=request.form.get("total_cost") or 0,
-            total_sale=request.form.get("total_sale") or 0,
+            total_cost=total_cost,
+            # Precio final pactado, no lo confundimos con el costo de producción.
+            total_sale=total_sale.quantize(Decimal("0.01")),
             notes=request.form.get("notes"),
         )
         db.session.add(order)
         db.session.flush()
+        for name, quantity, spec in prepared:
+            db.session.add(PrintItem(
+                order_id=order.id, name=name, quantity=quantity, specification=spec,
+            ))
 
-        names = request.form.getlist("item_name[]")
-        quantities = request.form.getlist("quantity[]")
-        specifications = request.form.getlist("specification[]")
-        created_items = 0
-
-        for index, raw_name in enumerate(names):
-            name = (raw_name or "").strip()
-            if not name:
-                continue
-            try:
-                quantity = int(quantities[index] or 1)
-            except (ValueError, IndexError):
-                quantity = 0
-            if quantity <= 0:
-                db.session.rollback()
-                flash("La cantidad de cada producto debe ser mayor que cero.", "danger")
-                return render_template("printing/form.html", clients=clients, sales=sales, collaborators=collaborators)
-
-            db.session.add(
-                PrintItem(
-                    order_id=order.id,
-                    name=name,
-                    quantity=quantity,
-                    specification=specifications[index] if index < len(specifications) else None,
-                )
-            )
-            created_items += 1
-
-        if not created_items:
-            db.session.rollback()
-            flash("Agrega al menos un producto a la orden de imprenta.", "danger")
-            return render_template("printing/form.html", clients=clients, sales=sales, collaborators=collaborators)
-
-        audit("crear_orden_imprenta", "PrintOrder", order.id, after={"order_no": order.order_no})
+        audit(
+            "crear_orden_imprenta", "PrintOrder", order.id,
+            after={
+                "order_no": order.order_no,
+                "client_id": client_id,
+                "total_sale": str(order.total_sale),
+                "total_cost": str(order.total_cost),
+                "items": len(prepared),
+            },
+        )
         db.session.commit()
-        flash("Orden de imprenta creada.", "success")
+        flash("Orden de imprenta creada con el precio acordado de cada producto.", "success")
         return redirect(url_for("printing.detail", order_id=order.id))
 
-    return render_template("printing/form.html", clients=clients, sales=sales, collaborators=collaborators)
+    return render_template("printing/form.html", **context)"printing/form.html", clients=clients, sales=sales, collaborators=collaborators)
 
 
 @bp.route("/<int:order_id>")
