@@ -1,0 +1,27 @@
+PARCHE NEXORA v1.26.7 - FILTRO UNICO DE PLANES EN CLIENTES
+
+Este ZIP se descarga a través de la compresión automática de GitHub y puede abrirse con Windows.
+
+CAMBIOS:
+- Elimina completamente el recuadro "Clasificación por tipo de plan".
+- Elimina el selector "Plan / producto específico".
+- Conserva UN SOLO selector "Tipo de plan" con Esencial, Golden, VIP, Premium,
+  Community Manager, Imprenta, Servicio digital y Otros planes.
+- Conserva los filtros Buscar, Estado y Proyecto comercial, así como la
+  paginación y la columna que muestra los planes de cada cliente.
+- No se alteran datos, ventas, órdenes de imprenta ni contratos existentes.
+
+INSTALACION:
+1. Haz respaldo del proyecto y de la base de datos.
+2. Descomprime el archivo ZIP en Windows con "Extraer todo".
+3. Entra en la carpeta extraída y copia SOLAMENTE la carpeta app a la raíz
+   de tu proyecto, reemplazando estos 3 archivos:
+   app/client_plan_groups.py
+   app/production_hardening.py
+   app/templates/clients/index.html
+4. Opcional: copia los dos archivos de tests/ a tu carpeta tests.
+5. Sube los cambios a main de GitHub como acostumbras; Railway desplegará.
+6. Abre Clientes y comprueba el único selector "Tipo de plan".
+
+IMPORTANTE: la rama de descarga NO debe fusionarse con main; úsala solo
+para descargar los archivos. No ejecutar migraciones de base de datos.
