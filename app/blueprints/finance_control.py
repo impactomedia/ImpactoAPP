@@ -250,7 +250,11 @@ def movements():
     projects = AdvisorProject.query.order_by(AdvisorProject.name).all()
     if role() == "advisor":
         projects = [p for p in projects if current_user.collaborator and p.id == current_user.collaborator.advisor_project_id]
-    sales = Sale.query.order_by(Sale.id.desc()).limit(200).all() if role() in FINANCE_ROLES else []
+    if role() in FINANCE_ROLES:
+        sales = Sale.query.order_by(Sale.id.desc()).limit(200).all()
+    else:
+        from app.blueprints.sales import _visible_sales_query
+        sales = _visible_sales_query().order_by(Sale.id.desc()).limit(200).all()
     return render_template("finance_control/movements.html", rows=rows,
         projects=projects, sales=sales, categories=CATEGORIES,
         can_execute=role() in FINANCE_ROLES,
