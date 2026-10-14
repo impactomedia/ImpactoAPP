@@ -259,7 +259,17 @@ def detail(client_id):
         return redirect(url_for("clients.detail", client_id=client.id))
     interactions = Interaction.query.filter_by(client_id=client.id).order_by(Interaction.occurred_at.desc()).all()
     quotes = Quote.query.filter_by(client_id=client.id).order_by(Quote.created_at.desc()).all()
-    return render_template("crm/detail.html", client=client, interactions=interactions, quotes=quotes, stages=STAGES)
+    # Reutiliza los eventos del expediente de Nexora con los permisos del usuario.
+    # El seguimiento no presenta información financiera del cliente.
+    from app.blueprints.clients import _build_client_timeline
+    timeline = _build_client_timeline(
+        client, attachments=[], visible_projects=[], visible_tasks=[], can_financial=False
+    )
+    return render_template(
+        "crm/detail.html", client=client, interactions=interactions,
+        quotes=quotes, stages=STAGES, timeline=timeline,
+        timeline_count=len(timeline),
+    )
 
 
 @bp.route("/<int:client_id>/stage", methods=["POST"])
@@ -308,6 +318,8 @@ def add_interaction(client_id):
     audit("agregar_interaccion", "Client", client.id, after={"type": interaction.interaction_type})
     db.session.commit()
     flash("Actividad registrada.", "success")
+    if request.form.get("from_history") == "1":
+        return redirect(url_for("crm.detail", client_id=client.id, _anchor="historial"))
     return redirect(url_for("crm.detail", client_id=client.id))
 
 
