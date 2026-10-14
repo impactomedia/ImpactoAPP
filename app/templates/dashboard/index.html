@@ -65,6 +65,31 @@
 </div>
 
 {% elif role_dashboard and role_dashboard.kind == 'advisor' %}
+{% if fortnight %}
+<section class="panel-card mb-4">
+  <div class="panel-header"><div><span class="eyebrow">{{ fortnight.advisor.advisor_project.name }} · Quincena {{ fortnight.starts.strftime('%d/%m') }} – {{ fortnight.ends.strftime('%d/%m') }}</span>
+  <h2 class="h4 mb-1">Mi Meta Total</h2><p>Avance de ingresos confirmados, sin deducciones.</p></div>
+  <a class="btn btn-outline-primary" href="{{ url_for('finance_control.advisor') }}">Mis finanzas</a></div>
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <strong class="fs-3">USD {{ fortnight.gross|money }} / {{ fortnight.total_goal|money }}</strong>
+    <strong>{{ fortnight.gross_progress|round(1) }}%</strong>
+  </div>
+  <div class="progress" style="height:20px" role="progressbar" aria-valuenow="{{ fortnight.gross_progress }}" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de meta quincenal">
+    <div class="progress-bar bg-primary" style="width:{{ fortnight.gross_progress }}%">{{ fortnight.gross_progress|round(1) }}%</div>
+  </div>
+  {% if not fortnight.goal %}<div class="alert alert-warning mt-3 mb-0">La meta de esta quincena aún no ha sido configurada por Administración.</div>{% endif %}
+</section>
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Meta Neta para comisionar</span><strong>USD {{ fortnight.net_goal|money }}</strong><small>Neto acumulado USD {{ fortnight.net|money }}</small></div>
+  <div class="metric-card"><span>Pendiente para comisionar</span><strong>USD {{ fortnight.net_left|money }}</strong><small>{{ 'Comisión habilitada' if fortnight.eligible else 'Meta Neta pendiente' }}</small></div>
+  <div class="metric-card"><span>Deducciones ejecutadas</span><strong>USD {{ fortnight.deductions|money }}</strong><small>Imprenta y Meta Ads en esta quincena</small></div>
+  <div class="metric-card"><span>Faltante Meta Total</span><strong>USD {{ fortnight.gross_left|money }}</strong><small>Objetivo comercial restante</small></div>
+  <div class="metric-card"><span>Días restantes</span><strong>{{ fortnight.days_remaining }}</strong><small>Hasta terminar la quincena</small></div>
+  <div class="metric-card"><span>Ingreso diario requerido</span><strong>USD {{ fortnight.daily_required|money }}</strong><small>Para llegar a Meta Total</small></div>
+  <div class="metric-card"><span>Comisión de la quincena</span><strong>USD {{ fortnight.earned|money }}</strong><small>{{ fortnight.percentage }}% si cumple Meta Neta</small></div>
+  <div class="metric-card"><span>Clientes nuevos</span><strong>{{ fortnight.new_clients }}</strong><small>Membresías: {{ fortnight.new_memberships }} · Accesorios: {{ fortnight.new_accessories }} · Propinas excluidas: {{ fortnight.tip_only_clients }}</small></div>
+</div>
+{% endif %}
 <div class="metric-grid mb-4">
   <div class="metric-card"><span>Prospectos nuevos</span><strong>{{ role_dashboard.metrics.new_prospects }}</strong><small>Mes actual</small></div>
   <div class="metric-card"><span>Seguimientos vencidos</span><strong>{{ role_dashboard.metrics.followup_overdue }}</strong><small>Requieren atención</small></div>
@@ -72,9 +97,9 @@
   <div class="metric-card"><span>Cotizaciones pendientes</span><strong>{{ role_dashboard.metrics.quotes_pending }}</strong><small>Borrador o enviadas</small></div>
   <div class="metric-card"><span>Ventas del mes</span><strong>USD {{ role_dashboard.metrics.sales_total|money }}</strong><small>{{ role_dashboard.metrics.sales_count }} venta(s)</small></div>
   <div class="metric-card"><span>Cobrado de tus ventas</span><strong>USD {{ role_dashboard.metrics.collected|money }}</strong><small>Pagos confirmados</small></div>
-  <div class="metric-card"><span>Meta</span><strong>{% if role_dashboard.metrics.goal_percent is not none %}{{ role_dashboard.metrics.goal_percent }}%{% else %}—{% endif %}</strong><small>USD {{ role_dashboard.metrics.goal_amount|money }} objetivo</small></div>
-  <div class="metric-card"><span>Comisión estimada</span><strong>USD {{ role_dashboard.metrics.commission_estimated|money }}</strong><small>Aún no aprobada</small></div>
-  <div class="metric-card"><span>Comisión aprobada</span><strong>USD {{ role_dashboard.metrics.commission_approved|money }}</strong><small>Según reglas vigentes</small></div>
+{% if not fortnight %}
+  <div class="metric-card"><span>Meta comercial anterior</span><strong>{{ role_dashboard.metrics.goal_percent if role_dashboard.metrics.goal_percent is not none else '—' }}%</strong><small>Meta existente para informes anteriores</small></div>
+{% endif %}
   <div class="metric-card"><span>Clientes asignados</span><strong>{{ role_dashboard.metrics.clients }}</strong><small>Cartera comercial</small></div>
   <div class="metric-card"><span>Renovaciones</span><strong>{{ role_dashboard.metrics.renewals }}</strong><small>Próximos / vencidos</small></div>
   <div class="metric-card"><span>Seguimientos próximos</span><strong>{{ role_dashboard.metrics.followup_upcoming }}</strong><small>Programados</small></div>

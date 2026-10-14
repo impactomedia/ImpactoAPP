@@ -531,6 +531,7 @@ def _finance_index(endpoint):
     }:
         return None
 
+    from app.finance_control_service import legacy_allocation_context
     from app.models import (
         AccountReceivable,
         Commission,
@@ -549,6 +550,7 @@ def _finance_index(endpoint):
         return render_template(
             "finance/expenses.html",
             expenses=pagination.items,
+            **legacy_allocation_context(),
             pagination=pagination,
         )
 
@@ -603,6 +605,7 @@ def _finance_index(endpoint):
         return render_template(
             "finance/incomes.html",
             rows=pagination.items,
+            **legacy_allocation_context(),
             pagination=pagination,
         )
 
