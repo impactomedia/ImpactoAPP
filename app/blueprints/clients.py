@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, current_app, send_from_directory, abort
 from flask_login import login_required, current_user
 from sqlalchemy import or_, and_
+from sqlalchemy.orm import selectinload
 
 from app.commercial_plans import maintenance_label
 from app.extensions import db
@@ -31,6 +32,7 @@ from app.models import (
     Interaction,
     Quote,
     Sale,
+    SaleItem,
     Payment,
     AccountReceivable,
     Project,
@@ -1025,7 +1027,11 @@ def index():
             Collaborator.advisor_project_id == advisor_project_id
         )
 
-    base_clients = q.order_by(Client.updated_at.desc()).all()
+    base_clients = q.options(
+        selectinload(Client.contracts).selectinload(ClientContract.product),
+        selectinload(Client.sales).selectinload(Sale.items).selectinload(SaleItem.product),
+        selectinload(Client.print_orders).selectinload(PrintOrder.items),
+    ).order_by(Client.updated_at.desc()).all()
     plans_by_client = {}
     types_by_client = {}
     ids_by_client = {}
@@ -1060,9 +1066,10 @@ def index():
                     add_product(item.product)
 
         # También muestra imprenta creada a medida directamente como una orden.
-        if client.print_orders:
+        print_orders = [order for order in client.print_orders if order.status != "cancelado"]
+        if print_orders:
             categories.add("imprenta")
-            for order in client.print_orders:
+            for order in print_orders:
                 for item in order.items:
                     if item.name and item.name not in seen:
                         names.append(item.name)
