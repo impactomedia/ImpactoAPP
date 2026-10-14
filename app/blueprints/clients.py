@@ -1502,7 +1502,7 @@ def add_comment(client_id):
     body = (request.form.get("body") or "").strip()
     if not body:
         flash("Escribe un comentario antes de guardar.", "warning")
-        return redirect(url_for("clients.detail", client_id=client.id))
+        return redirect(url_for("clients.detail", client_id=client.id, _anchor="historial"))
 
     collaborator = current_user.collaborator
     department = collaborator.department if collaborator else (current_user.role.label if current_user.role else None)
@@ -1520,7 +1520,7 @@ def add_comment(client_id):
     audit("comentario_cliente", "Client", client.id, after={"process_type": comment.process_type})
     db.session.commit()
     flash("Comentario agregado al historial del cliente.", "success")
-    return redirect(url_for("clients.detail", client_id=client.id))
+    return redirect(url_for("clients.detail", client_id=client.id, _anchor="historial"))
 
 
 @bp.route("/export.csv")
