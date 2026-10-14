@@ -5,7 +5,7 @@
   <div class="row g-3 align-items-center">
     <div class="col-md-4"><small class="text-secondary d-block">Precio acordado con el cliente</small><strong class="h4 mb-0">USD {{ order.total_sale|money }}</strong></div>
     <div class="col-md-4"><small class="text-secondary d-block">Costo de producción</small><strong class="h5 mb-0">USD {{ order.total_cost|money }}</strong></div>
-    <div class="col-md-4"><small class="text-secondary d-block">Venta vinculada</small><span>{{ order.sale.sale_no if order.sale else 'Sin venta vinculada' }}</span></div>
+    <div class="col-md-4"><small class="text-secondary d-block">Venta vinculada</small><span>{{ linked_sale.sale_no if linked_sale else 'Sin venta vinculada' }}</span></div>
   </div>
   <p class="small text-secondary mt-3 mb-0">Los precios unitarios pactados quedan registrados junto a las especificaciones de cada artículo. El valor de esta orden no genera un cobro adicional automáticamente.</p>
 </section>
