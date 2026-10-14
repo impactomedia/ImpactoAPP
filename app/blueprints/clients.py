@@ -426,15 +426,24 @@ def _build_client_timeline(
         for entity, rows in source_groups.items() if rows
     ]
     created_by = {}
+    creation_actions = {
+        "Sale": {"crear_compra_adicional", "convertir_cotizacion_venta"},
+        "ClientContract": {"servicio_principal_nuevo", "servicio_principal_upgrade"},
+    }
     if source_filters:
         for entry in (
             AuditLog.query.filter(
                 or_(*source_filters), AuditLog.user_id.isnot(None)
             ).order_by(AuditLog.created_at.asc(), AuditLog.id.asc()).all()
         ):
-            if entry.action.startswith(("crear_", "registrar_", "agregar_", "programar_", "generar_", "nueva_", "subir_")):
-                if entry.user:
-                    created_by.setdefault((entry.entity, entry.entity_id), entry.user.name)
+            allowed = creation_actions.get(entry.entity)
+            is_creation = (
+                entry.action in allowed
+                if allowed is not None
+                else entry.action.startswith(("crear_", "registrar_", "agregar_", "programar_", "generar_", "nueva_", "subir_"))
+            )
+            if is_creation and entry.user:
+                created_by.setdefault((entry.entity, entry.entity_id), entry.user.name)
 
     def actor_created(entity, row):
         return created_by.get((entity, str(row.id)))
@@ -527,7 +536,11 @@ def _build_client_timeline(
                     + f" · {payment.status.replace('_', ' ').title()}"
                 ),
                 link=url_for("sales.detail", sale_id=payment.sale_id),
-                actor=actor_created("Payment", payment),
+                actor=(
+                    db.session.get(User, payment.registered_by_id).name
+                    if payment.registered_by_id and db.session.get(User, payment.registered_by_id)
+                    else actor_created("Payment", payment)
+                ),
             )
 
         for note in client.collection_notes:
@@ -791,6 +804,11 @@ def _build_client_timeline(
                 "clients.download_attachment",
                 client_id=client.id,
                 attachment_id=attachment.id,
+            ),
+            actor=(
+                db.session.get(User, attachment.uploaded_by_id).name
+                if attachment.uploaded_by_id and db.session.get(User, attachment.uploaded_by_id)
+                else None
             ),
         )
 
