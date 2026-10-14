@@ -1,12 +1,20 @@
 {% extends "app_base.html" %}
 {% block app_content %}
 <div class="page-heading"><div><span class="eyebrow">Imprenta</span><h1>{{ order.order_no }}</h1><p>{{ order.client.business_name }} · {{ order.status|label }}</p></div></div>
+<section class="panel-card mb-4">
+  <div class="row g-3 align-items-center">
+    <div class="col-md-4"><small class="text-secondary d-block">Precio acordado con el cliente</small><strong class="h4 mb-0">USD {{ order.total_sale|money }}</strong></div>
+    <div class="col-md-4"><small class="text-secondary d-block">Costo de producción</small><strong class="h5 mb-0">USD {{ order.total_cost|money }}</strong></div>
+    <div class="col-md-4"><small class="text-secondary d-block">Venta vinculada</small><span>{{ order.sale.sale_no if order.sale else 'Sin venta vinculada' }}</span></div>
+  </div>
+  <p class="small text-secondary mt-3 mb-0">Los precios unitarios pactados quedan registrados junto a las especificaciones de cada artículo. El valor de esta orden no genera un cobro adicional automáticamente.</p>
+</section>
 <div class="row g-4">
   <div class="col-xl-8">
     {% for item in order.items %}
     <section class="panel-card mb-4">
       <div class="panel-header"><div><h2>{{ item.name }}</h2><p>Cantidad {{ item.quantity }} · Enviada {{ item.qty_sent }} · Recibida {{ item.qty_received }}</p></div><span class="badge-soft {{ 'success' if item.design_status=='aprobado' else 'info' }}">Diseño: {{ item.design_status|label }}</span></div>
-      <p>{{ item.specification or 'Sin especificaciones.' }}</p>
+      <p style="white-space:pre-line">{{ item.specification or 'Sin especificaciones.' }}</p>
       <div class="row g-3">
         <div class="col-md-6">{% if current_user.has_permission('printing.edit') %}<form method="post" enctype="multipart/form-data" action="{{ url_for('printing.upload_design', item_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-label">Nueva versión de diseño</label><input name="file" type="file" class="form-control mb-2"><textarea name="comment" class="form-control mb-2" placeholder="Comentario"></textarea><button class="btn btn-light border">Subir versión</button></form>{% endif %}</div>
         <div class="col-md-6">{% if current_user.has_permission('printing.approve') %}<form method="post" action="{{ url_for('printing.design_decision', item_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-label">Aprobación de diseño</label><select name="decision" class="form-select mb-2"><option value="aprobado">Aprobado</option><option value="cambios">Solicitar cambios</option><option value="rechazado">Rechazado</option></select><textarea name="comment" class="form-control mb-2" placeholder="Comentario"></textarea><button class="btn btn-dark">Registrar decisión</button></form>{% if item.design_approved_at and not item.shipping_approved_at %}<form method="post" action="{{ url_for('printing.shipping_approval', item_id=item.id) }}" class="mt-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-brand">Aprobar envío</button></form>{% endif %}{% endif %}</div>
