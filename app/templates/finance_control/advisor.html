@@ -26,7 +26,7 @@
   <div class="metric-card"><span>Ingreso diario necesario</span><strong>USD {{ summary.daily_required|money }}</strong><small>Para completar la Meta Total</small></div>
   <div class="metric-card"><span>Comisión del período</span><strong>USD {{ summary.earned|money }}</strong><small>{{ summary.percentage }}% de la base neta al alcanzar la meta</small></div>
   <div class="metric-card"><span>Comisión ya pagada</span><strong>USD {{ summary.paid|money }}</strong><small>Pagos de esta quincena</small></div>
-  <div class="metric-card"><span>Clientes nuevos</span><strong>{{ summary.new_clients }}</strong><small>Compradores de servicios o membresías, sin propinas</small></div>
+  <div class="metric-card"><span>Clientes nuevos</span><strong>{{ summary.new_clients }}</strong><small>Membresías: {{ summary.new_memberships }} · Accesorios: {{ summary.new_accessories }} · Propinas excluidas: {{ summary.tip_only_clients }}</small></div>
 </div>
 <section class="panel-card">
   <h2 class="h5">Cómo se calcula</h2>
