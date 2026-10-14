@@ -214,65 +214,79 @@ def init_paginated_views(app):
 
 
 def _clients_index():
+    # Esta capa maneja los listados reales de producción; filtra ANTES de paginar.
     from app.blueprints.clients import _visible_client_query
-    from app.models import AdvisorProject, Client, Collaborator
-
-    query = _visible_client_query(Client.query).filter(
-        Client.record_type == "cliente"
+    from app.client_plan_groups import (
+        PLAN_TYPES, plan_condition, specific_plan_condition,
+        summaries_for_clients,
     )
+    from app.models import (
+        AdvisorProject, Client, ClientContract, Collaborator,
+        PrintOrder, ProductService, Sale, SaleItem,
+    )
+    from sqlalchemy.orm import selectinload
+
+    query = _visible_client_query(Client.query).filter(Client.record_type == "cliente")
     search = request.args.get("q", "").strip()
     status = request.args.get("status", "").strip()
-    advisor_project_id = request.args.get(
-        "advisor_project_id",
-        type=int,
-    )
+    advisor_project_id = request.args.get("advisor_project_id", type=int)
+    commercial_plan_id = request.args.get("commercial_plan_id", type=int)
+    plan_type = (request.args.get("plan_type") or "").strip().lower()
+    if plan_type not in PLAN_TYPES:
+        plan_type = ""
 
     if search:
         like = f"%{search}%"
-        query = query.filter(
-            or_(
-                Client.business_name.ilike(like),
-                Client.contact_name.ilike(like),
-                Client.phone.ilike(like),
-                Client.email.ilike(like),
-                Client.code.ilike(like),
-            )
-        )
-
+        query = query.filter(or_(
+            Client.business_name.ilike(like),
+            Client.contact_name.ilike(like),
+            Client.phone.ilike(like),
+            Client.email.ilike(like),
+            Client.code.ilike(like),
+        ))
     if status:
         query = query.filter_by(client_status=status)
     else:
         query = query.filter(Client.client_status != "archivado")
-
     if advisor_project_id:
         query = query.join(
-            Collaborator,
-            Client.owner_id == Collaborator.id,
-        ).filter(
-            Collaborator.advisor_project_id == advisor_project_id
-        )
+            Collaborator, Client.owner_id == Collaborator.id
+        ).filter(Collaborator.advisor_project_id == advisor_project_id)
+
+    all_visible_count = query.count()
+    type_counts = {
+        code: query.filter(plan_condition(code)).count()
+        for code in PLAN_TYPES
+    }
+    if plan_type:
+        query = query.filter(plan_condition(plan_type))
+    if commercial_plan_id:
+        query = query.filter(specific_plan_condition(commercial_plan_id))
 
     query = query.options(
         joinedload(Client.owner).joinedload(Collaborator.user),
-        joinedload(Client.owner).joinedload(
-            Collaborator.advisor_project
-        ),
+        joinedload(Client.owner).joinedload(Collaborator.advisor_project),
+        selectinload(Client.contracts).selectinload(ClientContract.product),
+        selectinload(Client.sales).selectinload(Sale.items).selectinload(SaleItem.product),
+        selectinload(Client.print_orders).selectinload(PrintOrder.items),
     ).order_by(Client.updated_at.desc())
-
     pagination = _paginate(query)
-    advisor_projects = (
-        AdvisorProject.query
-        .filter_by(active=True)
-        .order_by(AdvisorProject.name)
-        .all()
-    )
+    plans_by_client, _ = summaries_for_clients(pagination.items)
+    advisor_projects = AdvisorProject.query.filter_by(
+        active=True
+    ).order_by(AdvisorProject.name).all()
     pending_followups = 0
     if current_user.has_permission("crm.view"):
-        pending_followups = (
-            _visible_client_query(Client.query)
-            .filter_by(record_type="seguimiento")
-            .count()
-        )
+        pending_followups = _visible_client_query(Client.query).filter_by(
+            record_type="seguimiento"
+        ).count()
+
+    commercial_plans = ProductService.query.filter(
+        ProductService.active.is_(True),
+        ProductService.category.in_([
+            "paquete", "community_manager", "servicio", "mantenimiento", "imprenta",
+        ]),
+    ).order_by(ProductService.category, ProductService.name).all()
 
     return render_template(
         "clients/index.html",
@@ -283,8 +297,14 @@ def _clients_index():
         advisor_project_id=advisor_project_id,
         advisor_projects=advisor_projects,
         pending_followups=pending_followups,
+        commercial_plan_id=commercial_plan_id,
+        commercial_plans=commercial_plans,
+        plan_type=plan_type,
+        plan_types=PLAN_TYPES,
+        type_counts=type_counts,
+        plans_by_client=plans_by_client,
+        all_visible_count=all_visible_count,
     )
-
 
 def _crm_prospects():
     from app.blueprints.crm import STAGES, visible_clients
