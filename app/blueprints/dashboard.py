@@ -174,8 +174,15 @@ def index():
         .all()
     )
 
+    fortnight = None
+    if role_name == "advisor" and current_user.collaborator:
+        from app.finance_control_service import fortnight_summary, is_commercial_advisor
+        if is_commercial_advisor(current_user.collaborator):
+            fortnight = fortnight_summary(current_user.collaborator)
+
     return render_template(
         "dashboard/index.html",
+        fortnight=fortnight,
         role_dashboard=build_role_dashboard(),
         total_clients=total_clients,
         followups=followups,
