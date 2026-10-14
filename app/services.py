@@ -137,6 +137,19 @@ def recalc_commission(sale):
     if not sale.advisor_id:
         return None
 
+    # Nexora financiero: no se generan comisiones legacy por venta en
+    # quincenas administradas mediante metas individuales. Esto previene
+    # pagar la misma operación dos veces (Commission + desembolso quincenal).
+    from app.finance_control_models import AdvisorFortnightGoal
+    from app.finance_control_service import fortnight_bounds
+    for payment in sale.payments:
+        if payment.status == "confirmado":
+            start, _ = fortnight_bounds(payment.effective_date)
+            if AdvisorFortnightGoal.query.filter_by(
+                advisor_id=sale.advisor_id, period_start=start
+            ).first():
+                return sale.commission
+
     # Una comisión ya pagada se congela. No debe cambiar su monto por ajustes
     # posteriores de la venta sin una intervención financiera explícita.
     commission = sale.commission
