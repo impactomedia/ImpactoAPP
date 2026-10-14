@@ -237,7 +237,8 @@ def monthly_ledger(year, month):
         entries.append({
             "on": income.effective_date, "type": "ingreso", "source": "Ingreso manual",
             "project_id": allocations.get(("income", income.id)),
-            "description": income.concept, "amount": money(income.amount),
+            "description": income.concept, "record_type": "income", "record_id": income.id,
+            "amount": money(income.amount),
             "currency": income.currency,
         })
     for expense in Expense.query.filter(
@@ -247,7 +248,8 @@ def monthly_ledger(year, month):
         entries.append({
             "on": expense.expense_date, "type": "egreso", "source": "Egreso histórico",
             "project_id": allocations.get(("expense", expense.id)),
-            "description": expense.description, "amount": money(expense.amount),
+            "description": expense.description, "record_type": "expense", "record_id": expense.id,
+            "amount": money(expense.amount),
             "currency": expense.currency,
         })
     for movement in FinanceProjectMovement.query.filter(
@@ -287,6 +289,7 @@ def monthly_ledger(year, month):
             "project_id": allocations.get(("payroll_line", line.id))
                 or (line.collaborator.advisor_project_id if line.collaborator else None),
             "description": line.collaborator.user.name if line.collaborator and line.collaborator.user else "Colaborador",
+            "record_type": "payroll_line", "record_id": line.id,
             "amount": money(line.total), "currency": "USD",
         })
     entries.sort(key=lambda row: row["on"], reverse=True)
