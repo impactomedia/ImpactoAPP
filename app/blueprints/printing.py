@@ -105,7 +105,11 @@ def index():
                 changed = True
                 break
     if changed:
-        db.ses@bp.route("/new", methods=["GET", "POST"])
+        db.session.commit()
+    return render_template("printing/index.html", orders=orders)
+
+
+@bp.route("/new", methods=["GET", "POST"])
 @login_required
 def new_order():
     clients = _visible_clients_query().order_by(Client.business_name).all()
