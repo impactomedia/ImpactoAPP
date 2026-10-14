@@ -120,3 +120,16 @@ def test_crm_empty_comment_is_rejected(browser, app):
     assert response.status_code == 302
     with app.app_context():
         assert ClientComment.query.filter_by(client_id=cid).count() == 0
+
+
+def test_crm_stage_changes_appear_in_automatic_timeline(browser, app):
+    with app.app_context():
+        cid = Client.query.filter_by(code="QH-LEAD").one().id
+    changed = browser.post(f"/crm/{cid}/stage", data={"stage": "interesado"})
+    assert changed.status_code == 302
+    page = browser.get(f"/crm/{cid}")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert "Cambio de etapa" in html
+    assert "Contactado" in html
+    assert "Interesado" in html
