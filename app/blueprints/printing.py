@@ -243,7 +243,7 @@ def new_order():
         flash("Orden de imprenta creada con el precio acordado de cada producto.", "success")
         return redirect(url_for("printing.detail", order_id=order.id))
 
-    return render_template("printing/form.html", **context)"printing/form.html", clients=clients, sales=sales, collaborators=collaborators)
+    return render_template("printing/form.html", **context)
 
 
 @bp.route("/<int:order_id>")
