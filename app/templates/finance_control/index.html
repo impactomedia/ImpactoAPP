@@ -30,9 +30,18 @@
 {% if nio.income or nio.expenses %}<div class="alert alert-warning">Hay importes en NIO sin convertir: ingresos C$ {{ nio.income|money }} y egresos C$ {{ nio.expenses|money }}. No se suman a los totales USD sin una tasa verificada.</div>{% endif %}
 <section class="panel-card">
 <div class="panel-header"><div><h2 class="h5">Libro de movimientos · {{ '%02d'|format(month) }}/{{ year }}</h2><p>Máximo 300 movimientos más recientes en pantalla.</p></div></div>
-<div class="table-responsive"><table class="table modern-table"><thead><tr><th>Fecha</th><th>Proyecto</th><th>Origen</th><th>Descripción</th><th>Ingreso</th><th>Egreso</th></tr></thead><tbody>
-{% for x in entries %}<tr><td>{{ x.on }}</td><td>{{ grouped[x.project_id].project.name if x.project_id else 'Sin asignar' }}</td><td>{{ x.source }}</td><td>{{ x.description }}</td><td>{{ x.amount|money if x.type=='ingreso' else '—' }} {% if x.type=='ingreso' %}{{ x.currency }}{% endif %}</td><td>{{ x.amount|money if x.type=='egreso' else '—' }} {% if x.type=='egreso' %}{{ x.currency }}{% endif %}</td></tr>
-{% else %}<tr><td colspan="6" class="text-secondary">Sin movimientos en este período.</td></tr>{% endfor %}
+<div class="table-responsive"><table class="table modern-table"><thead><tr><th>Fecha</th><th>Proyecto</th><th>Origen</th><th>Descripción</th><th>Ingreso</th><th>Egreso</th><th>Clasificar</th></tr></thead><tbody>
+{% for x in entries %}<tr><td>{{ x.on }}</td><td>{{ grouped[x.project_id].project.name if x.project_id else 'Sin asignar' }}</td><td>{{ x.source }}</td><td>{{ x.description }}</td><td>{{ x.amount|money if x.type=='ingreso' else '—' }} {% if x.type=='ingreso' %}{{ x.currency }}{% endif %}</td><td>{{ x.amount|money if x.type=='egreso' else '—' }} {% if x.type=='egreso' %}{{ x.currency }}{% endif %}</td><td>
+{% if can_consolidate and not x.project_id and x.get('record_type') %}
+<form method="post" action="{{ url_for('finance_control.allocate') }}" class="d-flex gap-1">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="record_type" value="{{ x.record_type }}"><input type="hidden" name="record_id" value="{{ x.record_id }}">
+<select name="project_id" class="form-select form-select-sm" required><option value="">Proyecto</option>
+{% for project in projects %}<option value="{{ project.id }}">{{ project.name }}</option>{% endfor %}</select>
+<button class="btn btn-sm btn-outline-primary">Asignar</button></form>
+{% else %}—{% endif %}
+</td></tr>
+{% else %}<tr><td colspan="7" class="text-secondary">Sin movimientos en este período.</td></tr>{% endfor %}
 </tbody></table></div>
 </section>
 {% endblock %}
