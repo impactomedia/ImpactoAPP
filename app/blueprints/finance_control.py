@@ -205,6 +205,8 @@ def movements():
             executed_on = parse_day(request.form.get("executed_on"), local_today())
             if executed_on > local_today():
                 raise ValueError("No se pueden ejecutar gastos con fecha futura.")
+            if fortnight_bounds(executed_on)[0] != fortnight_bounds(local_today())[0]:
+                raise ValueError("Los gastos deben registrarse en su quincena de ejecución; no se permite alterar quincenas anteriores.")
             if not description:
                 raise ValueError("Describe el concepto del gasto.")
             if sale and sale.status == "cancelada":
@@ -212,11 +214,11 @@ def movements():
         except ValueError as exc:
             flash(str(exc), "danger")
             return redirect(url_for("finance_control.movements"))
-        amount_paid = money(sum((
+        amount_paid_at_execution = money(sum((
             money(p.amount) for p in sale.payments
-            if p.status == "confirmado" and p.currency == "USD"
+            if p.status == "confirmado" and p.currency == "USD" and p.effective_date <= executed_on
         ), money(0))) if sale else money(0)
-        is_early = bool(sale and amount_paid < money(sale.total))
+        is_early = bool(sale and amount_paid_at_execution < money(sale.total))
         if is_early:
             status = "pendiente_autorizacion"
             executed_on = None
@@ -288,7 +290,7 @@ def execute(movement_id):
     if row.status not in {"pendiente", "autorizado"}:
         abort(409)
     if row.status == "pendiente" and row.sale:
-        paid = sum((money(p.amount) for p in row.sale.payments if p.status == "confirmado" and p.currency == "USD"), money(0))
+        paid = sum((money(p.amount) for p in row.sale.payments if p.status == "confirmado" and p.currency == "USD" and p.effective_date <= local_today()), money(0))
         if paid < money(row.sale.total):
             flash("El cliente no ha completado su contrato; solicita autorización de Superadministración.", "danger")
             return redirect(url_for("finance_control.movements"))
@@ -296,6 +298,8 @@ def execute(movement_id):
         day = parse_day(request.form.get("executed_on"), local_today())
         if day > local_today():
             raise ValueError("La fecha de ejecución no puede ser futura.")
+        if fortnight_bounds(day)[0] != fortnight_bounds(local_today())[0]:
+            raise ValueError("La ejecución debe registrarse en la quincena vigente, sin alterar períodos anteriores.")
     except ValueError as exc:
         flash(str(exc), "danger")
         return redirect(url_for("finance_control.movements"))
