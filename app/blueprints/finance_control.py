@@ -416,7 +416,11 @@ def allocate():
         abort(400)
     model = models[record_type]
     record_id = request.form.get("record_id", type=int)
-    db.get_or_404(model, record_id)
+    source = db.get_or_404(model, record_id)
+    if record_type == "sale":
+        worker = source.advisor or (source.client.owner if source.client else None)
+        if worker and worker.advisor_project_id:
+            abort(409)  # El proyecto del asesor no se modifica manualmente.
     project = db.get_or_404(AdvisorProject, request.form.get("project_id", type=int))
     row = FinanceProjectAllocation.query.filter_by(record_type=record_type, record_id=record_id).first()
     if not row:
