@@ -411,7 +411,7 @@ def payouts():
 def allocate():
     from app.models import Expense, Income, PayrollLine
     record_type = request.form.get("record_type")
-    models = {"expense": Expense, "income": Income, "payroll_line": PayrollLine}
+    models = {"expense": Expense, "income": Income, "payroll_line": PayrollLine, "sale": Sale}
     if record_type not in models:
         abort(400)
     model = models[record_type]
