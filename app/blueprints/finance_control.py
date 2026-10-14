@@ -409,11 +409,12 @@ def payouts():
 @login_required
 @roles_required(*FINANCE_ROLES)
 def allocate():
-    from app.models import Expense, Income
+    from app.models import Expense, Income, PayrollLine
     record_type = request.form.get("record_type")
-    if record_type not in {"expense", "income"}:
+    models = {"expense": Expense, "income": Income, "payroll_line": PayrollLine}
+    if record_type not in models:
         abort(400)
-    model = Expense if record_type == "expense" else Income
+    model = models[record_type]
     record_id = request.form.get("record_id", type=int)
     db.get_or_404(model, record_id)
     project = db.get_or_404(AdvisorProject, request.form.get("project_id", type=int))
