@@ -75,6 +75,37 @@ def snapshot_at_first_payment(sale):
     return record
 
 
+def set_sale_generator(sale, generator_id, user_id, *, allow_collected=False, reason=None):
+    """Origen de UNA venta. Los cambios a cobros requieren autorización y motivo.
+
+    La atribución es independiente del generador del cliente. Un pago ya hecho
+    a Daniel/Oscar no puede reasignarse porque cambiaría su beneficiario.
+    """
+    chosen = db.session.get(LeadGenerator, generator_id)
+    if not chosen or not chosen.active:
+        raise ValueError("Selecciona Daniel, Oscar o Empresa como origen del lead.")
+
+    already_collected = any(p.status == "confirmado" for p in sale.payments)
+    if already_collected and not allow_collected:
+        raise ValueError("Solo Superadministración puede corregir el origen de una venta con cobros.")
+    if already_collected and not (reason or "").strip():
+        raise ValueError("Es obligatorio justificar el cambio de origen de una venta cobrada.")
+    if LeadCommissionPayout.query.filter_by(sale_id=sale.id).first():
+        raise ValueError("No se puede modificar el generador porque esta venta ya tiene comisiones de leads pagadas.")
+
+    current = sale.lead_attribution
+    if current is None:
+        current = SaleLeadAttribution(
+            sale=sale, generator_id=chosen.id, percentage=chosen.percentage
+        )
+        db.session.add(current)
+    else:
+        current.generator_id = chosen.id
+        current.percentage = chosen.percentage
+    db.session.flush()
+    return current
+
+
 def net_sale_commission(sale):
     """Resultados de venta: bruto cobrado - costos realmente ejecutados de Imprenta/Meta Ads."""
     collected = sum((

@@ -1,0 +1,39 @@
+NEXORA v1.27.3 — PARCHE: ORIGEN DE LEADS VISIBLE EN CADA VENTA
+
+ESTA VERSIÓN SOLUCIONA:
+1. En VENTAS > Nueva compra adicional ahora existe:
+   "¿De quién provino el lead de esta venta?"
+   Opciones: Daniel (4%), Oscar (2%), Empresa (0%).
+2. En SERVICIO PRINCIPAL / UPGRADE existe el mismo selector.
+3. Si el seguimiento ya tiene origen, se muestra como sugerencia
+   al elegir el cliente, pero puede cambiarse por esa venta.
+4. En VENTAS > listado: columna "Origen del lead".
+5. En VENTAS > Ver: bloque de origen que permite ver el generador.
+6. Para ventas anteriores sin atribución: Administración puede
+   asignar o corregir el origen ANTES del primer cobro. Si
+   ya hay cobros, SOLO Superadministración puede corregirlo
+   escribiendo un motivo obligatorio; el cambio se audita.
+7. Nunca se cambia atribución de una venta que ya tiene
+   comisiones de leads PAGADAS.
+8. Registrar la fuente por venta no modifica el origen del cliente,
+   el asesor, sus metas ni sus comisiones.
+
+CÁLCULO DE COMISIÓN YA ESTABLECIDO:
+Daniel recibe 4% y Oscar 2% de los cobros confirmados netos
+de Imprenta y Meta Ads ejecutados de LA VENTA.
+Empresa 0%. El gasto por pagar al generador es independiente;
+no reduce otra vez la base para comisionar.
+El cálculo de comisiones bancarias se mantiene intacto.
+
+INSTALAR SIN PYTHON:
+1. Respalda tu MySQL y los archivos del proyecto.
+2. Descarga el ZIP y extráelo en Windows.
+3. Copia la carpeta app/ en la raíz del proyecto Nexora
+   REEMPLAZANDO los archivos que corresponden.
+4. El archivo tests/ es opcional, para tus pruebas.
+5. Sube solo esos cambios a GitHub MAIN y espera Railway.
+6. Abre VENTAS y comprueba los nuevos selectores,
+   la columna en el listado y el bloque del detalle.
+
+NO son necesarias tablas ni migraciones nuevas en esta versión.
+Este ZIP no modifica producción automáticamente.
