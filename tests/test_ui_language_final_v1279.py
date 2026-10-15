@@ -51,3 +51,12 @@ def test_original_business_rules_are_not_removed_from_lead_attribution():
     assert 'name="lead_generator_id"' in detail
     assert 'name="reason"' in detail
     assert "lead_has_payout" in detail
+
+
+def test_old_commissions_are_labeled_separately():
+    sale = (TEMPLATES / "sales/detail.html").read_text(encoding="utf-8")
+    historic = (TEMPLATES / "finance/commissions.html").read_text(encoding="utf-8")
+    rules = (TEMPLATES / "finance/commission_rules.html").read_text(encoding="utf-8")
+    assert "Comisión anterior por venta" in sale
+    assert "Comisiones por venta (histórico)" in historic
+    assert "comisiones quincenales actuales" in rules
