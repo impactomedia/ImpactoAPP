@@ -8,6 +8,7 @@ from sqlalchemy import or_
 from app.decorators import roles_required
 from app.extensions import db
 from app.helpers import audit, next_code
+from app.lead_commission_service import available_generators, assign_client_origin, source_for_client
 from app.history_edits import edit_history, may_edit_note
 from app.models import (
     AdvisorProject,
@@ -172,7 +173,7 @@ def new_prospect():
 
         if not business_name or not contact_name:
             flash("Negocio y contacto son obligatorios.", "danger")
-            return render_template("crm/prospect_form.html", collaborators=collaborators)
+            return render_template("crm/prospect_form.html", collaborators=collaborators, lead_generators=available_generators())
 
         priority = request.form.get("priority", "media")
         if priority not in PRIORITIES:
@@ -182,10 +183,10 @@ def new_prospect():
         budget = _decimal_or_none(budget_raw)
         if budget_raw not in (None, "") and budget is None:
             flash("El presupuesto estimado no es válido.", "danger")
-            return render_template("crm/prospect_form.html", collaborators=collaborators)
+            return render_template("crm/prospect_form.html", collaborators=collaborators, lead_generators=available_generators())
         if budget is not None and budget < 0:
             flash("El presupuesto estimado no puede ser negativo.", "danger")
-            return render_template("crm/prospect_form.html", collaborators=collaborators)
+            return render_template("crm/prospect_form.html", collaborators=collaborators, lead_generators=available_generators())
 
         duplicate_conditions = [Client.business_name == business_name]
         if phone:
@@ -205,7 +206,7 @@ def new_prospect():
                     "Ya existe un registro coincidente fuera de tu cartera. Solicita una revisión antes de crear un duplicado.",
                     "warning",
                 )
-            return render_template("crm/prospect_form.html", collaborators=collaborators)
+            return render_template("crm/prospect_form.html", collaborators=collaborators, lead_generators=available_generators())
 
         owner_id = request.form.get("owner_id", type=int)
         role = _role_name()
@@ -215,6 +216,12 @@ def new_prospect():
             abort(403)
         elif not owner_id and current_user.collaborator:
             owner_id = current_user.collaborator.id
+
+        generators = available_generators()
+        chosen_generator = request.form.get("lead_generator_id", type=int)
+        if chosen_generator and chosen_generator not in {g.id for g in generators}:
+            flash("Selecciona un generador de leads válido.", "danger")
+            return render_template("crm/prospect_form.html", collaborators=collaborators, lead_generators=generators)
 
         client = Client(
             code=next_code("CLI", Client),
@@ -244,12 +251,15 @@ def new_prospect():
         )
         db.session.add(client)
         db.session.flush()
+        generator = assign_client_origin(client, chosen_generator, current_user.id)
+        audit("asignar_generador_leads", "Client", client.id,
+              after={"generador": generator.name, "porcentaje": str(generator.percentage)})
         audit("crear_prospecto", "Client", client.id, after={"business_name": client.business_name})
         db.session.commit()
         flash("Seguimiento creado.", "success")
         return redirect(url_for("crm.detail", client_id=client.id))
 
-    return render_template("crm/prospect_form.html", collaborators=collaborators)
+    return render_template("crm/prospect_form.html", collaborators=collaborators, lead_generators=available_generators())
 
 
 @bp.route("/<int:client_id>")
@@ -271,7 +281,31 @@ def detail(client_id):
         "crm/detail.html", client=client, interactions=interactions,
         quotes=quotes, stages=STAGES, timeline=timeline,
         note_edits=note_edits, timeline_count=len(timeline),
+        lead_generator=source_for_client(client), lead_generators=available_generators(),
     )
+
+
+@bp.route("/<int:client_id>/lead-origin", methods=["POST"])
+@login_required
+@roles_required("superadmin", "admin")
+def change_lead_origin(client_id):
+    """Administración asigna procedencia para ventas futuras; los snapshots se conservan."""
+    client = db.get_or_404(Client, client_id)
+    provider_id = request.form.get("lead_generator_id", type=int)
+    previous = source_for_client(client)
+    try:
+        generator = assign_client_origin(client, provider_id, current_user.id)
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+    else:
+        audit("actualizar_generador_leads", "Client", client.id,
+              before={"generador": previous.name},
+              after={"generador": generator.name},
+              reason="Las ventas ya cobradas conservan su atribución original.")
+        db.session.commit()
+        flash("Generador de leads actualizado sin modificar las ventas previamente atribuidas.", "success")
+    return redirect(url_for("clients.detail" if client.record_type == "cliente" else "crm.detail", client_id=client.id))
 
 
 @bp.route("/<int:client_id>/stage", methods=["POST"])

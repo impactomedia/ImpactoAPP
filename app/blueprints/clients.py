@@ -17,6 +17,7 @@ from app.access_control import _commercial_client_allowed, _project_allowed, _ta
 from app.helpers import audit, next_code, save_upload
 from app.history_edits import edit_history, may_edit_note
 from app.services import recalc_sale, active_principal_contract
+from app.lead_commission_service import available_generators, assign_client_origin, source_for_client
 from app.models import (
     Client,
     Collaborator,
@@ -1177,6 +1178,7 @@ def edit(client_id):
                 collaborators=collaborators,
                 operational_profile=operational_profile,
                 mode="edit",
+                lead_generators=available_generators(), lead_generator=source_for_client(client),
             )
 
         duplicate = _find_duplicate(business_name, phone, email, exclude_id=client.id)
@@ -1188,6 +1190,7 @@ def edit(client_id):
                 collaborators=collaborators,
                 operational_profile=operational_profile,
                 mode="edit",
+                lead_generators=available_generators(), lead_generator=source_for_client(client),
             )
 
         before = {
@@ -1197,6 +1200,17 @@ def edit(client_id):
             "owner_id": client.owner_id,
         }
         _apply_client_form(client)
+        if (current_user.is_superadmin or (current_user.role and current_user.role.name == "admin")) and "lead_generator_id" in request.form:
+            requested = request.form.get("lead_generator_id", type=int)
+            if requested not in {g.id for g in available_generators()}:
+                db.session.rollback()
+                flash("Generador de leads no válido.", "danger")
+                return redirect(url_for("clients.edit", client_id=client.id))
+            previous_generator = source_for_client(client)
+            updated_generator = assign_client_origin(client, requested, current_user.id)
+            audit("actualizar_generador_leads", "Client", client.id,
+                  before={"generador": previous_generator.name},
+                  after={"generador": updated_generator.name})
         operational_profile = _apply_operational_profile_form(
             client,
             operational_profile,
@@ -1224,6 +1238,7 @@ def edit(client_id):
         collaborators=collaborators,
         operational_profile=operational_profile,
         mode="edit",
+        lead_generators=available_generators(), lead_generator=source_for_client(client),
     )
 
 
