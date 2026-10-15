@@ -25,6 +25,10 @@ REVIEWED = [
     "planning/operations_calendar.html",
     "planning/overtime.html",
     "planning/hr_incidents.html",
+    "planning/index.html",
+    "auth/verify_2fa.html",
+    "errors/413.html",
+    "errors/500.html",
 ]
 
 
@@ -73,3 +77,10 @@ def test_login_brand_name_is_not_duplicated():
     login_page = (TEMPLATES / "auth/login.html").read_text(encoding="utf-8")
     assert '<h1><span>Nexora</span></h1>' in login_page
     assert '<span class="eyebrow">NEXORA</span>' not in login_page
+
+
+def test_section_heading_and_payroll_terms_are_clear():
+    notices = (TEMPLATES / "notifications/index.html").read_text(encoding="utf-8")
+    payroll = (TEMPLATES / "finance/payroll.html").read_text(encoding="utf-8")
+    assert "<h1>Notificaciones</h1>" in notices
+    assert "Las quincenales actuales se liquidan por separado." in payroll
