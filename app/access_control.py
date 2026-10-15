@@ -258,6 +258,12 @@ def _task_allowed(task):
     if task.assignee_id == collaborator.id or collaborator in task.collaborators:
         return True
 
+    # Los desarrolladores asignados al cliente pueden verificar cada beneficio
+    # contratado, incluso cuando todavía no tiene responsable individual.
+    if role == "developer" and task.task_type == "beneficio_plan" and task.client_id:
+        from app.client_v3_services import client_coordination_allowed
+        return client_coordination_allowed(task.client)
+
     if role == "supervisor":
         team_ids = _team_collaborator_ids()
         if task.assignee_id in team_ids:
@@ -291,6 +297,8 @@ def _task_write_allowed(task):
         return _task_allowed(task)
 
     if role in {"production", "developer", "hr"}:
+        if role == "developer" and task.task_type == "beneficio_plan":
+            return _task_allowed(task)
         return task.assignee_id == collaborator.id or collaborator in task.collaborators
 
     return False
