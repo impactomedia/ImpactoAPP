@@ -108,7 +108,13 @@ def test_developer_can_read_only_assigned_client(client,app):
     assert client.get(f"/clients/{ids['client1']}/coordination").status_code==200
     assert client.get(f"/clients/{ids['client2']}/coordination").status_code==403
     assert client.get(f"/clients/{ids['client1']}").status_code==403
-    assert client.post(f"/clients/{ids['client1']}/coordination/comment",data={"body":"intento"}).status_code==403
+    assert client.post(f"/clients/{ids['client1']}/coordination/comment",data={"body":"Seguimiento de desarrollo","process_type":"Desarrollo web"}).status_code==302
+    assert client.post(f"/clients/{ids['client2']}/coordination/comment",data={"body":"Intento ajeno","process_type":"Desarrollo web"}).status_code==403
+    with app.app_context():
+        from app.models import ClientComment
+        comment=ClientComment.query.filter_by(client_id=ids["client1"],body="Seguimiento de desarrollo").one()
+        author=User.query.filter_by(email="role1@test.local").one()
+        assert comment.user_id==author.id
 
 
 def test_developer_can_update_only_own_task(client,app):
