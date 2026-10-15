@@ -230,6 +230,10 @@ def add_payment(
     db.session.flush()
 
     if status == "confirmado":
+        from app.lead_commission_service import snapshot_at_first_payment
+        snapshot_at_first_payment(sale)
+
+    if status == "confirmado":
         income = Income(
             effective_date=payment.effective_date,
             client_id=sale.client_id,
