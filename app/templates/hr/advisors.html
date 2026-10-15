@@ -1,0 +1,31 @@
+{% extends "app_base.html" %}
+{% block title %}Gestión de asesores | Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div><span class="eyebrow">Equipo comercial · Expedientes</span>
+    <h1>Perfiles de asesores</h1>
+    <p>Consulta y modifica únicamente los asesores autorizados para tu proyecto o equipo. Los salarios se registran con auditoría.</p>
+  </div>
+</div>
+<section class="panel-card">
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Asesor</th><th>Proyecto</th><th>Supervisor</th><th>Salario fijo</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>
+      {% for a in advisors %}
+        <tr>
+          <td><strong>{{ a.user.name }}</strong><small class="d-block text-secondary">{{ a.user.email }}</small></td>
+          <td>{{ a.advisor_project.name if a.advisor_project else 'Sin proyecto' }}</td>
+          <td>{{ a.supervisor.user.name if a.supervisor and a.supervisor.user else 'Sin supervisor' }}</td>
+          <td>{{ a.base_salary|money }}</td>
+          <td><span class="badge-soft {{ 'success' if a.status == 'activo' else 'warning' }}">{{ a.status|label }}</span></td>
+          <td><a class="btn btn-sm btn-brand" href="{{ url_for('hr.advisor_edit', collaborator_id=a.id) }}">Editar perfil</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-secondary text-center py-4">No hay asesores disponibles en tu ámbito.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
