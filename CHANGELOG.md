@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.27.7 — Comisiones quincenales y edición salarial de asesores
+
+- Escala automática de asesores: 11% hasta $1999.99, 12% desde $2000, 13% desde $3000, 14% + $50 desde $4000 y 15% + $100 desde $5500.
+- Supervisor: 15% fijo sobre cobros personales netos, sin bonos y sin sumar las ventas de su equipo.
+- Tramos según cobros confirmados personales de la quincena en USD; comisión sobre la base neta positiva tras deducciones de imprenta y Meta Ads.
+- Comisiones de leads independientes, fechas de liquidación visibles (20 y 5) y protección del historial anterior a octubre de 2026.
+- Perfiles de asesores: salario, nombre y datos laborales editables con auditoría por superadmin, admin de su proyecto o supervisor de su equipo; no se pueden cambiar roles ni proyectos desde ese formulario.
+- Supervisores pueden asociarse opcionalmente a proyecto comercial para liquidar ventas propias.
+- Mantiene metas quincenales como KPIs comerciales y no como condición para comisionar bajo la escala nueva.
+- Requiere revisión de CI y despliegue antes de utilizarse en producción.
+
 ## 1.27.6 — Nexora · Desarrollo, entregables y proyectos empresariales
 
 - Desarrollo consulta comentarios internos y el historial de los clientes asignados y puede registrar notas con su autor real.
