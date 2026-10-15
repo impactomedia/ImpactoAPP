@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, redirect, request, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import func, or_
 
+from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.models import Client, Collaborator, Payment, Task, Project, Notification, Quote, Sale, SupportTicket
 from app.services import refresh_overdue_receivables, refresh_expired_contracts
@@ -18,7 +19,7 @@ def _client_scope(query):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_scope_condition
         return query.filter(client_scope_condition())
     if role == "advisor" and collaborator:
@@ -39,7 +40,7 @@ def _task_scope(query):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_scope_condition
         return query.filter(Task.client.has(client_scope_condition()))
     if role == DEVELOPMENT_COORDINATOR_ROLE:
@@ -67,7 +68,7 @@ def _project_scope(query):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_scope_condition
         return query.filter(Project.client.has(client_scope_condition()))
     if role == DEVELOPMENT_COORDINATOR_ROLE:
@@ -95,7 +96,7 @@ def index():
 
     if role_name == DEVELOPMENT_COORDINATOR_ROLE:
         return redirect(url_for("operations.development_dashboard"))
-    if role_name == "admin":
+    if role_name == "admin" and is_project_admin():
         # Una vista aislada: no mostrar KPIs financieros/globales de la empresa.
         from app.project_admin_scope import project_id_for_admin
         from app.models import AdvisorProject
