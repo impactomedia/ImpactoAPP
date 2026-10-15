@@ -3,7 +3,7 @@
 {% set role_name = current_user.role.name if current_user.role else '' %}
 {% set can_financial = current_user.has_permission('sales.view') or current_user.has_permission('finance.view') %}
 <div class="page-heading">
-  <div><span class="eyebrow">Nexora · Clientes</span><h1>Clientes por plan contratado</h1>
+  <div><span class="eyebrow">Cartera de clientes</span><h1>Clientes por plan contratado</h1>
     <p>Identifica cada empresa por sus planes principales, Community Manager, servicios individuales e imprenta.</p>
   </div>
   <div class="d-flex flex-wrap gap-2">
