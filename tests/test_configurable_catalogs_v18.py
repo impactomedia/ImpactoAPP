@@ -82,7 +82,7 @@ def test_master_data_initializes_operational_catalogs(client, app):
     _login(client)
     response = client.get("/settings/master-data/")
     assert response.status_code == 200
-    assert b"Configuraciones y cat" in response.data
+    assert "Catálogos y políticas".encode("utf-8") in response.data
 
     with app.app_context():
         assert CatalogItem.query.filter_by(
