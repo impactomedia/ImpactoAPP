@@ -31,7 +31,7 @@
     </div>
     <div class="col-md-4">
       <label class="form-label" for="advisorSalary">Salario fijo</label>
-      <div class="input-group"><span class="input-group-text">$</span>
+      <div class="input-group"><span class="input-group-text"><i class="bi bi-cash"></i></span>
         <input id="advisorSalary" class="form-control" type="number" name="base_salary" min="0" step="0.01" required value="{{ advisor.base_salary or 0 }}">
       </div>
       <small class="text-secondary">Este valor es independiente de las comisiones quincenales.</small>
