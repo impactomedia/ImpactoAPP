@@ -284,7 +284,12 @@ def coordination(client_id):
     else:
         can_open_full_detail = True
 
-    operational_comments = _visible_operational_comments(client.id)
+    operational_comments = (
+        ClientComment.query.filter_by(client_id=client.id)
+        .order_by(ClientComment.created_at.desc()).all()
+        if role in {"developer", DEVELOPMENT_COORDINATOR_ROLE}
+        else _visible_operational_comments(client.id)
+    )
     operational_attachments = _visible_operational_attachments(client.id)
 
     db.session.commit()
@@ -302,7 +307,7 @@ def coordination(client_id):
         timeline=timeline[:120],
         can_financial=can_financial,
         can_assign=current_user.has_permission("clients.assign"),
-        can_comment=current_user.has_permission("clients.comment"),
+        can_comment=(current_user.has_permission("clients.comment") or role in {"developer", DEVELOPMENT_COORDINATOR_ROLE}),
         can_files=current_user.has_permission("clients.files"),
         operational_comments=operational_comments,
         operational_attachments=operational_attachments,
@@ -313,8 +318,12 @@ def coordination(client_id):
 
 @bp.route("/<int:client_id>/coordination/comment", methods=["POST"])
 @login_required
-@permission_required("clients.comment")
 def add_operational_comment(client_id):
+    if not (
+        current_user.has_permission("clients.comment")
+        or _role_name() in {"developer", DEVELOPMENT_COORDINATOR_ROLE}
+    ):
+        abort(403)
     client = _get_client_or_403(client_id)
     body = (request.form.get("body") or "").strip()
     process_type = (request.form.get("process_type") or "Otro").strip()
