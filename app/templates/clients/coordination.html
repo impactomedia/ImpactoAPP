@@ -1,5 +1,5 @@
 {% extends "app_base.html" %}
-{% block title %}Coordinación · {{ client.business_name }} | Impacto Manager{% endblock %}
+{% block title %}Coordinación · {{ client.business_name }} | Nexora{% endblock %}
 {% block app_content %}
 <div class="page-heading">
   <div>
@@ -129,7 +129,7 @@
     <div class="tab-pane fade" id="entregables">
       <section class="panel-card">
         <div class="panel-header"><div>
-          <h2 class="h5">Beneficios contratados · Tareas verificables</h2>
+          <h2 class="h5">Beneficios contratados y avances</h2>
           <p>Cada beneficio de un plan se registra por separado. La finalización se guarda con el usuario responsable.</p>
         </div></div>
         {% set completed_benefits = plan_benefit_tasks|selectattr('status','equalto','completada')|list|length %}
@@ -164,7 +164,7 @@
     <div class="tab-pane fade" id="notas">
       <div class="row g-4">
         <div class="col-xl-5">
-          {% if can_comment %}<section class="border rounded-4 p-3"><h2 class="h5">Nueva nota operativa</h2><p class="text-secondary small">No permite registrar cobros, pagos ni cotizaciones.</p><form method="post" action="{{ url_for('clients_v3.add_operational_comment', client_id=client.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="process_type" class="form-select mb-2" required>{% for t in operational_comment_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select><input name="process_detail" class="form-control mb-2" placeholder="Detalle del proceso"><textarea name="body" class="form-control mb-2" rows="4" required placeholder="Nota operativa"></textarea><small class="d-block text-secondary mb-2">Se publicará como: <strong>{{ current_user.name }}</strong></small><button class="btn btn-brand w-100">Guardar nota</button></form></section>{% endif %}
+          {% if can_comment %}<section class="border rounded-4 p-3"><h2 class="h5">Nueva nota operativa</h2><p class="text-secondary small">Registra aquí los avances y observaciones del trabajo realizado.</p><form method="post" action="{{ url_for('clients_v3.add_operational_comment', client_id=client.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="process_type" class="form-select mb-2" required>{% for t in operational_comment_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select><input name="process_detail" class="form-control mb-2" placeholder="Detalle del proceso"><textarea name="body" class="form-control mb-2" rows="4" required placeholder="Nota operativa"></textarea><small class="d-block text-secondary mb-2">Se publicará como: <strong>{{ current_user.name }}</strong></small><button class="btn btn-brand w-100">Guardar nota</button></form></section>{% endif %}
         </div>
         <div class="col-xl-7"><div class="panel-header"><div><h2>Notas del equipo</h2><p>Solo información operativa autorizada.</p></div></div><div class="timeline">{% for c in operational_comments %}<div class="timeline-item"><div class="d-flex justify-content-between"><strong>Publicado por: {{ c.user.name if c.user and c.user.name else 'Usuario no disponible' }}</strong><small class="text-secondary">{{ c.created_at.strftime('%d/%m/%Y %H:%M') }}</small></div><span class="badge-soft info">{{ c.process_type }}</span>{% if c.process_detail %}<small class="d-block text-secondary mt-2">{{ c.process_detail }}</small>{% endif %}<p class="mb-0 mt-2">{{ c.body }}</p></div>{% else %}<p class="text-secondary">Sin notas operativas.</p>{% endfor %}</div></div>
       </div>
