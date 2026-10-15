@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.27.9 — Revisión final de textos y consistencia visual
+
+- Unificación de nombres de navegación: Seguimientos, Embudo de ventas y Finanzas históricas.
+- Eliminación de textos internos de versiones antiguas («Impacto Manager», «Clientes V2», «Fase 4», «v1.19.1») de las pantallas revisadas.
+- Simplificación de encabezados que repetían Nexora o el nombre del módulo.
+- Lenguaje más claro en fichas de cliente, ventas, Desarrollo, Excel, Imprenta, Seguridad y copias de seguridad.
+- Mensajes de metas quincenales alineados con las comisiones automáticas vigentes; la meta comercial no es una condición para devengar la comisión nueva.
+- Pruebas de regresión de terminología, navegación y editor de origen de leads.
+- Sin migraciones, cambios de permisos, contratos, reglas de comisiones ni datos financieros.
+
 ## 1.27.8 — Atribución comercial discreta en el detalle de ventas
 
 - Se reemplaza la sección grande de «Origen del lead» por una fila compacta.
