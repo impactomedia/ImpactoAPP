@@ -20,6 +20,7 @@ from app.finance_control_models import (
     AdvisorFortnightGoal, AdvisorFortnightPayout,
     FinanceProjectAllocation, FinanceProjectMovement,
 )
+from app.lead_commission_models import LeadCommissionPayout
 
 
 def money(value):
@@ -281,6 +282,19 @@ def monthly_ledger(year, month):
             "on": payout.paid_on, "type": "egreso", "source": "Comisión quincenal pagada",
             "project_id": payout.project_id,
             "description": payout.advisor.user.name if payout.advisor and payout.advisor.user else "Asesor",
+            "amount": money(payout.amount), "currency": "USD",
+        })
+    # Una comisión generada de lead NO se resta del neto del asesor ni del resultado
+    # empresarial mientras no esté pagada. Solo el desembolso entra en egresos.
+    for payout in LeadCommissionPayout.query.filter(
+        LeadCommissionPayout.paid_on >= start,
+        LeadCommissionPayout.paid_on <= end,
+    ).all():
+        entries.append({
+            "on": payout.paid_on, "type": "egreso",
+            "source": "Comisión generador leads",
+            "project_id": payout.project_id,
+            "description": f"{payout.generator.name} · {payout.sale.sale_no}",
             "amount": money(payout.amount), "currency": "USD",
         })
     # La planilla se contabiliza únicamente cuando aparece como pagada.
