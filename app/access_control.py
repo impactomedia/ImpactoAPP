@@ -1,5 +1,6 @@
 from flask import abort, request
 from flask_login import current_user
+from app.extensions import db
 
 from app.development_scope import (
     DEVELOPMENT_COORDINATOR_ROLE,
