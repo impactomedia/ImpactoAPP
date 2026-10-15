@@ -163,3 +163,25 @@ def test_reject_non_advisors_and_invalid_salary(app):
     browser.post(path,data={"name":"Ana","status":"activo","work_mode":"remoto","base_salary":"NaN"})
     with app.app_context():
         assert db.session.get(Collaborator,ids["Ana"]).base_salary != Decimal("NaN")
+
+
+def test_prior_supervisor_payout_is_not_counted_as_overpayment(app):
+    from app.finance_control_models import AdvisorFortnightPayout
+    from app.finance_control_service import adjustment_balance
+    with app.app_context():
+        person=db.session.get(Collaborator, app.config["TEST_COMM_EMP"]["Supervisor Impacto"])
+        db.session.add(AdvisorFortnightPayout(
+            advisor_id=person.id, project_id=person.advisor_project_id,
+            period_start=date(2026,10,1), amount=Decimal("200"),
+            paid_on=date(2026,10,20), paid_by_id=person.user_id,
+        ))
+        db.session.commit()
+        assert adjustment_balance(person, date(2026,10,16)) == Decimal("0.00")
+
+
+def test_bonuses_follow_gross_threshold_but_rate_applies_to_net():
+    value=commission_amount("advisor", Decimal("4000"), Decimal("3900"))
+    assert value["percentage"] == Decimal("14")
+    assert value["base_commission"] == Decimal("546.00")
+    assert value["bonus"] == Decimal("50")
+    assert value["earned"] == Decimal("596.00")
