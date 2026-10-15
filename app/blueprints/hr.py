@@ -139,10 +139,13 @@ def collaborators():
             flash("Ya existe un usuario con ese correo.", "danger")
             return redirect(url_for("hr.collaborators"))
 
-        advisor_project_id = request.form.get("advisor_project_id", type=int) if role.name == "advisor" else None
-        if role.name == "advisor" and not advisor_project_id:
-            flash("Los asesores deben pertenecer al proyecto IMPACTO o NOVAX.", "warning")
+        advisor_project_id = request.form.get("advisor_project_id", type=int) if role.name in {"advisor", "admin"} else None
+        if role.name in {"advisor", "admin"} and not advisor_project_id:
+            flash("Asesores y administradores requieren un proyecto empresarial.", "warning")
             return redirect(url_for("hr.collaborators"))
+
+        if advisor_project_id and not AdvisorProject.query.filter_by(id=advisor_project_id, active=True).first():
+            abort(403)
 
         supervisor_id = request.form.get("supervisor_id", type=int)
         if supervisor_id and not db.session.get(Collaborator, supervisor_id):
@@ -218,6 +221,12 @@ def collaborator_detail(collaborator_id):
             status = collaborator.status
 
         new_project_id = request.form.get("advisor_project_id", type=int)
+        if collaborator.user and collaborator.user.role and collaborator.user.role.name == "admin":
+            if not current_user.is_superadmin:
+                abort(403)
+            if not new_project_id or not AdvisorProject.query.filter_by(id=new_project_id, active=True).first():
+                flash("Todo administrador debe pertenecer a IMPACTO o NOVAX.", "danger")
+                return redirect(url_for("hr.collaborator_detail", collaborator_id=collaborator.id))
         if collaborator.user and collaborator.user.role and collaborator.user.role.name == "advisor":
             from app.finance_control_models import AdvisorFortnightGoal, AdvisorFortnightPayout
             if not new_project_id:
