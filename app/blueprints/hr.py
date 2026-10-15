@@ -139,7 +139,7 @@ def collaborators():
             flash("Ya existe un usuario con ese correo.", "danger")
             return redirect(url_for("hr.collaborators"))
 
-        advisor_project_id = request.form.get("advisor_project_id", type=int) if (role.name == "advisor" or (role.name == "admin" and current_app.config.get("PROJECT_ADMIN_SCOPE_ENABLED", False))) else None
+        advisor_project_id = request.form.get("advisor_project_id", type=int) if (role.name in {"advisor", "supervisor"} or (role.name == "admin" and current_app.config.get("PROJECT_ADMIN_SCOPE_ENABLED", False))) else None
         if (role.name == "advisor" or (role.name == "admin" and current_app.config.get("PROJECT_ADMIN_SCOPE_ENABLED", False))) and not advisor_project_id:
             flash("Asesores y administradores requieren un proyecto empresarial.", "warning")
             return redirect(url_for("hr.collaborators"))
