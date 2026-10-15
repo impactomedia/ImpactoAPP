@@ -433,7 +433,13 @@ def init_access_control(app):
             return None
 
         permission = _required_permission(endpoint, request.method)
-        if permission and not current_user.has_permission(permission):
+        development_comment = (
+            endpoint == "clients_v3.add_operational_comment"
+            and request.method == "POST"
+            and current_user.role
+            and current_user.role.name in {"developer", DEVELOPMENT_COORDINATOR_ROLE}
+        )
+        if permission and not current_user.has_permission(permission) and not development_comment:
             abort(403)
 
         _enforce_record_scope(endpoint)
