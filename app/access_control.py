@@ -1,5 +1,6 @@
 from flask import abort, request
 from flask_login import current_user
+from app.project_admin_scope import is_project_admin
 from app.extensions import db
 
 from app.development_scope import (
@@ -195,7 +196,7 @@ def _commercial_client_allowed(client):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_allowed
         return client_allowed(client)
     if role not in {"advisor", "supervisor"}:
@@ -213,7 +214,7 @@ def _sale_allowed(sale):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_allowed
         return client_allowed(sale.client)
     if role not in {"advisor", "supervisor"}:
@@ -232,10 +233,10 @@ def _project_allowed(project):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_allowed
         return client_allowed(project.client)
-    if role in {"superadmin", "manager"}:
+    if role in {"superadmin", "manager"} or (role == "admin" and not is_project_admin()):
         return True
 
     if role == DEVELOPMENT_COORDINATOR_ROLE:
@@ -257,7 +258,7 @@ def _task_allowed(task):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_allowed
         return bool(task.client and client_allowed(task.client))
     if role in {"superadmin", "manager"}:
@@ -398,7 +399,7 @@ def _enforce_record_scope(endpoint):
     role = current_user.role.name if current_user.role else ""
     args = request.view_args or {}
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         _enforce_project_admin_boundary(endpoint)
 
     # CRM: asesor = su cartera; supervisor = su equipo.
