@@ -28,10 +28,10 @@
     <div class="row g-3">
       <div class="col-lg-5">
         <label class="form-label">Seguimiento / Cliente</label>
-        <select name="client_id" class="form-select" required {% if not clients %}disabled{% endif %}>
+        <select name="client_id" id="saleClientChoice" class="form-select" required {% if not clients %}disabled{% endif %}>
           <option value="">Seleccionar registro</option>
           {% for c in clients %}
-            <option value="{{ c.id }}" {% if selected_client_id == c.id %}selected{% endif %}>
+            <option value="{{ c.id }}" data-lead-id="{{ c.lead_origin.generator_id if c.lead_origin else company_lead_id }}" {% if selected_client_id == c.id %}selected{% endif %}>
               {{ c.business_name }} — {{ 'Seguimiento' if c.record_type == 'seguimiento' else 'Cliente' }}{% if c.owner and c.owner.user %} · {{ c.owner.user.name }}{% endif %}
             </option>
           {% endfor %}
@@ -57,6 +57,18 @@
         <input class="form-control" value="USD" readonly>
         <input type="hidden" name="currency" value="USD">
         <small class="text-secondary">Solo dólares.</small>
+      </div>
+    </div>
+
+    <div class="row mt-3">
+      <div class="col-lg-6">
+        <label class="form-label fw-semibold" for="saleLeadGenerator">¿De quién provino el lead de esta venta?</label>
+        <select name="lead_generator_id" id="saleLeadGenerator" class="form-select" required>
+          {% for generator in lead_generators %}
+          <option value="{{ generator.id }}" {% if request.form.get('lead_generator_id', type='')|string == generator.id|string or (not request.form.get('lead_generator_id') and generator.id == company_lead_id) %}selected{% endif %}>{{ generator.name }}</option>
+          {% endfor %}
+        </select>
+        <small class="text-secondary">Daniel, Oscar o Empresa. Este origen pertenece a la venta y no cambia el asesor responsable.</small>
       </div>
     </div>
 
@@ -224,6 +236,21 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+  // La elección sugerida corresponde a la fuente del cliente seleccionado.
+  // Si hubo error de formulario se conserva la elección enviada anteriormente.
+  const clientChoice = document.getElementById('saleClientChoice');
+  const leadChoice = document.getElementById('saleLeadGenerator');
+  if (clientChoice && leadChoice) {
+    const syncLead = () => {
+      const selected = clientChoice.selectedOptions[0];
+      if (selected && selected.dataset.leadId) {
+        leadChoice.value = selected.dataset.leadId;
+      }
+    };
+    clientChoice.addEventListener('change', syncLead);
+    if (!{{ 'true' if request.form.get('lead_generator_id') else 'false' }}) syncLead();
+  }
+
   const rows = document.getElementById('saleRows');
   const template = document.getElementById('saleRowTemplate');
   const addRow = document.getElementById('addSaleRow');
