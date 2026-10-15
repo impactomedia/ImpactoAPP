@@ -141,7 +141,10 @@ def my_clients_query():
     )
     role = _user_role()
 
-    if role in {"superadmin", "admin", "manager"}:
+    if role == "admin":
+        from app.project_admin_scope import client_scope_condition
+        return query.filter(client_scope_condition())
+    if role in {"superadmin", "manager"}:
         return query
 
     collaborator = current_user.collaborator
@@ -214,7 +217,10 @@ def my_clients_query():
 
 def client_coordination_allowed(client):
     role = _user_role()
-    if role in {"superadmin", "admin", "manager", "finance"}:
+    if role == "admin":
+        from app.project_admin_scope import client_allowed
+        return client_allowed(client)
+    if role in {"superadmin", "manager", "finance"}:
         return True
 
     collaborator = current_user.collaborator
