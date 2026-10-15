@@ -36,7 +36,7 @@
     <div class="col-lg-6">
       <label for="principalSaleLead" class="form-label fw-semibold">¿De quién provino el lead de esta venta?</label>
       <select name="lead_generator_id" id="principalSaleLead" class="form-select" required>
-        {% for generator in lead_generators %}<option value="{{ generator.id }}" {% if request.form.get('lead_generator_id', type='')|string == generator.id|string or (not request.form.get('lead_generator_id') and generator.id == selected_lead_generator_id) %}selected{% endif %}>{{ generator.name }}</option>{% endfor %}
+        {% for generator in lead_generators %}<option value="{{ generator.id }}" {% if request.form.get('lead_generator_id')|string == generator.id|string or (not request.form.get('lead_generator_id') and generator.id == selected_lead_generator_id) %}selected{% endif %}>{{ generator.name }}</option>{% endfor %}
       </select>
       <small class="text-secondary">Daniel, Oscar o Empresa; independiente del asesor que cerró la venta.</small>
     </div>
