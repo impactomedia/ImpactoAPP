@@ -160,15 +160,10 @@ def _visible_operational_attachments(client_id):
 
 
 def _visible_operational_comments(client_id):
-    return (
-        ClientComment.query
-        .filter(
-            ClientComment.client_id == client_id,
-            ClientComment.process_type.in_(OPERATIONAL_COMMENT_TYPES),
-        )
-        .order_by(ClientComment.created_at.desc())
-        .all()
-    )
+    # Los usuarios de Desarrollo necesitan ver también los comentarios creados
+    # en la ficha comercial: son parte del historial del cliente asignado.
+    return (ClientComment.query.filter_by(client_id=client_id)
+            .order_by(ClientComment.created_at.desc()).all())
 
 
 @bp.route("/mine")
