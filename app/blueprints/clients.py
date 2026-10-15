@@ -160,6 +160,10 @@ def _visible_client_query(query=None):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
+    if role == "admin":
+        from app.project_admin_scope import client_scope_condition
+        return query.filter(client_scope_condition())
+
     if role == "advisor" and collaborator:
         return query.filter(Client.owner_id == collaborator.id)
 
@@ -179,7 +183,10 @@ def _active_collaborators():
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
-    if role == "advisor" and collaborator:
+    if role == "admin":
+        from app.project_admin_scope import project_id_for_admin
+        query = query.filter(Collaborator.advisor_project_id == (project_id_for_admin() or -1))
+    elif role == "advisor" and collaborator:
         query = query.filter(Collaborator.id == collaborator.id)
     elif role == "supervisor" and collaborator:
         allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
