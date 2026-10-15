@@ -113,6 +113,6 @@ def lead_commission_rows():
     ).all()
     return [
         net_sale_commission(sale) for sale in sales
-        if sale.status not in {"cancelada", "anulada", "reemplazada"}
+        if sale.status not in {"cancelada", "anulada"}
         and sale.lead_attribution.percentage > 0
     ]
