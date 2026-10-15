@@ -3,12 +3,14 @@
 El proyecto comercial asignado al COLABORADOR es el límite obligatorio.
 La falta de proyecto no concede acceso global. Superadmin no usa este filtro.
 """
+from flask import current_app
 from flask_login import current_user
 from app.models import Client, Collaborator
 
 
 def is_project_admin():
-    return bool(current_user.is_authenticated and current_user.role and
+    return bool(current_app.config.get("PROJECT_ADMIN_SCOPE_ENABLED", False) and
+                current_user.is_authenticated and current_user.role and
                 current_user.role.name == "admin")
 
 
