@@ -28,41 +28,67 @@
 </div>
 {% endif %}
 
-<section class="panel-card mb-4">
-  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-    <div>
-      <span class="eyebrow">Atribución comercial</span>
-      <h2 class="h5 mb-2">Origen del lead de esta venta</h2>
+{# Atribución comercial: una fila discreta; formulario oculto salvo al editar. #}
+<div class="border rounded-3 bg-white px-3 py-2 mb-3">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <i class="bi bi-person-check text-secondary" aria-hidden="true"></i>
+      <span class="small fw-semibold">Origen del lead de esta venta:</span>
       {% if lead_assignment %}
-        <span class="badge-soft success" style="font-size:1rem">{{ lead_assignment.generator.name }}</span>
-        {% if current_user.is_superadmin %}<span class="text-secondary ms-2">Comisión generador: {{ lead_assignment.percentage }}%</span>{% endif %}
-        <p class="small text-secondary mt-2 mb-0">Asignación registrada para esta operación; no cambia la Meta Neta del asesor.</p>
+        <span class="badge-soft success">{{ lead_assignment.generator.name }}</span>
+        {% if current_user.is_superadmin and lead_assignment.percentage > 0 %}
+          <small class="text-secondary">{{ lead_assignment.percentage }}% leads</small>
+        {% endif %}
       {% else %}
-        <span class="badge-soft warning">Sin atribución registrada</span>
-        <p class="small text-secondary mt-2 mb-0">Origen sugerido por el cliente: <strong>{{ suggested_generator.name if suggested_generator else 'Empresa' }}</strong>. Debes asignarlo a la venta para calcular la comisión de leads.</p>
+        <span class="badge-soft warning">Sin asignar</span>
+        <small class="text-secondary">Sugerido: {{ suggested_generator.name if suggested_generator else 'Empresa' }}</small>
+      {% endif %}
+      {% if lead_has_payout %}
+        <small class="text-secondary"><i class="bi bi-lock me-1" aria-hidden="true"></i>Bloqueada por comisión pagada</small>
       {% endif %}
     </div>
+
     {% if lead_generators and not lead_has_payout and (not lead_has_confirmed_payment or current_user.is_superadmin) %}
-    <form method="post" action="{{ url_for('sales.change_sale_lead_generator', sale_id=sale.id) }}" class="d-flex flex-column gap-2" style="min-width:250px">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label for="saleLeadOriginEditor" class="form-label mb-0">Asignar o corregir origen</label>
-      <select name="lead_generator_id" id="saleLeadOriginEditor" class="form-select" required>
-        {% for generator in lead_generators %}
-        <option value="{{ generator.id }}" {% if lead_assignment and lead_assignment.generator_id == generator.id %}selected{% elif not lead_assignment and suggested_generator and suggested_generator.id == generator.id %}selected{% endif %}>{{ generator.name }}</option>
-        {% endfor %}
-      </select>
-      {% if lead_has_confirmed_payment %}
-        <label for="saleLeadReason" class="form-label mb-0">Motivo de corrección (obligatorio)</label>
-        <input id="saleLeadReason" class="form-control" name="reason" maxlength="255" placeholder="Ej. el contacto provino de Daniel" required>
-        <small class="text-secondary">Solo Superadministración puede modificar la atribución de ventas con cobros.</small>
-      {% endif %}
-      <button class="btn btn-outline-primary btn-sm">Guardar origen de esta venta</button>
-    </form>
-    {% elif lead_has_payout %}
-      <span class="text-secondary small">Atribución bloqueada: ya existen comisiones de leads pagadas.</span>
+      <button type="button" class="btn btn-sm btn-outline-secondary"
+              data-bs-toggle="collapse" data-bs-target="#saleLeadOriginCompactEditor"
+              aria-controls="saleLeadOriginCompactEditor" aria-expanded="false">
+        <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>
+        {{ 'Cambiar' if lead_assignment else 'Asignar' }}
+      </button>
     {% endif %}
   </div>
-</section>
+
+  {% if lead_generators and not lead_has_payout and (not lead_has_confirmed_payment or current_user.is_superadmin) %}
+    <div class="collapse border-top mt-2 pt-2" id="saleLeadOriginCompactEditor">
+      <form method="post" action="{{ url_for('sales.change_sale_lead_generator', sale_id=sale.id) }}"
+            class="row g-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="col-12 col-md-4">
+          <label for="saleLeadOriginEditor" class="form-label small mb-1">Origen</label>
+          <select name="lead_generator_id" id="saleLeadOriginEditor" class="form-select form-select-sm" required>
+            {% for generator in lead_generators %}
+              <option value="{{ generator.id }}"
+                {% if lead_assignment and lead_assignment.generator_id == generator.id %}selected{% elif not lead_assignment and suggested_generator and suggested_generator.id == generator.id %}selected{% endif %}>{{ generator.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if lead_has_confirmed_payment %}
+          <div class="col-12 col-md-5">
+            <label for="saleLeadReason" class="form-label small mb-1">Motivo de corrección</label>
+            <input id="saleLeadReason" class="form-control form-control-sm" name="reason"
+                   maxlength="255" placeholder="Motivo obligatorio" required>
+          </div>
+        {% endif %}
+        <div class="col-12 col-md-auto">
+          <button type="submit" class="btn btn-primary btn-sm w-100">Guardar origen</button>
+        </div>
+      </form>
+      {% if lead_has_confirmed_payment %}
+        <small class="d-block text-secondary mt-2">Las ventas con cobros solo pueden corregirse desde Superadministración.</small>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
 
 <div class="metric-grid mb-4">
   <div class="metric-card"><span>Total</span><strong>{{ sale.total|money }}</strong><small>{{ sale.currency }}</small></div>
