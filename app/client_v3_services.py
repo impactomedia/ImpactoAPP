@@ -472,8 +472,6 @@ def build_client_timeline(client, can_financial=False):
             )
 
     for comment in client.comments:
-        if operational_only and comment.process_type not in OPERATIONAL_COMMENT_TYPES:
-            continue
         add(
             comment.created_at,
             "Comentario interno",
