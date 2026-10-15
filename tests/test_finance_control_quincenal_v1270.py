@@ -684,6 +684,16 @@ def test_new_sale_explicit_origin_oscar_overrides_client_and_shows_on_sales(app)
     assert detail.status_code == 200
     assert b"Origen del lead de esta venta" in detail.data
     assert b"Oscar" in detail.data
+    # En una venta ya cobrada, Administración ve el origen pero no lo puede editar.
+    assert b"saleLeadOriginCompactEditor" not in detail.data
+    browser.post("/auth/logout")
+    login(browser, "chief")
+    super_detail = browser.get(f"/sales/{sale_id}")
+    assert super_detail.status_code == 200
+    assert b"saleLeadOriginCompactEditor" in super_detail.data
+    assert b"data-bs-toggle=\"collapse\"" in super_detail.data
+    assert b"Guardar origen" in super_detail.data
+    assert b"saleLeadReason" in super_detail.data
     listing = browser.get("/sales/")
     assert listing.status_code == 200
     assert b"Origen del lead" in listing.data

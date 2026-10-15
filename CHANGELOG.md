@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.27.8 — Atribución comercial discreta en el detalle de ventas
+
+- Se reemplaza la sección grande de «Origen del lead» por una fila compacta.
+- Se muestran únicamente el origen asignado o sugerido y, si aplica, el porcentaje del generador.
+- El botón «Asignar» o «Cambiar» despliega el editor cuando es necesario.
+- Se mantienen intactos la validación del motivo, los permisos de Superadministración y el bloqueo cuando ya hay comisiones de leads pagadas.
+- No se modifica ningún cálculo, dato ni flujo financiero.
+
 ## 1.27.7 — Comisiones quincenales y edición salarial de asesores
 
 - Escala automática de asesores: 11% hasta $1999.99, 12% desde $2000, 13% desde $3000, 14% + $50 desde $4000 y 15% + $100 desde $5500.
