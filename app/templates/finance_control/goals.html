@@ -1,7 +1,7 @@
 {% extends "app_base.html" %}
 {% block title %}Metas quincenales | Nexora{% endblock %}
 {% block app_content %}
-<div class="page-heading"><div><span class="eyebrow">Finanzas · Metas individuales</span><h1>Configurar metas de asesores</h1><p>Meta Total comercial y Meta Neta que habilita las comisiones. Exclusivas de cada asesor y quincena.</p></div></div>
+<div class="page-heading"><div><span class="eyebrow">Objetivos del equipo</span><h1>Metas quincenales de asesores</h1><p>Define objetivos comerciales por asesor y quincena. Las comisiones se calculan automáticamente con la escala vigente.</p></div></div>
 <section class="panel-card mb-4">
  <form class="row g-2 align-items-end" method="get">
   <div class="col-md-4"><label class="form-label">Fecha de referencia</label><input type="date" class="form-control" name="period" value="{{ day }}"></div>
@@ -24,7 +24,7 @@
  <p class="text-secondary small mt-2 mb-0">Las metas se conservan como indicadores comerciales. El pago se calcula automáticamente sobre el neto positivo de los cobros confirmados, según el rango de facturación personal. Los cambios se auditan.</p>
 </section>
 <section class="panel-card">
- <h2 class="h5">Metas establecidas para esta quincena</h2>
+ <h2 class="h5">Metas de la quincena</h2>
  <div class="table-responsive"><table class="table modern-table"><thead><tr><th>Asesor</th><th>Proyecto</th><th>Meta Total</th><th>Meta Neta</th><th>Comisión</th></tr></thead><tbody>
  {% for a in advisors %}{% set g=saved.get(a.id) %}<tr><td>{{ a.user.name }}</td><td>{{ a.advisor_project.name }}</td><td>{{ g.total_goal|money if g else 'Pendiente' }}</td><td>{{ g.net_goal|money if g else 'Pendiente' }}</td><td>Automática (11–15%)</td></tr>
  {% else %}<tr><td colspan="5">No tienes asesores disponibles para configurar.</td></tr>{% endfor %}

@@ -19,8 +19,8 @@
 </section>
 {% if not summary.goal %}<div class="alert alert-info">Todavía no hay metas comerciales configuradas. La comisión actual se calcula automáticamente según la política quincenal.</div>{% endif %}
 <div class="metric-grid mb-4">
-  <div class="metric-card"><span>Meta Neta para comisionar</span><strong>USD {{ summary.net_goal|money }}</strong><small>Ingresos netos actuales: USD {{ summary.net|money }}</small></div>
-  <div class="metric-card"><span>Pendiente de Meta Neta</span><strong>USD {{ summary.net_left|money }}</strong><small>{{ 'Comisión disponible' if summary.eligible else 'Sin base neta positiva' }}</small></div>
+  <div class="metric-card"><span>Meta neta comercial</span><strong>USD {{ summary.net_goal|money }}</strong><small>Ingresos netos actuales: USD {{ summary.net|money }}</small></div>
+  <div class="metric-card"><span>Faltante de meta neta</span><strong>USD {{ summary.net_left|money }}</strong><small>{{ 'Comisión disponible' if summary.eligible else 'Sin base neta positiva' }}</small></div>
   <div class="metric-card"><span>Deducciones ejecutadas</span><strong>USD {{ summary.deductions|money }}</strong><small>Imprenta {{ summary.print_deductions|money }} · Meta Ads {{ summary.ads_deductions|money }}</small></div>
   <div class="metric-card"><span>Días disponibles</span><strong>{{ summary.days_remaining }}</strong><small>Incluye hoy cuando la quincena está en curso</small></div>
   <div class="metric-card"><span>Ingreso diario necesario</span><strong>USD {{ summary.daily_required|money }}</strong><small>Para completar la Meta Total</small></div>

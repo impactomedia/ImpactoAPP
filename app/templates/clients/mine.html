@@ -1,11 +1,11 @@
 {% extends "app_base.html" %}
-{% block title %}Clientes asignados | Impacto Nexora{% endblock %}
+{% block title %}Clientes asignados | Nexora{% endblock %}
 {% block app_content %}
 {% set role_name = current_user.role.name if current_user.role else '' %}
 <div class="page-heading">
   <div>
     <span class="eyebrow">Cartera y asignaciones</span>
-    <h1>{{ 'Clientes de Desarrollo' if role_name == 'development_coordinator' else ('Clientes asignados (consulta)' if role_name == 'developer' else 'Mis clientes') }}</h1>
+    <h1>{{ 'Clientes de Desarrollo' if role_name == 'development_coordinator' else ('Mis clientes asignados' if role_name == 'developer' else 'Mis clientes') }}</h1>
     <p>{{ 'Clientes vinculados a proyectos y asignaciones del equipo de Desarrollo.' if role_name == 'development_coordinator' else ('Acceso de solo lectura a los datos de clientes vinculados a tus tareas y asignaciones.' if role_name == 'developer' else 'Clientes vinculados a tu cartera comercial o a tu equipo operativo activo.') }}</p>
   </div>
   {% if role_name not in ['production','developer','development_coordinator'] %}

@@ -1,9 +1,9 @@
 {% extends "app_base.html" %}
-{% block title %}{{ sale.sale_no }} | Impacto Nexora{% endblock %}
+{% block title %}{{ sale.sale_no }} | Nexora{% endblock %}
 {% block app_content %}
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Impacto Nexora · Operación comercial</span>
+    <span class="eyebrow">Detalle de venta</span>
     <h1>{{ sale.sale_no }}</h1>
     <p>{{ sale.client.business_name }} · {{ sale.sale_date }}{% if sale.advisor and sale.advisor.user %} · {{ sale.advisor.user.name }}{% endif %}</p>
   </div>
@@ -94,7 +94,7 @@
   <div class="metric-card"><span>Total</span><strong>{{ sale.total|money }}</strong><small>{{ sale.currency }}</small></div>
   <div class="metric-card"><span>Pagado</span><strong>{{ sale.amount_paid|money }}</strong><small>Confirmado</small></div>
   <div class="metric-card"><span>Saldo</span><strong>{{ sale.balance|money }}</strong><small>{{ sale.receivable.status|label if sale.receivable else '' }}</small></div>
-  <div class="metric-card"><span>Comisión</span><strong>{{ sale.commission.amount|money if sale.commission else '0.00' }}</strong><small>{{ sale.commission.status|label if sale.commission else 'Sin regla' }}</small></div>
+  <div class="metric-card"><span>Comisión anterior por venta</span><strong>{{ sale.commission.amount|money if sale.commission else '0.00' }}</strong><small>{{ sale.commission.status|label if sale.commission else 'Sin registro anterior' }}</small></div>
 </div>
 
 <div class="row g-4">
@@ -182,7 +182,7 @@
     </section>
 
     <section class="panel-card">
-      <h2 class="h5">Deducciones antes de comisión</h2>
+      <h2 class="h5">Deducciones registradas en la venta</h2>
       <div class="table-responsive">
         <table class="table modern-table">
           <thead><tr><th>Concepto</th><th>Monto</th><th>Afecta comisión</th></tr></thead>

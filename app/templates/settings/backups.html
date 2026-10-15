@@ -1,10 +1,10 @@
 {% extends "app_base.html" %}
-{% block title %}Backups automáticos | Impacto Nexora{% endblock %}
+{% block title %}Copias de seguridad | Nexora{% endblock %}
 {% block app_content %}
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Impacto Nexora · v1.19.1</span>
-    <h1>Backups automáticos</h1>
+    <span class="eyebrow">Respaldo y recuperación</span>
+    <h1>Copias de seguridad</h1>
     <p>Programa copias lógicas diarias de MySQL y archivos sobre el volumen persistente de Nexora.</p>
   </div>
   <div class="d-flex flex-wrap gap-2">
@@ -120,7 +120,7 @@
   <div class="panel-header">
     <div>
       <h2>Copias disponibles</h2>
-      <p>Archivos guardados actualmente en el directorio persistente de backups.</p>
+      <p>Archivos de respaldo disponibles en el almacenamiento del sistema.</p>
     </div>
   </div>
 
@@ -146,7 +146,7 @@
 
   <div class="alert alert-light border mb-0">
     <strong>Protección contra duplicados:</strong>
-    Nexora usa un lock distribuido de MySQL y un lock adicional sobre el volumen. Aunque Gunicorn ejecute varios workers, solo un proceso puede generar la copia programada.
+    Nexora evita que se ejecuten varias copias programadas al mismo tiempo, incluso cuando hay varios procesos activos.
   </div>
 </section>
 {% endblock %}

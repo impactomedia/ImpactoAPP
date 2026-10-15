@@ -1,7 +1,7 @@
 {% extends "app_base.html" %}
 {% block app_content %}
 <div class="page-heading">
-  <div><span class="eyebrow">CRM Comercial</span><h1>Seguimientos</h1><p>Gestiona contactos y oportunidades hasta que confirmen una compra y pasen a Clientes.</p></div>
+  <div><span class="eyebrow">Gestión de oportunidades</span><h1>Seguimientos</h1><p>Gestiona contactos y oportunidades hasta que confirmen una compra y pasen a Clientes.</p></div>
   <div class="d-flex flex-wrap gap-2">
     <a class="btn btn-outline-secondary" href="{{ url_for('crm.pipeline') }}">Pipeline</a>
     {% if current_user.has_permission('crm.export') %}<a class="btn btn-outline-secondary" href="{{ url_for('data_hub.export_prospects', q=search, stage=stage, advisor_project_id=advisor_project_id) }}">Exportar filtrado</a>{% endif %}

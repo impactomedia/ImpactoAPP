@@ -1,12 +1,12 @@
 {% extends "app_base.html" %}
 {% block title %}Comisiones quincenales | Nexora{% endblock %}
 {% block app_content %}
-<div class="page-heading"><div><span class="eyebrow">Finanzas · Liquidación de comisiones</span><h1>Comisiones por quincena</h1><p>La facturación personal quincenal fija la escala del asesor. La comisión se calcula sobre el neto positivo tras deducciones; el supervisor recibe 15% fijo y ningún bono.</p></div></div>
+<div class="page-heading"><div><span class="eyebrow">Pagos quincenales</span><h1>Comisiones por quincena</h1><p>La facturación personal quincenal fija la escala del asesor. La comisión se calcula sobre el neto positivo tras deducciones; el supervisor recibe 15% fijo y ningún bono.</p></div></div>
 <section class="panel-card mb-4">
 <form method="get" class="row g-2 align-items-end"><div class="col-md-4"><label class="form-label">Fecha de quincena</label><input type="date" class="form-control" name="period" value="{{ day }}"></div><div class="col-md-3"><button class="btn btn-outline-primary">Consultar</button></div></form>
 <p class="small text-secondary mt-2 mb-0">Período: {{ starts.strftime('%d/%m/%Y') }} – {{ ends.strftime('%d/%m/%Y') }}. Los pagos y gastos se asignan según su fecha efectiva.</p></section>
 <section class="panel-card mb-4"><h2 class="h5">Comisiones de asesores y supervisores</h2>
-<div class="table-responsive"><table class="table modern-table"><thead><tr><th>Asesor / Proyecto</th><th>Cobrado</th><th>Deducciones</th><th>Base neta</th><th>Meta Neta</th><th>Comisión y bono</th><th>Pago previsto</th><th>Pagado</th><th>Disponible</th></tr></thead><tbody>
+<div class="table-responsive"><table class="table modern-table"><thead><tr><th>Asesor / Proyecto</th><th>Cobrado</th><th>Deducciones</th><th>Base neta</th><th>Meta neta objetivo</th><th>Comisión y bono</th><th>Pago previsto</th><th>Pagado</th><th>Disponible</th></tr></thead><tbody>
 {% for s, available in summaries %}<tr><td><strong>{{ s.advisor.user.name }}</strong><small class="d-block text-secondary">{{ s.advisor.advisor_project.name }}</small></td><td>{{ s.gross|money }}</td><td>{{ s.deductions|money }}</td><td>{{ s.net|money }}</td><td>{{ s.net_goal|money }}</td><td>{{ s.earned|money }}<small class="d-block text-secondary">{{ s.percentage }}% = {{ s.base_commission|money }} + bono {{ s.bonus|money }}</small></td><td>{{ s.payment_date.strftime('%d/%m/%Y') }}</td><td>{{ s.paid|money }}</td><td>{{ available|money }}</td></tr>
 {% else %}<tr><td colspan="9">Sin personal con comisiones asignado.</td></tr>{% endfor %}
 </tbody></table></div></section>

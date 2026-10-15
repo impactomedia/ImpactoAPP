@@ -1,7 +1,7 @@
 {% extends "app_base.html" %}
 {% block app_content %}
 <div class="page-heading">
-  <div><span class="eyebrow">Tareas</span><h1>Tablero Kanban</h1></div>
+  <div><span class="eyebrow">Tareas</span><h1>Tablero de tareas</h1></div>
   {% if current_user.has_permission('tasks.edit') %}<a class="btn btn-brand" href="{{ url_for('operations.new_task') }}">Nueva tarea</a>{% endif %}
 </div>
 <div class="kanban">

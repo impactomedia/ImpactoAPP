@@ -4,7 +4,7 @@
 <div class="page-heading">
   <div>
     <span class="eyebrow">Protección y acceso</span>
-    <h1>Administración de Seguridad</h1>
+    <h1>Seguridad y accesos</h1>
     <p>Sesiones, bloqueo, usuarios, 2FA y alcance efectivo de datos.</p>
   </div>
   <a class="btn btn-light border" href="{{ url_for('security_admin.audit_log') }}"><i class="bi bi-shield-check"></i> Abrir auditoría</a>
@@ -12,7 +12,7 @@
 
 <section class="panel-card mb-4" id="policy">
   <div class="panel-header">
-    <div><h2 class="h5">Política de acceso</h2><p>Valores globales aplicados en backend.</p></div>
+    <div><h2 class="h5">Política de acceso</h2><p>Opciones de seguridad aplicadas en todo el sistema.</p></div>
   </div>
   <form method="post" action="{{ url_for('security_admin.policy_update') }}" class="row g-3">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -248,7 +248,7 @@
 
 <section class="panel-card mt-4" id="temporary">
   <div class="panel-header">
-    <div><h2 class="h5">Acceso especial temporal</h2><p>Concede a un usuario de rol personalizado acceso directo a un cliente específico para un permiso marcado como “Especial temporal”. Al vencer, el backend deja de autorizarlo automáticamente.</p></div>
+    <div><h2 class="h5">Acceso especial temporal</h2><p>Concede a un usuario de rol personalizado acceso directo a un cliente específico para un permiso marcado como “Especial temporal”. Al vencer el plazo, el sistema retira automáticamente ese acceso.</p></div>
   </div>
 
   <form method="post" action="{{ url_for('security_admin.temporary_grant') }}" class="row g-2 align-items-end mb-4">

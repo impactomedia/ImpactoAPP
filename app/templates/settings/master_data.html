@@ -1,10 +1,10 @@
 {% extends "app_base.html" %}
-{% block title %}Configuraciones | Nexora{% endblock %}
+{% block title %}Catálogos y políticas | Nexora{% endblock %}
 {% block app_content %}
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Administración del sistema</span>
-    <h1>Configuraciones y catálogos</h1>
+    <span class="eyebrow">Gestión operativa</span>
+    <h1>Catálogos y políticas</h1>
     <p>Administra políticas, catálogos y reglas sin modificar código.</p>
   </div>
 </div>
@@ -27,7 +27,7 @@
   </div>
   <div class="col-md-6 col-xl-3">
     <a class="panel-card d-block h-100" href="{{ url_for('finance.commission_rules') }}">
-      <h2 class="h5">Reglas de comisión</h2><p>{{ commission_rules_count }} reglas activas</p>
+      <h2 class="h5">Reglas anteriores por venta</h2><p>{{ commission_rules_count }} reglas registradas</p>
     </a>
   </div>
 </div>

@@ -215,5 +215,5 @@ def test_backup_admin_page_loads(client):
     _login(client)
     response = client.get("/settings/backups/")
     assert response.status_code == 200
-    assert b"Backups autom" in response.data
+    assert b"Copias de seguridad" in response.data
     assert b"02:00" in response.data
