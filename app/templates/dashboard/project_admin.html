@@ -1,0 +1,27 @@
+{% extends "app_base.html" %}
+{% block title %}Administración de {{ project_name }} | Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Administración · Acceso empresarial limitado</span>
+    <h1>Proyecto {{ project_name }}</h1>
+    <p>Únicamente registros de tu proyecto. El acceso global corresponde a Superadministración.</p>
+  </div>
+</div>
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Clientes</span><strong>{{ clients }}</strong></div>
+  <div class="metric-card"><span>Seguimientos</span><strong>{{ prospects }}</strong></div>
+  <div class="metric-card"><span>Proyectos operativos</span><strong>{{ projects }}</strong></div>
+  <div class="metric-card"><span>Tareas pendientes</span><strong>{{ tasks }}</strong></div>
+</div>
+<div class="panel-card">
+  <h2 class="h5">Trabajar con {{ project_name }}</h2>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('crm.prospects') }}" class="btn btn-outline-primary">Seguimientos</a>
+    <a href="{{ url_for('clients.index') }}" class="btn btn-outline-primary">Clientes</a>
+    <a href="{{ url_for('sales.index') }}" class="btn btn-outline-primary">Ventas del proyecto</a>
+    <a href="{{ url_for('operations.projects') }}" class="btn btn-outline-primary">Proyectos</a>
+    <a href="{{ url_for('operations.tasks') }}" class="btn btn-outline-primary">Tareas</a>
+  </div>
+</div>
+{% endblock %}
