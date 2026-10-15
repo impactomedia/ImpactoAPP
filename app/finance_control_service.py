@@ -21,6 +21,8 @@ from app.finance_control_models import (
     FinanceProjectAllocation, FinanceProjectMovement,
 )
 from app.lead_commission_models import LeadCommissionPayout
+from app.payment_fee_models import PaymentProcessingFee
+from app.payment_fee_service import METHODS
 
 
 def money(value):
@@ -239,6 +241,24 @@ def monthly_ledger(year, month):
             "description": payment.sale.sale_no if payment.sale else "Cobro",
             "amount": money(payment.amount), "currency": payment.currency,
         })
+    # Tarifas realmente descontadas por el procesador del cobro.
+    # Son egresos de la empresa; se separan del Payment bruto, nunca se
+    # pasan a commission_expenses()/fortnight_summary() del asesor.
+    for fee in PaymentProcessingFee.query.join(Payment).filter(
+        Payment.effective_date >= start, Payment.effective_date <= end,
+        Payment.status == "confirmado",
+        Payment.currency == "USD",
+        PaymentProcessingFee.amount > 0,
+    ).all():
+        payment = fee.payment
+        entries.append({
+            "on": payment.effective_date, "type": "egreso",
+            "source": "Comisión de cobro",
+            "project_id": project_of_sale(payment.sale),
+            "description": f"{METHODS.get(fee.method_key, fee.method_key)} · {payment.sale.sale_no if payment.sale else 'Cobro'}",
+            "amount": money(fee.amount), "currency": "USD",
+            "processing_fee": True,
+        })
     for income in Income.query.filter(
         Income.sale_id.is_(None),
         Income.effective_date >= start, Income.effective_date <= end,
@@ -320,11 +340,11 @@ def monthly_ledger(year, month):
     for project in AdvisorProject.query.order_by(AdvisorProject.name).all():
         result[project.id] = {
             "project": project, "income": money(0), "expenses": money(0),
-            "result": money(0), "entries": [],
+            "processing_fees": money(0), "result": money(0), "entries": [],
         }
     result[None] = {
         "project": None, "income": money(0), "expenses": money(0),
-        "result": money(0), "entries": [],
+        "processing_fees": money(0), "result": money(0), "entries": [],
     }
     unconverted_nio = {"income": money(0), "expenses": money(0)}
     for entry in entries:
@@ -337,6 +357,8 @@ def monthly_ledger(year, month):
             continue
         field = "income" if entry["type"] == "ingreso" else "expenses"
         bucket[field] += entry["amount"]
+        if entry.get("processing_fee"):
+            bucket["processing_fees"] += entry["amount"]
     for row in result.values():
         row["result"] = row["income"] - row["expenses"]
     return result, entries, unconverted_nio
