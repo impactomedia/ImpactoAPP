@@ -19,7 +19,7 @@ from app.finance_control_models import (
 )
 from app.finance_control_service import (
     available_payout, fortnight_bounds, fortnight_summary,
-    is_commercial_advisor, local_today, money, monthly_ledger, project_of_sale,
+    is_commercial_advisor, is_commission_eligible, local_today, money, monthly_ledger, project_of_sale,
 )
 
 bp = Blueprint("finance_control", __name__, url_prefix="/finance-control")
@@ -49,8 +49,14 @@ def positive_amount(raw, *, allow_zero=False):
 
 
 def user_can_manage_advisor(advisor):
-    if role() in ("superadmin", "admin"):
+    if role() == "superadmin":
         return True
+    if role() == "admin":
+        from app.project_admin_scope import is_project_admin, project_id_for_admin
+        return bool(
+            not is_project_admin()
+            or (project_id_for_admin() and advisor.advisor_project_id == project_id_for_admin())
+        )
     if role() == "supervisor" and current_user.collaborator:
         supervisor = current_user.collaborator
         return bool(advisor.supervisor_id == supervisor.id and (not supervisor.advisor_project_id or advisor.advisor_project_id == supervisor.advisor_project_id))
@@ -271,7 +277,7 @@ def goals():
         try:
             total_goal = positive_amount(request.form.get("total_goal"))
             net_goal = positive_amount(request.form.get("net_goal"))
-            percent = positive_amount(request.form.get("percentage"), allow_zero=True)
+            percent = positive_amount(request.form.get("percentage") or "0", allow_zero=True)
             if percent > 100:
                 raise ValueError("El porcentaje no puede superar 100 %.")
             if starts < fortnight_bounds(today)[0]:
@@ -319,6 +325,18 @@ def advisor():
     worker = current_user.collaborator
     if not worker or not is_commercial_advisor(worker):
         abort(403)
+    return render_template("finance_control/advisor.html",
+        summary=fortnight_summary(worker))
+
+
+@bp.route("/supervisor")
+@login_required
+@roles_required("supervisor")
+def supervisor_summary():
+    worker = current_user.collaborator
+    if not worker or not is_commission_eligible(worker):
+        flash("Asigna un proyecto comercial al supervisor para consultar sus comisiones.", "warning")
+        return redirect(url_for("dashboard.index"))
     return render_template("finance_control/advisor.html",
         summary=fortnight_summary(worker))
 
@@ -469,7 +487,10 @@ def payouts():
     starts, ends = fortnight_bounds(day)
     if request.method == "POST":
         worker = db.get_or_404(Collaborator, request.form.get("advisor_id", type=int))
-        if not is_commercial_advisor(worker):
+        if not is_commission_eligible(worker):
+            abort(403)
+        from app.project_admin_scope import is_project_admin, project_id_for_admin
+        if role() == "admin" and is_project_admin() and worker.advisor_project_id != project_id_for_admin():
             abort(403)
         summary = fortnight_summary(worker, starts)
         try:
@@ -479,7 +500,7 @@ def payouts():
             return redirect(url_for("finance_control.payouts", period=str(starts)))
         available = available_payout(summary)
         if not summary["eligible"] or amount > available:
-            flash("El monto supera la comisión disponible o la meta neta aún no fue alcanzada.", "danger")
+            flash("El monto supera la comisión disponible.", "danger")
             return redirect(url_for("finance_control.payouts", period=str(starts)))
         row = AdvisorFortnightPayout(
             advisor_id=worker.id, project_id=worker.advisor_project_id,
@@ -493,10 +514,18 @@ def payouts():
         db.session.commit()
         flash("Pago de comisión registrado sin modificar quincenas anteriores.", "success")
         return redirect(url_for("finance_control.payouts", period=str(starts)))
-    advisors = [x for x in Collaborator.query.order_by(Collaborator.id).all() if is_commercial_advisor(x)]
+    from app.project_admin_scope import is_project_admin, project_id_for_admin
+    advisors = [x for x in Collaborator.query.order_by(Collaborator.id).all()
+                if is_commission_eligible(x) and (
+                    role() != "admin" or not is_project_admin()
+                    or x.advisor_project_id == project_id_for_admin()
+                )]
     summaries = [(fortnight_summary(a, starts), None) for a in advisors]
     summaries = [(item, available_payout(item)) for item, _ in summaries]
-    records = AdvisorFortnightPayout.query.filter_by(period_start=starts).order_by(
+    records_query = AdvisorFortnightPayout.query.filter_by(period_start=starts)
+    if role() == "admin" and is_project_admin():
+        records_query = records_query.filter_by(project_id=project_id_for_admin())
+    records = records_query.order_by(
         AdvisorFortnightPayout.paid_on.desc(), AdvisorFortnightPayout.id.desc()
     ).all()
     return render_template("finance_control/payouts.html",
