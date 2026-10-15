@@ -571,7 +571,7 @@ def _build_client_timeline(
             comment.created_at,
             "interno",
             "Comentario interno",
-            f"{comment.user.name} · {comment.process_type}",
+            f"{comment.user.name if comment.user and comment.user.name else 'Usuario no disponible'} · {comment.process_type}",
             f"{detail} — {comment.body}" if detail else comment.body,
             actor=comment.user.name if comment.user else None,
         )
