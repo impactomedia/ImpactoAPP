@@ -11,6 +11,7 @@ from app.development_scope import (
     development_projects_query,
     development_team_query,
 )
+from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.helpers import audit, next_code
 from app.models import ChangeRequest, Client, Collaborator, Notification, Project, Task, TaskComment
@@ -52,6 +53,10 @@ def _visible_projects_query():
     role = _role_name()
     collaborator = current_user.collaborator
 
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import client_scope_condition
+        return query.filter(Project.client.has(client_scope_condition()))
+
     if role == DEVELOPMENT_COORDINATOR_ROLE:
         if not collaborator:
             return query.filter(Project.id == -1)
@@ -81,7 +86,10 @@ def _visible_tasks_query():
     role = _role_name()
     collaborator = current_user.collaborator
 
-    if role in {"superadmin", "admin", "manager"}:
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import client_scope_condition
+        return query.filter(Task.client.has(client_scope_condition()))
+    if role in {"superadmin", "manager"} or (role == "admin" and not is_project_admin()):
         return query
     if not collaborator:
         return query.filter(Task.id == -1)
@@ -115,6 +123,12 @@ def _visible_tasks_query():
     if role == "production":
         return query.filter(own)
 
+    if role == "developer":
+        from app.client_v3_services import my_clients_query
+        visible_ids = [row.id for row in my_clients_query().all()]
+        return query.filter(or_(own, (Task.task_type == "beneficio_plan") &
+                            (Task.client_id.in_(visible_ids or [-1]))))
+
     return query.filter(own)
 
 
@@ -129,7 +143,10 @@ def _visible_clients_for_task():
     role = _role_name()
     collaborator = current_user.collaborator
 
-    if role == "advisor" and collaborator:
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import client_scope_condition
+        query = query.filter(client_scope_condition())
+    elif role == "advisor" and collaborator:
         query = query.filter(Client.owner_id == collaborator.id)
     elif role == "supervisor" and collaborator:
         query = query.filter(Client.owner_id.in_(_team_ids()))
@@ -156,7 +173,10 @@ def _assignable_collaborators():
 
     query = Collaborator.query.filter_by(status="activo")
 
-    if role == "supervisor" and collaborator:
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import project_id_for_admin
+        query = query.filter(Collaborator.advisor_project_id == (project_id_for_admin() or -1))
+    elif role == "supervisor" and collaborator:
         query = query.filter(Collaborator.id.in_(_team_ids()))
     elif role in {"advisor", "production", "hr"} and collaborator:
         query = query.filter(Collaborator.id == collaborator.id)
@@ -336,6 +356,9 @@ def new_project():
         Client.record_type == "cliente",
         Client.client_status != "archivado",
     )
+    if _role_name() == "admin":
+        from app.project_admin_scope import client_scope_condition
+        client_query = client_query.filter(client_scope_condition())
     if _role_name() == "supervisor" and current_user.collaborator:
         client_query = client_query.filter(Client.owner_id.in_(_team_ids()))
     clients = client_query.order_by(Client.business_name).all()
