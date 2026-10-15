@@ -1,10 +1,10 @@
 {% extends "app_base.html" %}
-{% block title %}Ficha completa · {{ client.business_name }} | Impacto Nexora{% endblock %}
+{% block title %}Editar cliente · {{ client.business_name }} | Nexora{% endblock %}
 {% block app_content %}
 {% set is_edit = mode == 'edit' and client %}
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Impacto Nexora · Expediente único</span>
+    <span class="eyebrow">Expediente del cliente</span>
     <h1>Editar ficha completa</h1>
     <p>{{ client.business_name }} · Datos comerciales, operativos y digitales en un solo lugar.</p>
   </div>
@@ -87,7 +87,7 @@
   </section>
 
   <section class="panel-card form-card mb-4">
-    <div class="panel-header"><div><h2>2. Ubicación en USA</h2><p>Dirección y zona horaria para operación y contacto.</p></div></div>
+    <div class="panel-header"><div><h2>2. Dirección y ubicación</h2><p>Dirección y zona horaria para operación y contacto.</p></div></div>
     <div class="row g-3">
       <div class="col-12">
         <label class="form-label">Dirección</label>
@@ -153,7 +153,7 @@
   </section>
 
   <section class="panel-card form-card mb-4">
-    <div class="panel-header"><div><h2>5. Ficha operativa</h2><p>Equivalente a la sección REQUERIMIENTOS del Excel operativo.</p></div></div>
+    <div class="panel-header"><div><h2>5. Ficha operativa</h2><p>Información necesaria para gestionar los servicios contratados.</p></div></div>
     <div class="row g-3">
       <div class="col-md-6"><label class="form-label">Días de atención</label><input name="attention_days" class="form-control" value="{{ operational_profile.attention_days if operational_profile else '' }}" placeholder="Ej. Lunes a sábado"></div>
       <div class="col-md-6"><label class="form-label">Horarios</label><input name="business_hours" class="form-control" value="{{ operational_profile.business_hours if operational_profile else '' }}" placeholder="Ej. 8:00 a. m. - 5:00 p. m."></div>
