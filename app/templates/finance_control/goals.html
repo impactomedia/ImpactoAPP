@@ -10,22 +10,23 @@
  <p class="text-secondary mt-3 mb-0">Período seleccionado: <strong>{{ starts.strftime('%d/%m/%Y') }} – {{ ends.strftime('%d/%m/%Y') }}</strong>.</p>
 </section>
 <section class="panel-card mb-4">
- <h2 class="h5">Establecer metas y porcentaje</h2>
+ <h2 class="h5">Establecer metas comerciales</h2>
+  <p class="small text-secondary">La comisión ya no se escribe manualmente: se determina automáticamente por la escala de facturación personal quincenal (11 % a 15 %). Los supervisores reciben 15 % fijo, sin bono.</p>
  <form method="post" class="row g-3">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="period" value="{{ starts }}">
   <div class="col-md-5"><label class="form-label">Asesor</label><select name="advisor_id" class="form-select" required><option value="">Seleccionar asesor</option>{% for a in advisors %}<option value="{{ a.id }}">{{ a.user.name }} · {{ a.advisor_project.name }}</option>{% endfor %}</select></div>
   <div class="col-md-2"><label class="form-label">Meta Total (USD)</label><input class="form-control" type="number" name="total_goal" min="0.01" step="0.01" required></div>
   <div class="col-md-2"><label class="form-label">Meta Neta (USD)</label><input class="form-control" type="number" name="net_goal" min="0.01" step="0.01" required></div>
-  <div class="col-md-2"><label class="form-label">Comisión (%)</label><input class="form-control" type="number" name="percentage" min="0" max="100" step="0.01" required></div>
+  <div class="col-md-2"><label class="form-label">Comisión</label><div class="form-control bg-light">Automática</div></div>
   <div class="col-md-1 d-grid"><button class="btn btn-brand">Guardar</button></div>
  </form>
- <p class="text-secondary small mt-2 mb-0">Los cambios se auditan. Las metas de quincenas pasadas o con comisiones pagadas no pueden modificarse.</p>
+ <p class="text-secondary small mt-2 mb-0">Las metas se conservan como indicadores comerciales. El pago se calcula automáticamente sobre el neto positivo de los cobros confirmados, según el rango de facturación personal. Los cambios se auditan.</p>
 </section>
 <section class="panel-card">
  <h2 class="h5">Metas establecidas para esta quincena</h2>
  <div class="table-responsive"><table class="table modern-table"><thead><tr><th>Asesor</th><th>Proyecto</th><th>Meta Total</th><th>Meta Neta</th><th>Comisión</th></tr></thead><tbody>
- {% for a in advisors %}{% set g=saved.get(a.id) %}<tr><td>{{ a.user.name }}</td><td>{{ a.advisor_project.name }}</td><td>{{ g.total_goal|money if g else 'Pendiente' }}</td><td>{{ g.net_goal|money if g else 'Pendiente' }}</td><td>{{ g.percentage if g else '—' }}%</td></tr>
+ {% for a in advisors %}{% set g=saved.get(a.id) %}<tr><td>{{ a.user.name }}</td><td>{{ a.advisor_project.name }}</td><td>{{ g.total_goal|money if g else 'Pendiente' }}</td><td>{{ g.net_goal|money if g else 'Pendiente' }}</td><td>Automática (11–15%)</td></tr>
  {% else %}<tr><td colspan="5">No tienes asesores disponibles para configurar.</td></tr>{% endfor %}
  </tbody></table></div>
 </section>
