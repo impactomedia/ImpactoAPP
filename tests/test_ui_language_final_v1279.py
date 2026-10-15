@@ -18,6 +18,13 @@ REVIEWED = [
     "sales/principal_form.html",
     "settings/backups.html",
     "finance_control/goals.html",
+    "data_hub/preview.html",
+    "planning/hr_calendar.html",
+    "planning/recurring_expenses.html",
+    "planning/sales_goals.html",
+    "planning/operations_calendar.html",
+    "planning/overtime.html",
+    "planning/hr_incidents.html",
 ]
 
 
@@ -60,3 +67,9 @@ def test_old_commissions_are_labeled_separately():
     assert "Comisión anterior por venta" in sale
     assert "Comisiones por venta (histórico)" in historic
     assert "comisiones quincenales actuales" in rules
+
+
+def test_login_brand_name_is_not_duplicated():
+    login_page = (TEMPLATES / "auth/login.html").read_text(encoding="utf-8")
+    assert '<h1><span>Nexora</span></h1>' in login_page
+    assert '<span class="eyebrow">NEXORA</span>' not in login_page
