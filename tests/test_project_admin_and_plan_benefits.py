@@ -17,6 +17,7 @@ from scripts.seed import seed_all
 
 class Config:
     TESTING = True
+    PROJECT_ADMIN_SCOPE_ENABLED = True
     SECRET_KEY = "test-project-admin-development"
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
