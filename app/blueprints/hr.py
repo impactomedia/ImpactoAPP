@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from app.project_admin_scope import is_project_admin
 
 from app.decorators import roles_required
 from app.extensions import db
@@ -139,8 +140,8 @@ def collaborators():
             flash("Ya existe un usuario con ese correo.", "danger")
             return redirect(url_for("hr.collaborators"))
 
-        advisor_project_id = request.form.get("advisor_project_id", type=int) if role.name in {"advisor", "admin"} else None
-        if role.name in {"advisor", "admin"} and not advisor_project_id:
+        advisor_project_id = request.form.get("advisor_project_id", type=int) if (role.name == "advisor" or (role.name == "admin" and is_project_admin())) else None
+        if (role.name == "advisor" or (role.name == "admin" and is_project_admin())) and not advisor_project_id:
             flash("Asesores y administradores requieren un proyecto empresarial.", "warning")
             return redirect(url_for("hr.collaborators"))
 
@@ -221,7 +222,7 @@ def collaborator_detail(collaborator_id):
             status = collaborator.status
 
         new_project_id = request.form.get("advisor_project_id", type=int)
-        if collaborator.user and collaborator.user.role and collaborator.user.role.name == "admin":
+        if collaborator.user and collaborator.user.role and collaborator.user.role.name == "admin" and is_project_admin():
             if not current_user.is_superadmin:
                 abort(403)
             if not new_project_id or not AdvisorProject.query.filter_by(id=new_project_id, active=True).first():
