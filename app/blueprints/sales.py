@@ -7,6 +7,7 @@ from sqlalchemy import or_
 from werkzeug.exceptions import HTTPException
 
 from app.commercial_plans import cortesias, VIP_CHOICES
+from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.helpers import audit, next_code
 from app.decorators import roles_required
@@ -57,7 +58,10 @@ def _visible_clients_query():
     )
     role = _role_name()
     collaborator = current_user.collaborator
-    if role == "advisor" and collaborator:
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import client_scope_condition
+        query = query.filter(client_scope_condition())
+    elif role == "advisor" and collaborator:
         query = query.filter(Client.owner_id == collaborator.id)
     elif role == "supervisor" and collaborator:
         query = query.filter(Client.owner_id.in_(_team_ids()))
@@ -68,7 +72,10 @@ def _visible_sales_query():
     query = Sale.query
     role = _role_name()
     collaborator = current_user.collaborator
-    if role == "advisor" and collaborator:
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import client_scope_condition
+        query = query.filter(Sale.client.has(client_scope_condition()))
+    elif role == "advisor" and collaborator:
         query = query.filter(
             or_(
                 Sale.advisor_id == collaborator.id,
@@ -90,7 +97,10 @@ def _visible_renewals_query():
     query = Renewal.query
     role = _role_name()
     collaborator = current_user.collaborator
-    if role == "advisor" and collaborator:
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import client_scope_condition
+        query = query.filter(Renewal.client.has(client_scope_condition()))
+    elif role == "advisor" and collaborator:
         query = query.filter(Renewal.client.has(Client.owner_id == collaborator.id))
     elif role == "supervisor" and collaborator:
         query = query.filter(Renewal.client.has(Client.owner_id.in_(_team_ids())))
@@ -118,6 +128,9 @@ def _allowed_advisors():
     elif role == "supervisor" and collaborator:
         query = query.filter(Collaborator.id.in_(_team_ids()))
 
+    if _role_name() == "admin" and is_project_admin():
+        from app.project_admin_scope import project_id_for_admin
+        query = query.filter(Collaborator.advisor_project_id == (project_id_for_admin() or -1))
     return query.order_by(User.name).all()
 
 
