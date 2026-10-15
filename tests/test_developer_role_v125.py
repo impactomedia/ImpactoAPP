@@ -89,7 +89,7 @@ def test_developer_exact_permissions(app):
     with app.app_context():
         user=User.query.filter_by(email="role1@test.local").one()
         assert user.role.name == "developer"
-        allowed={"clients.view","tasks.view","tasks.update"}
+        allowed={"clients.view","clients.comment","tasks.view","tasks.update"}
         assert {p.code for p in user.role.permissions} == allowed
         assert user.has_permission("tasks.update")
         assert not user.has_permission("clients.edit")
