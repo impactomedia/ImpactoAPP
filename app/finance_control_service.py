@@ -21,6 +21,7 @@ from app.finance_control_models import (
     FinanceProjectAllocation, FinanceProjectMovement,
 )
 from app.lead_commission_models import LeadCommissionPayout
+from app.commission_policy import POLICY_START, commission_amount, commission_payment_date
 from app.payment_fee_models import PaymentProcessingFee
 from app.payment_fee_service import METHODS
 
@@ -47,6 +48,14 @@ def is_commercial_advisor(collaborator):
     return bool(
         collaborator and collaborator.user and collaborator.user.role
         and collaborator.user.role.name == "advisor"
+        and collaborator.advisor_project_id
+    )
+
+
+def is_commission_eligible(collaborator):
+    return bool(
+        collaborator and collaborator.user and collaborator.user.role
+        and collaborator.user.role.name in {"advisor", "supervisor"}
         and collaborator.advisor_project_id
     )
 
@@ -166,9 +175,22 @@ def fortnight_summary(advisor, period_start=None, today=None):
     net = gross - deduction
     total_goal = money(goal.total_goal) if goal else Decimal("0")
     net_goal = money(goal.net_goal) if goal else Decimal("0")
-    percentage = Decimal(str(goal.percentage or 0)) if goal else Decimal("0")
-    eligible = bool(goal and net_goal > 0 and net >= net_goal)
-    earned = money(net * percentage / 100) if eligible else money(0)
+    role_name = advisor.user.role.name if advisor.user and advisor.user.role else ""
+    if starts >= POLICY_START and role_name in {"advisor", "supervisor"}:
+        # Rango por cobros personales confirmados; base de pago neta.
+        calculated = commission_amount(role_name, gross, net)
+        percentage = calculated["percentage"]
+        base_commission = calculated["base_commission"]
+        bonus = calculated["bonus"]
+        eligible = bool(net > 0 and gross > 0)
+        earned = calculated["earned"]
+    else:
+        # Mantener el cálculo histórico sin modificar quincenas anteriores.
+        percentage = Decimal(str(goal.percentage or 0)) if goal else Decimal("0")
+        eligible = bool(goal and net_goal > 0 and net >= net_goal)
+        base_commission = money(net * percentage / 100) if eligible else money(0)
+        bonus = money(0)
+        earned = base_commission
     paid = money(sum((
         money(row.amount) for row in AdvisorFortnightPayout.query.filter_by(
             advisor_id=advisor.id, period_start=starts
@@ -188,6 +210,9 @@ def fortnight_summary(advisor, period_start=None, today=None):
         "gross_progress": min(100, float(gross / total_goal * 100)) if total_goal > 0 else 0,
         "net_progress": min(100, float(net / net_goal * 100)) if net_goal > 0 else 0,
         "percentage": percentage, "eligible": eligible, "earned": earned, "paid": paid,
+        "base_commission": base_commission, "bonus": bonus,
+        "payment_date": commission_payment_date(starts),
+        "commission_role": role_name, "new_policy": starts >= POLICY_START,
         "days_remaining": remaining_days,
         "daily_required": money((gross_left / remaining_days).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)) if remaining_days else money(0),
         "new_clients": client_counts["total"],
