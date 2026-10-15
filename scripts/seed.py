@@ -129,7 +129,7 @@ ROLE_PERMISSION_CODES = {
     },
     # Perfil mínimo de Desarrollo: consulta de clientes asignados y actualización de tareas propias.
     "developer": {
-        "clients.view", "tasks.view", "tasks.update",
+        "clients.view", "clients.comment", "tasks.view", "tasks.update",
     },
     "development_coordinator": {
         "clients.view", "clients.assign", "clients.comment", "clients.files",

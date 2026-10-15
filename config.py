@@ -19,6 +19,8 @@ _DEFAULT_BACKUP_DIR = (
 
 
 class Config:
+    # Aislamiento empresarial activado en despliegues reales.
+    PROJECT_ADMIN_SCOPE_ENABLED = os.getenv("PROJECT_ADMIN_SCOPE_ENABLED", "1") == "1"
     SECRET_KEY = os.getenv("SECRET_KEY", "change-this-in-production")
     SQLALCHEMY_DATABASE_URI = os.getenv(
         "DATABASE_URL",

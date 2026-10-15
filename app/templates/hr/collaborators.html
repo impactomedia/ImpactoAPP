@@ -58,7 +58,7 @@
             <option value="{{ p.id }}">{{ p.name }}</option>
             {% endfor %}
           </select>
-          <small class="text-secondary d-block mb-3">Solo corresponde al perfil Asesor de Ventas.</small>
+          <small class="text-secondary d-block mb-3">Obligatorio para Asesores y Administradores. Define los datos a los que tendrá acceso Administración.</small>
         </div>
 
         <details class="rounded-4 p-3 mb-3" style="border:1px solid #dce3ef;background:#fbfdff">
@@ -141,7 +141,7 @@
     'finance': ['Contabilidad / Finanzas', 'Finanzas', 'Administra los procesos financieros autorizados.'],
     'audit': ['Consulta / Auditoría', 'Auditoría', 'Consulta información y reportes autorizados.'],
     'superadmin': ['Superadministrador', 'Administración', 'Acceso integral. Su creación requiere un superadministrador vigente.'],
-    'admin': ['Administración', 'Administración', 'Administración general del sistema.'],
+    'admin': ['Administración', 'Administración', 'Acceso restringido al proyecto empresarial asignado.'],
     'manager': ['Gerencia', 'Gerencia', 'Gestión y coordinación administrativa.']
   };
   const select = document.getElementById('nxRole');
@@ -156,9 +156,9 @@
     document.getElementById('nxRoleHelp').textContent = info[2];
     document.getElementById('nxJobPreview').textContent = info[0];
     document.getElementById('nxDepartmentPreview').textContent = info[1];
-    advisorFields.hidden = key !== 'advisor';
-    advisorProject.required = key === 'advisor';
-    if (key !== 'advisor') advisorProject.value = '';
+    advisorFields.hidden = !['advisor','admin'].includes(key);
+    advisorProject.required = ['advisor','admin'].includes(key);
+    if (!['advisor','admin'].includes(key)) advisorProject.value = '';
   };
   select.addEventListener('change', render);
   render();

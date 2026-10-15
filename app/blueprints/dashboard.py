@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, redirect, request, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import func, or_
 
+from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.models import Client, Collaborator, Payment, Task, Project, Notification, Quote, Sale, SupportTicket
 from app.services import refresh_overdue_receivables, refresh_expired_contracts
@@ -18,6 +19,9 @@ def _client_scope(query):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import client_scope_condition
+        return query.filter(client_scope_condition())
     if role == "advisor" and collaborator:
         return query.filter(Client.owner_id == collaborator.id)
 
@@ -36,6 +40,9 @@ def _task_scope(query):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import client_scope_condition
+        return query.filter(Task.client.has(client_scope_condition()))
     if role == DEVELOPMENT_COORDINATOR_ROLE:
         return query.filter(Task.project.has(development_project_condition()))
 
@@ -61,6 +68,9 @@ def _project_scope(query):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import client_scope_condition
+        return query.filter(Project.client.has(client_scope_condition()))
     if role == DEVELOPMENT_COORDINATOR_ROLE:
         return query.filter(development_project_condition())
 
@@ -86,6 +96,18 @@ def index():
 
     if role_name == DEVELOPMENT_COORDINATOR_ROLE:
         return redirect(url_for("operations.development_dashboard"))
+    if role_name == "admin" and is_project_admin():
+        # Una vista aislada: no mostrar KPIs financieros/globales de la empresa.
+        from app.project_admin_scope import project_id_for_admin
+        from app.models import AdvisorProject
+        pid = project_id_for_admin()
+        project_name = (db.session.get(AdvisorProject, pid).name if pid and db.session.get(AdvisorProject, pid) else "Sin proyecto")
+        return render_template("dashboard/project_admin.html",
+            project_name=project_name,
+            clients=_client_scope(Client.query).filter_by(record_type="cliente").count(),
+            prospects=_client_scope(Client.query).filter_by(record_type="seguimiento").count(),
+            projects=_project_scope(Project.query).count(),
+            tasks=_task_scope(Task.query).filter(Task.status.notin_(["completada", "cancelada"])).count())
 
     if role_name and role_name not in BUILTIN_ROLES:
         ensure_system_alerts()

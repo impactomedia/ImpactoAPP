@@ -9,4 +9,7 @@ app = create_app()
 with app.app_context():
     db.create_all()
     seed_all()
-    print("Base de datos inicializada correctamente.")
+    from app.plan_benefit_tasks import sync_existing_plan_benefits
+    imported_benefits = sync_existing_plan_benefits()
+    db.session.commit()
+    print(f"Base de datos inicializada; {imported_benefits} entregables nuevos.")
