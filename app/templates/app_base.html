@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 {% set role_name = current_user.role.name if current_user.role else '' %}
+{% set scoped_admin = role_name == 'admin' and config.PROJECT_ADMIN_SCOPE_ENABLED|default(false) %}
 {% set is_development_coordinator = role_name == 'development_coordinator' %}
 {% set home_url = url_for('operations.development_dashboard') if is_development_coordinator else url_for('dashboard.index') %}
 <div class="app-shell">
@@ -38,10 +39,10 @@
 
       {% if current_user.has_permission('sales.view') %}
       <a class="nav-item {% if request.blueprint == 'sales' and request.endpoint != 'sales.renewals' %}active{% endif %}" href="{{ url_for('sales.index') }}"><i class="bi bi-receipt"></i> Ventas y pagos</a>
-{% if role_name != 'admin' %}<a class="nav-item {% if request.blueprint == 'renewals' %}active{% endif %}" href="{{ url_for('renewals.index') }}"><i class="bi bi-arrow-repeat"></i> Renovaciones</a>{% endif %}
+{% if not scoped_admin %}<a class="nav-item {% if request.blueprint == 'renewals' %}active{% endif %}" href="{{ url_for('renewals.index') }}"><i class="bi bi-arrow-repeat"></i> Renovaciones</a>{% endif %}
       {% endif %}
 
-      {% if current_user.has_permission('projects.view') or current_user.has_permission('tasks.view') or (role_name != 'admin' and (current_user.has_permission('printing.view') or current_user.has_permission('support.view'))) %}
+      {% if current_user.has_permission('projects.view') or current_user.has_permission('tasks.view') or (not scoped_admin and (current_user.has_permission('printing.view') or current_user.has_permission('support.view'))) %}
       <div class="nav-section">Operación</div>
       {% endif %}
 
@@ -53,15 +54,15 @@
       <a class="nav-item {% if request.endpoint in ['operations.tasks','operations.task_detail','operations.new_task','operations.task_kanban'] %}active{% endif %}" href="{{ url_for('operations.tasks') }}"><i class="bi bi-check2-square"></i> Tareas</a>
       {% endif %}
 
-      {% if role_name != 'admin' and current_user.has_permission('printing.view') %}
+      {% if not scoped_admin and current_user.has_permission('printing.view') %}
       <a class="nav-item {% if request.blueprint == 'printing' %}active{% endif %}" href="{{ url_for('printing.index') }}"><i class="bi bi-printer"></i> Imprenta</a>
       {% endif %}
 
-      {% if role_name != 'admin' and current_user.has_permission('support.view') %}
+      {% if not scoped_admin and current_user.has_permission('support.view') %}
       <a class="nav-item {% if request.blueprint == 'support' %}active{% endif %}" href="{{ url_for('support.index') }}"><i class="bi bi-headset"></i> Soporte</a>
       {% endif %}
 
-      {% if role_name != 'admin' %}
+      {% if not scoped_admin %}
       <div class="nav-section">Administración</div>
 
       {% if current_user.has_permission('finance.view') %}
@@ -117,12 +118,12 @@
   <main class="main-area">
     <header class="topbar">
       <button class="btn btn-light border d-lg-none" id="sidebarToggle" type="button"><i class="bi bi-list"></i></button>
-      {% if role_name != 'admin' %}<form class="global-search d-none d-md-flex" action="{{ url_for('dashboard.search') }}" method="get">
+      {% if not scoped_admin %}<form class="global-search d-none d-md-flex" action="{{ url_for('dashboard.search') }}" method="get">
         <i class="bi bi-search"></i>
         <input class="border-0 bg-transparent flex-grow-1" name="q" placeholder="Buscar clientes, ventas, proyectos, tickets..." style="min-width:320px;outline:none">
       </form>{% endif %}
       <div class="top-actions ms-auto d-flex align-items-center gap-2">
-{% if role_name != 'admin' %}<a class="btn btn-light border position-relative" href="{{ url_for('notifications.index') }}" title="Centro de Notificaciones"><i class="bi bi-bell"></i>{% if unread_notifications %}<span class="notif-badge">{{ unread_notifications }}</span>{% endif %}</a>{% endif %}
+{% if not scoped_admin %}<a class="btn btn-light border position-relative" href="{{ url_for('notifications.index') }}" title="Centro de Notificaciones"><i class="bi bi-bell"></i>{% if unread_notifications %}<span class="notif-badge">{{ unread_notifications }}</span>{% endif %}</a>{% endif %}
         <a class="btn btn-light border d-inline-flex align-items-center gap-2" href="{{ url_for('auth.profile') }}" title="Mi perfil y contraseña" aria-label="Abrir mi perfil y cambiar contraseña"><i class="bi bi-person-circle"></i><span class="d-none d-xl-inline">Mi cuenta</span></a>
         <form method="post" action="{{ url_for('auth.logout') }}" class="d-inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
