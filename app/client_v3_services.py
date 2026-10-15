@@ -3,6 +3,7 @@ from datetime import date, datetime, time
 from flask_login import current_user
 from sqlalchemy import or_
 
+from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.helpers import notify
 from app.models import (
@@ -141,10 +142,10 @@ def my_clients_query():
     )
     role = _user_role()
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_scope_condition
         return query.filter(client_scope_condition())
-    if role in {"superadmin", "manager"}:
+    if role in {"superadmin", "manager"} or (role == "admin" and not is_project_admin()):
         return query
 
     collaborator = current_user.collaborator
@@ -217,10 +218,10 @@ def my_clients_query():
 
 def client_coordination_allowed(client):
     role = _user_role()
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_allowed
         return client_allowed(client)
-    if role in {"superadmin", "manager", "finance"}:
+    if role in {"superadmin", "manager", "finance"} or (role == "admin" and not is_project_admin()):
         return True
 
     collaborator = current_user.collaborator
