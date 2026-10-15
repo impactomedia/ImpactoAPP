@@ -128,7 +128,7 @@ def _allowed_advisors():
     elif role == "supervisor" and collaborator:
         query = query.filter(Collaborator.id.in_(_team_ids()))
 
-    if _role_name() == "admin":
+    if _role_name() == "admin" and is_project_admin():
         from app.project_admin_scope import project_id_for_admin
         query = query.filter(Collaborator.advisor_project_id == (project_id_for_admin() or -1))
     return query.order_by(User.name).all()
