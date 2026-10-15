@@ -126,3 +126,44 @@ def test_prospect_note_redirects_to_history(browser, app):
     })
     assert response.status_code == 302
     assert response.headers["Location"].endswith("#historial")
+
+
+def test_distinct_users_are_identified_as_comment_authors(browser, app):
+    customer_id, prospect_id = ids(app)
+    with app.app_context():
+        role = Role.query.filter_by(name="admin").one()
+        second_user = User(
+            name="Asesora Ana", email="ana-autora@test.local",
+            role=role, active=True,
+        )
+        second_user.set_password("PasswordTest987")
+        db.session.add(second_user)
+        db.session.commit()
+
+    browser.post("/auth/logout")
+    login = browser.post("/auth/login", data={
+        "email": "ana-autora@test.local", "password": "PasswordTest987"
+    })
+    assert login.status_code in (302, 303)
+
+    created = browser.post(f"/clients/{customer_id}/comment", data={
+        "process_type": "Seguimiento / CRM",
+        "body": "Comentario exclusivo de Ana",
+    })
+    assert created.status_code == 302
+    customer_html = browser.get(f"/clients/{customer_id}").get_data(as_text=True)
+    assert "Publicado por: Asesora Ana" in customer_html
+    assert "Publicado por: Admin Historial" in customer_html
+    assert "Comentario exclusivo de Ana" in customer_html
+
+    created_prospect = browser.post(f"/crm/{prospect_id}/interaction", data={
+        "interaction_type": "nota",
+        "subject": "Nota exclusiva de Ana",
+        "notes": "Seguimiento realizado por Ana",
+        "from_history": "1",
+    })
+    assert created_prospect.status_code == 302
+    prospect_html = browser.get(f"/crm/{prospect_id}").get_data(as_text=True)
+    assert "Publicado por: Asesora Ana" in prospect_html
+    assert "Publicado por: Admin Historial" in prospect_html
+    assert "Nota exclusiva de Ana" in prospect_html
