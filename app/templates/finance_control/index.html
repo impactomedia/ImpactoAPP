@@ -1,7 +1,7 @@
 {% extends "app_base.html" %}
 {% block title %}Finanzas por proyecto | Nexora{% endblock %}
 {% block app_content %}
-<div class="page-heading"><div><span class="eyebrow">Nexora · Control financiero</span><h1>Finanzas por proyecto</h1><p>Ingresos cobrados, egresos ejecutados y resultado del mes. No sustituye la contabilidad fiscal.</p></div>
+<div class="page-heading"><div><span class="eyebrow">Resumen financiero</span><h1>Finanzas por proyecto</h1><p>Ingresos cobrados, egresos ejecutados y resultado del mes. No sustituye la contabilidad fiscal.</p></div>
 <div class="d-flex flex-wrap gap-2"><a class="btn btn-brand" href="{{ url_for('finance_control.movements') }}">Gastos y autorizaciones</a><a class="btn btn-light border" href="{{ url_for('finance_control.payouts') }}">Comisiones quincenales</a><a class="btn btn-outline-success" href="{{ url_for('finance_control.export_csv',year=year,month=month,project_id=selected_id) }}">Exportar CSV / Excel</a>{% if can_manage_lead_commissions %}<a class="btn btn-outline-primary" href="{{ url_for('finance_control.lead_commissions') }}">Comisiones de leads · Daniel / Oscar</a>{% endif %}{% if can_manage_payment_fees %}<a class="btn btn-outline-primary" href="{{ url_for('finance_control.payment_fees') }}">Tarifas de tarjeta, Zelle y otros</a>{% endif %}<a class="btn btn-light border" href="{{ url_for('finance.dashboard') }}">Finanzas anteriores</a></div></div>
 <section class="panel-card mb-4">
 <form method="get" class="row g-2 align-items-end">
