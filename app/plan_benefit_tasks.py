@@ -15,7 +15,7 @@ TASK_TYPE = "beneficio_plan"
 
 def contracted_benefits(text):
     """Devuelve (sección, beneficio) a partir del catálogo/snapshot del contrato."""
-    current_section = ""
+    current_section = "Beneficios contratados"
     benefits = []
     for raw_line in (text or "").splitlines():
         line = raw_line.strip()
