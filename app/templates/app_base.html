@@ -62,6 +62,19 @@
       <a class="nav-item {% if request.blueprint == 'support' %}active{% endif %}" href="{{ url_for('support.index') }}"><i class="bi bi-headset"></i> Soporte</a>
       {% endif %}
 
+      {% if role_name in ['superadmin', 'admin', 'supervisor'] %}
+      <div class="nav-section">Gestión de asesores</div>
+      <a class="nav-item {% if request.endpoint in ['hr.advisors','hr.advisor_edit'] %}active{% endif %}" href="{{ url_for('hr.advisors') }}"><i class="bi bi-person-gear"></i> Perfiles y salarios</a>
+      {% endif %}
+      {% if role_name == 'supervisor' %}
+      <a class="nav-item {% if request.endpoint == 'finance_control.supervisor_summary' %}active{% endif %}" href="{{ url_for('finance_control.supervisor_summary') }}"><i class="bi bi-cash-stack"></i> Mis comisiones · 15%</a>
+      {% endif %}
+      {% if scoped_admin or role_name == 'supervisor' %}
+      <a class="nav-item {% if request.endpoint == 'finance_control.goals' %}active{% endif %}" href="{{ url_for('finance_control.goals') }}"><i class="bi bi-bullseye"></i> Metas comerciales</a>
+      {% endif %}
+      {% if scoped_admin %}
+      <a class="nav-item {% if request.endpoint == 'finance_control.payouts' %}active{% endif %}" href="{{ url_for('finance_control.payouts') }}"><i class="bi bi-wallet2"></i> Comisiones de mi proyecto</a>
+      {% endif %}
       {% if not scoped_admin %}
       <div class="nav-section">Administración</div>
 
