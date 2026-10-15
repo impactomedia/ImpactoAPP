@@ -280,6 +280,7 @@ def coordination(client_id):
         can_open_full_detail = True
 
     operational_comments = _visible_operational_comments(client.id)
+    plan_benefit_tasks = [task for task in visible_tasks if task.task_type == "beneficio_plan"]
     operational_attachments = _visible_operational_attachments(client.id)
 
     db.session.commit()
@@ -300,6 +301,7 @@ def coordination(client_id):
         can_comment=current_user.has_permission("clients.comment"),
         can_files=current_user.has_permission("clients.files"),
         operational_comments=operational_comments,
+        plan_benefit_tasks=plan_benefit_tasks,
         operational_attachments=operational_attachments,
         operational_comment_types=OPERATIONAL_COMMENT_ORDER,
         operational_document_categories=OPERATIONAL_DOCUMENT_LABELS,
