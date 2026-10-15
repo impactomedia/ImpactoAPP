@@ -7,6 +7,7 @@ from sqlalchemy import or_
 from werkzeug.exceptions import HTTPException
 
 from app.commercial_plans import cortesias, VIP_CHOICES
+from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.helpers import audit, next_code
 from app.decorators import roles_required
@@ -57,7 +58,7 @@ def _visible_clients_query():
     )
     role = _role_name()
     collaborator = current_user.collaborator
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_scope_condition
         query = query.filter(client_scope_condition())
     elif role == "advisor" and collaborator:
@@ -71,7 +72,7 @@ def _visible_sales_query():
     query = Sale.query
     role = _role_name()
     collaborator = current_user.collaborator
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_scope_condition
         query = query.filter(Sale.client.has(client_scope_condition()))
     elif role == "advisor" and collaborator:
@@ -96,7 +97,7 @@ def _visible_renewals_query():
     query = Renewal.query
     role = _role_name()
     collaborator = current_user.collaborator
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_scope_condition
         query = query.filter(Renewal.client.has(client_scope_condition()))
     elif role == "advisor" and collaborator:
