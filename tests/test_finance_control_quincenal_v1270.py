@@ -683,6 +683,9 @@ def test_new_sale_explicit_origin_oscar_overrides_client_and_shows_on_sales(app)
     detail = browser.get(f"/sales/{sale_id}")
     assert detail.status_code == 200
     assert b"Origen del lead de esta venta" in detail.data
+    assert b"saleLeadOriginCompactEditor" in detail.data
+    assert b"data-bs-toggle=\"collapse\"" in detail.data
+    assert b"Guardar origen" in detail.data
     assert b"Oscar" in detail.data
     listing = browser.get("/sales/")
     assert listing.status_code == 200
