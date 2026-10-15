@@ -139,7 +139,7 @@ def collaborators():
             flash("Ya existe un usuario con ese correo.", "danger")
             return redirect(url_for("hr.collaborators"))
 
-        advisor_project_id = request.form.get("advisor_project_id", type=int) if (role.name == "advisor" or (role.name == "admin" and current_app.config.get("PROJECT_ADMIN_SCOPE_ENABLED", False))) else None
+        advisor_project_id = request.form.get("advisor_project_id", type=int) if (role.name in {"advisor", "supervisor"} or (role.name == "admin" and current_app.config.get("PROJECT_ADMIN_SCOPE_ENABLED", False))) else None
         if (role.name == "advisor" or (role.name == "admin" and current_app.config.get("PROJECT_ADMIN_SCOPE_ENABLED", False))) and not advisor_project_id:
             flash("Asesores y administradores requieren un proyecto empresarial.", "warning")
             return redirect(url_for("hr.collaborators"))
@@ -268,6 +268,103 @@ def collaborator_detail(collaborator_id):
         flash("Expediente actualizado.", "success")
 
     return render_template("hr/collaborator_detail.html", collaborator=collaborator, advisor_projects=advisor_projects)
+
+
+def _advisor_profile_allowed(advisor):
+    """Derecho explícito a editar solamente asesores del propio alcance."""
+    if not advisor or not advisor.user or not advisor.user.role or advisor.user.role.name != "advisor":
+        return False
+    role = _role_name()
+    if role == "superadmin":
+        return True
+    if role == "admin":
+        from app.project_admin_scope import is_project_admin, project_id_for_admin
+        if is_project_admin():
+            return bool(project_id_for_admin() and advisor.advisor_project_id == project_id_for_admin())
+        return True
+    if role == "supervisor":
+        lead = current_user.collaborator
+        return bool(lead and advisor.supervisor_id == lead.id and (
+            not lead.advisor_project_id or advisor.advisor_project_id == lead.advisor_project_id
+        ))
+    return False
+
+
+@bp.route("/advisors")
+@login_required
+@roles_required("superadmin", "admin", "supervisor")
+def advisors():
+    rows = [a for a in Collaborator.query.order_by(Collaborator.id).all()
+            if _advisor_profile_allowed(a)]
+    return render_template("hr/advisors.html", advisors=rows)
+
+
+@bp.route("/advisors/<int:collaborator_id>/edit", methods=["GET", "POST"])
+@login_required
+@roles_required("superadmin", "admin", "supervisor")
+def advisor_edit(collaborator_id):
+    advisor = db.get_or_404(Collaborator, collaborator_id)
+    if not _advisor_profile_allowed(advisor):
+        abort(403)
+
+    if request.method == "POST":
+        name = (request.form.get("name") or "").strip()
+        if not name or len(name) > 160:
+            flash("Indica un nombre válido (máximo 160 caracteres).", "danger")
+            return redirect(url_for("hr.advisor_edit", collaborator_id=advisor.id))
+
+        raw_salary = request.form.get("base_salary")
+        try:
+            salary = Decimal(str(raw_salary))
+            if not salary.is_finite() or salary < 0 or salary > Decimal("9999999999.99"):
+                raise InvalidOperation
+            salary = salary.quantize(Decimal("0.01"))
+        except (InvalidOperation, TypeError, ValueError):
+            flash("El salario fijo debe ser un valor numérico no negativo.", "danger")
+            return redirect(url_for("hr.advisor_edit", collaborator_id=advisor.id))
+
+        state = request.form.get("status")
+        if state not in {"activo", "inactivo", "suspendido"}:
+            flash("Estado laboral no válido.", "danger")
+            return redirect(url_for("hr.advisor_edit", collaborator_id=advisor.id))
+        mode = (request.form.get("work_mode") or "presencial").strip()
+        if mode not in {"presencial", "remoto", "hibrido"}:
+            flash("Modalidad de trabajo no válida.", "danger")
+            return redirect(url_for("hr.advisor_edit", collaborator_id=advisor.id))
+
+        phone = (request.form.get("phone") or "").strip()[:50]
+        contract_type = (request.form.get("contract_type") or "").strip()[:80]
+        before = {
+            "name": advisor.user.name,
+            "phone": advisor.phone,
+            "contract_type": advisor.contract_type,
+            "work_mode": advisor.work_mode,
+            "status": advisor.status,
+            "base_salary": str(advisor.base_salary or 0),
+            "advisor_project_id": advisor.advisor_project_id,
+        }
+        advisor.user.name = name
+        advisor.phone = phone or None
+        advisor.contract_type = contract_type or None
+        advisor.work_mode = mode
+        advisor.status = state
+        advisor.base_salary = salary
+        after = {
+            "name": advisor.user.name,
+            "phone": advisor.phone,
+            "contract_type": advisor.contract_type,
+            "work_mode": advisor.work_mode,
+            "status": advisor.status,
+            "base_salary": str(salary),
+            "advisor_project_id": advisor.advisor_project_id,
+        }
+        audit("actualizar_perfil_asesor", "Collaborator", advisor.id,
+              before=before, after=after)
+        db.session.commit()
+        flash("Perfil y salario del asesor actualizados con auditoría.", "success")
+        return redirect(url_for("hr.advisor_edit", collaborator_id=advisor.id))
+
+    return render_template("hr/advisor_edit.html", advisor=advisor)
 
 
 @bp.route("/schedules", methods=["GET", "POST"])

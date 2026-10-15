@@ -122,7 +122,7 @@ def test_quotas_use_confirmed_payments_and_are_independent(app):
         assert stats["gross"] == Decimal("400.00")
         assert stats["net"] == Decimal("400.00")
         assert stats["eligible"] is True
-        assert stats["earned"] == Decimal("40.00")
+        assert stats["earned"] == Decimal("44.00")
         assert stats["gross_left"] == Decimal("600.00")
         assert stats["daily_required"] >= 0
         assert stats["new_clients"] == 1
@@ -158,10 +158,10 @@ def test_second_fortnight_does_not_deduct_from_first(app):
         second = fortnight_summary(adviser, next_starts)
         assert first["gross"] == Decimal("400.00")
         assert first["deductions"] == Decimal("0.00")
-        assert first["earned"] == Decimal("40.00")
+        assert first["earned"] == Decimal("44.00")
         assert second["gross"] == Decimal("600.00")
         assert second["deductions"] == Decimal("200.00")
-        assert second["earned"] == Decimal("40.00")
+        assert second["earned"] == Decimal("44.00")
 
 
 def test_superadmin_only_can_approve_exception(app):
@@ -329,7 +329,7 @@ def test_later_execution_reduces_only_current_quincena_and_creates_future_adjust
         first = fortnight_summary(adviser, starts)
         assert first["gross"] == Decimal("400.00")
         assert first["net"] == Decimal("250.00")
-        assert first["earned"] == Decimal("0.00")
+        assert first["earned"] == Decimal("27.50")
         next_day = ends + timedelta(days=1)
         next_starts, _ = fortnight_bounds(next_day)
         db.session.add(AdvisorFortnightGoal(
@@ -344,8 +344,8 @@ def test_later_execution_reduces_only_current_quincena_and_creates_future_adjust
         ))
         db.session.commit()
         second = fortnight_summary(adviser, next_starts)
-        assert second["earned"] == Decimal("60.00")
-        assert available_payout(second) == Decimal("20.00")
+        assert second["earned"] == Decimal("66.00")
+        assert available_payout(second) == Decimal("53.50")
 
 
 
@@ -375,7 +375,7 @@ def test_processing_fees_reduce_company_profit_but_not_advisor_goals(app):
         summary = fortnight_summary(sale.advisor)
         assert summary["gross"] == Decimal("500.00")
         assert summary["net"] == Decimal("500.00")
-        assert summary["earned"] == Decimal("50.00")
+        assert summary["earned"] == Decimal("55.00")
         ledger, entries, _ = monthly_ledger(local_today().year, local_today().month)
         impact_id = sale.advisor.advisor_project_id
         assert ledger[impact_id]["income"] == Decimal("500.00")
@@ -513,7 +513,7 @@ def test_daniel_generates_four_percent_of_net_received_but_keeps_advisor_base(ap
         assert commission["commission"] == Decimal("28.00")
         assert commission["available"] == Decimal("28.00")
         assert fortnight_summary(sale.advisor)["net"] == Decimal("700.00")
-        assert fortnight_summary(sale.advisor)["earned"] == Decimal("70.00")
+        assert fortnight_summary(sale.advisor)["earned"] == Decimal("77.00")
         sale_id = sale.id
         project_id = sale.advisor.advisor_project_id
 

@@ -339,6 +339,12 @@ def _enforce_project_admin_boundary(endpoint):
     if not project_id_for_admin():
         abort(403)
 
+    # Rutas expresamente aisladas: sus controladores vuelven a validar
+    # el proyecto o equipo para cada perfil y cada solicitud POST.
+    if endpoint in {"hr.advisors", "hr.advisor_edit",
+                    "finance_control.goals", "finance_control.payouts"}:
+        return
+
     if request.blueprint not in {"crm", "clients", "clients_v3", "sales", "operations"}:
         abort(403)
 

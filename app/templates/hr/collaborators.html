@@ -58,7 +58,7 @@
             <option value="{{ p.id }}">{{ p.name }}</option>
             {% endfor %}
           </select>
-          <small class="text-secondary d-block mb-3">Obligatorio para Asesores y Administradores. Define los datos a los que tendrá acceso Administración.</small>
+          <small class="text-secondary d-block mb-3">Obligatorio para asesores y administradores; recomendable para supervisores que realizan ventas personales. Determina el ámbito comercial.</small>
         </div>
 
         <details class="rounded-4 p-3 mb-3" style="border:1px solid #dce3ef;background:#fbfdff">
@@ -156,9 +156,9 @@
     document.getElementById('nxRoleHelp').textContent = info[2];
     document.getElementById('nxJobPreview').textContent = info[0];
     document.getElementById('nxDepartmentPreview').textContent = info[1];
-    advisorFields.hidden = !['advisor','admin'].includes(key);
+    advisorFields.hidden = !['advisor','supervisor','admin'].includes(key);
     advisorProject.required = ['advisor','admin'].includes(key);
-    if (!['advisor','admin'].includes(key)) advisorProject.value = '';
+    if (!['advisor','supervisor','admin'].includes(key)) advisorProject.value = '';
   };
   select.addEventListener('change', render);
   render();
