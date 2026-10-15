@@ -1,0 +1,42 @@
+PARCHE NEXORA v1.27.1 — COMISIONES DE MEDIOS DE COBRO
+
+OBJETIVO:
+Al registrar cobros confirmados (tarjeta, Zelle, transferencia, ACH, Wise,
+efectivo u otros), se calcula un gasto administrativo configurable:
+(cobro bruto * porcentaje / 100) + cargo fijo.
+
+ESTOS GASTOS:
+- Se muestran desglosados por proyecto Impacto/Novax en Finanzas.
+- Se restan UNA sola vez de los resultados generales de la empresa.
+- NO afectan el bruto, Meta Total, Meta Neta o comisión de los asesores.
+- Se calculan únicamente para cobros USD confirmados registrados
+  mediante el flujo normal de Nexora.
+- No se recalculan los cobros anteriores al cambiar una tarifa.
+- No se inventan porcentajes: todo empieza en 0, debes configurarlos.
+
+INSTALACION:
+1. Respaldar la base de datos MySQL y proyecto actual.
+2. Descargar y EXTRAER el ZIP completo en Windows.
+3. Dentro de la carpeta descargada, copiar solo la carpeta app/ en
+   la raíz del proyecto Nexora, reemplazando archivos y agregando nuevos.
+4. Los archivos de tests/ son opcionales y no hace falta Python local.
+5. Subir esos archivos modificados a GitHub MAIN como siempre.
+   Esta rama ZIP es SOLO un parche, no es la rama de aplicación y
+   NO debe fusionarse como reemplazo de main.
+6. Railway debe iniciar con `python -m scripts.init_db` antes
+   de Gunicorn para crear automáticamente DOS TABLAS NUEVAS.
+   Si tu proceso de arranque cambió, verifica que init_db se ejecute.
+7. Entrar con Superadministración a Finanzas por proyecto,
+   pulsar "Tarifas de tarjeta, Zelle y otros" y configurar las
+   tarifas reales (porcentaje + cargo fijo por transacción).
+8. Revisar un cobro nuevo y comprobar que la comisión de procesamiento
+   aparece en Egresos y en "Comisiones de cobro USD".
+9. Evitar duplicar el mismo gasto de procesamiento como egreso manual.
+
+SEGURIDAD:
+- Solo superadmin puede cambiar tarifas y consultar esa pantalla.
+- No cambia pagos existentes ni altera su saldo.
+- Reversiones: un pago reversado deja de contarse en el informe;
+  si el banco no devuelve la comisión, registrar el costo real por separado.
+
+IMPORTANTE: el ZIP no instala ni modifica producción por sí mismo.

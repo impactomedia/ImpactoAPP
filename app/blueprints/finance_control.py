@@ -8,6 +8,8 @@ from flask_login import current_user, login_required
 from app.decorators import roles_required
 from app.extensions import db
 from app.helpers import audit
+from app.payment_fee_models import PaymentFeeRule
+from app.payment_fee_service import METHODS, usd_money, valid_rule_amount
 from app.models import AdvisorProject, Collaborator, Sale, User
 from app.finance_control_models import (
     AdvisorFortnightGoal, AdvisorFortnightPayout,
@@ -102,13 +104,55 @@ def index():
         entries = all_entries
         income = sum((row["income"] for row in grouped.values()), money(0))
         expenses = sum((row["expenses"] for row in grouped.values()), money(0))
+    processing_fees = (
+        selected["processing_fees"] if selected
+        else sum((x["processing_fees"] for x in grouped.values()), money(0))
+    )
     return render_template(
-        "finance_control/index.html", year=year, month=month,
+        "finance_control/index.html", processing_fees=processing_fees,
+        can_manage_payment_fees=role() == "superadmin", year=year, month=month,
         projects=projects, grouped=grouped, selected_id=requested_id,
         entries=entries[:300], income=income, expenses=expenses,
         result=income - expenses, nio=nio, can_consolidate=role() == "superadmin",
         unassigned=grouped[None],
     )
+
+
+@bp.route("/payment-fees", methods=["GET", "POST"])
+@login_required
+@roles_required("superadmin")
+def payment_fees():
+    """Configuración exclusivamente para la superadministradora."""
+    if request.method == "POST":
+        method_key = (request.form.get("method_key") or "").strip()
+        if method_key not in METHODS:
+            abort(400)
+        try:
+            percentage = valid_rule_amount(request.form.get("percentage"), Decimal("100"))
+            fixed = usd_money(valid_rule_amount(request.form.get("fixed_amount")))
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("finance_control.payment_fees"))
+        existing = PaymentFeeRule.query.filter_by(method_key=method_key).first()
+        previous = {
+            "percentage": str(existing.percentage),
+            "fixed_amount": str(existing.fixed_amount),
+        } if existing else None
+        if not existing:
+            existing = PaymentFeeRule(method_key=method_key, updated_by_id=current_user.id)
+            db.session.add(existing)
+        existing.percentage = percentage
+        existing.fixed_amount = fixed
+        existing.updated_by_id = current_user.id
+        audit("configurar_comision_metodo_pago", "PaymentFeeRule",
+              before=previous,
+              after={"metodo": method_key, "porcentaje": str(percentage),
+                     "cargo_fijo": str(fixed)})
+        db.session.commit()
+        flash("Tarifa guardada. Se aplicará automáticamente a los nuevos cobros; no cambia cobros anteriores.", "success")
+        return redirect(url_for("finance_control.payment_fees"))
+    rules = {x.method_key: x for x in PaymentFeeRule.query.all()}
+    return render_template("finance_control/payment_fees.html", methods=METHODS, rules=rules)
 
 
 @bp.route("/export.csv")

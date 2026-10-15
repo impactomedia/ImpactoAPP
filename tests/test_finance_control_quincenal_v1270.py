@@ -346,3 +346,137 @@ def test_later_execution_reduces_only_current_quincena_and_creates_future_adjust
         second = fortnight_summary(adviser, next_starts)
         assert second["earned"] == Decimal("60.00")
         assert available_payout(second) == Decimal("20.00")
+
+
+
+def test_processing_fees_reduce_company_profit_but_not_advisor_goals(app):
+    from app.services import add_payment
+    from app.payment_fee_models import PaymentProcessingFee
+
+    browser = app.test_client()
+    login(browser, "chief")
+    response = browser.post("/finance-control/payment-fees", data={
+        "method_key": "tarjeta", "percentage": "3.5", "fixed_amount": "0.50",
+    })
+    assert response.status_code == 302
+
+    with app.app_context():
+        sale = Sale.query.filter_by(sale_no="FC-VEN-1270").one()
+        payment = add_payment(
+            sale, 100, "tarjeta", effective_date=local_today(),
+            registered_by_id=User.query.filter_by(email="chief1270@test.local").one().id,
+        )
+        db.session.commit()
+        fee = PaymentProcessingFee.query.filter_by(payment_id=payment.id).one()
+        assert fee.amount == Decimal("4.00")
+        assert fee.percentage == Decimal("3.5000")
+        assert fee.fixed_amount == Decimal("0.50")
+        assert sale.amount_paid == Decimal("500.00")
+        summary = fortnight_summary(sale.advisor)
+        assert summary["gross"] == Decimal("500.00")
+        assert summary["net"] == Decimal("500.00")
+        assert summary["earned"] == Decimal("50.00")
+        ledger, entries, _ = monthly_ledger(local_today().year, local_today().month)
+        impact_id = sale.advisor.advisor_project_id
+        assert ledger[impact_id]["income"] == Decimal("500.00")
+        assert ledger[impact_id]["processing_fees"] == Decimal("4.00")
+        assert ledger[impact_id]["expenses"] == Decimal("4.00")
+        assert ledger[impact_id]["result"] == Decimal("496.00")
+        assert sum(1 for entry in entries if entry.get("processing_fee")) == 1
+    html = browser.get("/finance-control/")
+    assert html.status_code == 200
+    assert b"Comisiones de cobro USD" in html.data
+    assert b"Tarifas de tarjeta, Zelle y otros" in html.data
+
+
+def test_payment_fee_rule_changes_are_not_retroactive(app):
+    from app.services import add_payment
+    from app.payment_fee_models import PaymentProcessingFee
+
+    browser = app.test_client()
+    login(browser, "chief")
+    browser.post("/finance-control/payment-fees", data={
+        "method_key": "Zelle", "percentage": "2", "fixed_amount": "1",
+    })
+    with app.app_context():
+        sale = Sale.query.filter_by(sale_no="FC-VEN-1270").one()
+        earlier = add_payment(sale, 100, "Zelle", effective_date=local_today())
+        db.session.commit()
+        earlier_id = earlier.id
+    browser.post("/finance-control/payment-fees", data={
+        "method_key": "Zelle", "percentage": "5", "fixed_amount": "0",
+    })
+    with app.app_context():
+        original = PaymentProcessingFee.query.filter_by(payment_id=earlier_id).one()
+        assert original.amount == Decimal("3.00")
+        sale = Sale.query.filter_by(sale_no="FC-VEN-1270").one()
+        newer = add_payment(sale, 50, "Zelle", effective_date=local_today())
+        db.session.commit()
+        assert PaymentProcessingFee.query.filter_by(payment_id=newer.id).one().amount == Decimal("2.50")
+        assert PaymentProcessingFee.query.filter_by(payment_id=earlier_id).one().amount == Decimal("3.00")
+        ledger, _, _ = monthly_ledger(local_today().year, local_today().month)
+        assert ledger[sale.advisor.advisor_project_id]["processing_fees"] == Decimal("5.50")
+        # Pago cargado manualmente antes de la configuración no se retarifa.
+        assert PaymentProcessingFee.query.count() == 2
+
+
+def test_fees_reversed_payment_and_access_controls(app):
+    from app.services import add_payment
+
+    browser = app.test_client()
+    login(browser, "admin")
+    assert browser.get("/finance-control/payment-fees").status_code == 403
+    assert browser.post("/finance-control/payment-fees", data={
+        "method_key": "tarjeta", "percentage": "40", "fixed_amount": "100"
+    }).status_code == 403
+    assert browser.get("/finance-control/").status_code == 200
+    browser.post("/auth/logout")
+    login(browser, "advisor")
+    assert browser.get("/finance-control/payment-fees").status_code == 403
+    assert browser.get("/finance-control/").status_code == 403
+    with app.app_context():
+        sale = Sale.query.filter_by(sale_no="FC-VEN-1270").one()
+        payment = add_payment(sale, 100, "tarjeta", effective_date=local_today())
+        db.session.commit()
+        payment.status = "reversado"
+        db.session.commit()
+        ledger, _, _ = monthly_ledger(local_today().year, local_today().month)
+        assert ledger[sale.advisor.advisor_project_id]["processing_fees"] == Decimal("0.00")
+
+
+def test_zelle_fee_is_allocated_to_novax_only(app):
+    from app.services import add_payment
+
+    browser = app.test_client()
+    login(browser, "chief")
+    response = browser.post("/finance-control/payment-fees", data={
+        "method_key": "Zelle", "percentage": "2.5", "fixed_amount": "0",
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        other = User.query.filter_by(email="other1270@test.local").one().collaborator
+        novax = other.advisor_project_id
+        customer = Client(
+            code="NOVAX-FEE-1271", business_name="Cliente Novax Pago",
+            contact_name="Persona", record_type="cliente", owner_id=other.id,
+        )
+        db.session.add(customer)
+        db.session.flush()
+        sale = Sale(
+            sale_no="NOVAX-VEN-FEE-1271", client_id=customer.id,
+            advisor_id=other.id, sale_date=local_today(), status="confirmada",
+            currency="USD", total=200, amount_paid=0, balance=200,
+        )
+        db.session.add(sale)
+        db.session.flush()
+        db.session.add(SaleItem(sale_id=sale.id, description="Video",
+                                quantity=1, total=200))
+        db.session.flush()
+        add_payment(sale, 200, "Zelle", effective_date=local_today())
+        db.session.commit()
+        ledger, _, _ = monthly_ledger(local_today().year, local_today().month)
+        impacto = AdvisorProject.query.filter_by(code="IMPACTO").one().id
+        assert ledger[novax]["processing_fees"] == Decimal("5.00")
+        assert ledger[impacto]["processing_fees"] == Decimal("0.00")
+        assert ledger[novax]["income"] == Decimal("200.00")
+        assert ledger[novax]["result"] == Decimal("195.00")
