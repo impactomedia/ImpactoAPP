@@ -1,9 +1,9 @@
 {% extends "app_base.html" %}
-{% block title %}Nueva compra adicional | Impacto Nexora{% endblock %}
+{% block title %}Nueva compra adicional | Nexora{% endblock %}
 {% block app_content %}
 <div class="page-heading">
   <div>
-    <span class="eyebrow">Impacto Nexora · Comercial</span>
+    <span class="eyebrow">Registro de ventas</span>
     <h1>Nueva compra adicional</h1>
     <p>Imprenta, publicidad, video, diseño u otra compra independiente del servicio principal.</p>
   </div>
@@ -24,7 +24,7 @@
   <form method="post" id="saleForm">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    <h2 class="h5">1. Seguimiento / Cliente y responsable</h2>
+    <h2 class="h5">1. Cliente y responsable</h2>
     <div class="row g-3">
       <div class="col-lg-5">
         <label class="form-label">Seguimiento / Cliente</label>
