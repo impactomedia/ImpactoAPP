@@ -122,6 +122,13 @@
     <div class="row g-3">
       <div class="col-md-6"><label class="form-label">Industria / rubro</label><input name="industry" class="form-control" value="{{ client.industry or '' }}"></div>
       <div class="col-md-6"><label class="form-label">Fuente</label><input name="source" class="form-control" value="{{ client.source or '' }}" placeholder="Facebook, referido, llamada, Google..."></div>
+      {% if current_user.is_superadmin or (current_user.role and current_user.role.name == 'admin') %}
+      <div class="col-md-6"><label class="form-label">Generador del lead</label>
+        <select name="lead_generator_id" class="form-select">
+          {% for generator in lead_generators %}<option value="{{ generator.id }}" {% if lead_generator.id == generator.id %}selected{% endif %}>{{ generator.name }}</option>{% endfor %}
+        </select><small class="text-secondary">No modifica la comisión de ventas ya cobradas.</small>
+      </div>
+      {% endif %}
       <div class="col-md-4">
         <label class="form-label">Prioridad</label>
         <select name="priority" class="form-select">

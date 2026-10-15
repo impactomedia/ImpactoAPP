@@ -1,0 +1,53 @@
+{% extends "app_base.html" %}
+{% block title %}Comisiones de generadores de leads | Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div><span class="eyebrow">Finanzas · Solo Superadministración</span>
+    <h1>Comisiones por generación de leads</h1>
+    <p>Daniel: 4 % · Oscar: 2 % · Empresa: 0 %. Se calcula sobre cobros netos después de Imprenta y Meta Ads ejecutados por venta.</p>
+  </div>
+  <a class="btn btn-outline-primary" href="{{ url_for('finance_control.index') }}">Volver a Finanzas</a>
+</div>
+<div class="alert alert-info">
+  <strong>Dos operaciones diferentes:</strong> el porcentaje se calcula sobre la base neta de cada venta, pero <strong>no se descuenta de la Meta Neta ni del ingreso comercial del asesor</strong>. Se convierte en egreso empresarial solo al registrar el pago al generador.
+  Cada abono confirmado aumenta la base; se descuentan los gastos ejecutados vinculados a la venta.
+</div>
+<div class="metric-grid mb-4">
+  <div class="metric-card"><span>Comisiones calculadas</span><strong>USD {{ earned|money }}</strong><small>Sobre ventas netas cobradas</small></div>
+  <div class="metric-card"><span>Comisiones pagadas</span><strong>USD {{ paid|money }}</strong><small>Ya contabilizadas como gasto empresarial</small></div>
+  <div class="metric-card"><span>Saldo pendiente de comisión</span><strong>USD {{ outstanding|money }}</strong><small>No es un egreso ejecutado hasta su pago</small></div>
+</div>
+<section class="panel-card mb-4">
+  <h2 class="h5">Comisiones por venta</h2>
+  <div class="table-responsive"><table class="table modern-table">
+    <thead><tr><th>Venta / Cliente</th><th>Generador</th><th>Proyecto</th><th>Cobrado</th><th>Imprenta + Meta Ads</th><th>Base neta</th><th>Comisión</th><th>Pagado</th><th>Disponible</th><th>Registrar pago</th></tr></thead>
+    <tbody>
+      {% for x in rows %}
+      <tr>
+        <td><strong>{{ x.sale.sale_no }}</strong><small class="d-block text-secondary">{{ x.sale.client.business_name }}</small></td>
+        <td>{{ x.generator.name }} · {{ x.percentage }}%</td>
+        <td>{{ x.sale.advisor.advisor_project.name if x.sale.advisor and x.sale.advisor.advisor_project else 'Por asignar' }}</td>
+        <td>{{ x.collected|money }}</td><td>{{ x.deductions|money }}</td><td>{{ x.base|money }}</td><td>{{ x.commission|money }}</td><td>{{ x.paid|money }}</td><td>{{ x.available|money }}</td>
+        <td>{% if x.available > 0 and x.project_id %}
+        <form method="post" class="d-flex flex-wrap gap-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="sale_id" value="{{ x.sale.id }}">
+          <input class="form-control form-control-sm" type="number" step="0.01" min="0.01" max="{{ x.available }}" name="amount" value="{{ x.available }}" required aria-label="Monto de comisión">
+          <input class="form-control form-control-sm" name="notes" placeholder="Referencia del pago" aria-label="Referencia del pago">
+          <button type="submit" class="btn btn-sm btn-outline-success">Registrar pago</button>
+        </form>
+        {% else %}<small class="text-secondary">{{ 'Saldo cubierto o base pendiente' if x.project_id else 'Asigna proyecto' }}</small>{% endif %}</td>
+      </tr>
+      {% else %}<tr><td colspan="10">Todavía no hay ventas cobradas atribuibles a generadores externos.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+<section class="panel-card">
+  <h2 class="h5">Últimos pagos registrados</h2>
+  <div class="table-responsive"><table class="table modern-table">
+    <thead><tr><th>Fecha</th><th>Generador</th><th>Venta</th><th>Proyecto</th><th>Monto USD</th><th>Observación</th></tr></thead>
+    <tbody>{% for x in payouts %}<tr><td>{{ x.paid_on }}</td><td>{{ x.generator.name }}</td><td>{{ x.sale.sale_no }}</td><td>{{ x.project.name }}</td><td>{{ x.amount|money }}</td><td>{{ x.notes or '—' }}</td></tr>
+    {% else %}<tr><td colspan="6">Todavía no hay pagos de generadores.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

@@ -57,6 +57,10 @@
       <div><small>Correo electrónico</small><strong class="nx-client-wrap">{{ client.email or 'Sin registrar' }}</strong>{% if client.email %}<a href="mailto:{{ client.email }}">Enviar correo <i class="bi bi-arrow-up-right"></i></a>{% endif %}</div>
     </div>
     <div class="nx-client-fact">
+      <span class="nx-client-fact-icon"><i class="bi bi-person-badge"></i></span>
+      <div><small>Origen del lead</small><strong>{{ client.lead_origin.generator.name if client.lead_origin else 'Empresa' }}</strong></div>
+    </div>
+    <div class="nx-client-fact">
       <span class="nx-client-fact-icon"><i class="bi bi-person-check"></i></span>
       <div><small>Asesor responsable</small><strong>{{ client.owner.user.name if client.owner and client.owner.user else 'Sin asignar' }}</strong>{% if client.owner and client.owner.advisor_project %}<span>{{ client.owner.advisor_project.name }}</span>{% endif %}</div>
     </div>

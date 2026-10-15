@@ -183,6 +183,8 @@ CATALOGS = {
 
 
 def seed_all():
+    from app.lead_commission_service import initialize_generators
+    initialize_generators()
     for module, codes in PERMISSIONS.items():
         for code in codes:
             permission = Permission.query.filter_by(code=code).first()

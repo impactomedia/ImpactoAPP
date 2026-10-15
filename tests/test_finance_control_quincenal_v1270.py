@@ -346,3 +346,288 @@ def test_later_execution_reduces_only_current_quincena_and_creates_future_adjust
         second = fortnight_summary(adviser, next_starts)
         assert second["earned"] == Decimal("60.00")
         assert available_payout(second) == Decimal("20.00")
+
+
+
+def test_processing_fees_reduce_company_profit_but_not_advisor_goals(app):
+    from app.services import add_payment
+    from app.payment_fee_models import PaymentProcessingFee
+
+    browser = app.test_client()
+    login(browser, "chief")
+    response = browser.post("/finance-control/payment-fees", data={
+        "method_key": "tarjeta", "percentage": "3.5", "fixed_amount": "0.50",
+    })
+    assert response.status_code == 302
+
+    with app.app_context():
+        sale = Sale.query.filter_by(sale_no="FC-VEN-1270").one()
+        payment = add_payment(
+            sale, 100, "tarjeta", effective_date=local_today(),
+            registered_by_id=User.query.filter_by(email="chief1270@test.local").one().id,
+        )
+        db.session.commit()
+        fee = PaymentProcessingFee.query.filter_by(payment_id=payment.id).one()
+        assert fee.amount == Decimal("4.00")
+        assert fee.percentage == Decimal("3.5000")
+        assert fee.fixed_amount == Decimal("0.50")
+        assert sale.amount_paid == Decimal("500.00")
+        summary = fortnight_summary(sale.advisor)
+        assert summary["gross"] == Decimal("500.00")
+        assert summary["net"] == Decimal("500.00")
+        assert summary["earned"] == Decimal("50.00")
+        ledger, entries, _ = monthly_ledger(local_today().year, local_today().month)
+        impact_id = sale.advisor.advisor_project_id
+        assert ledger[impact_id]["income"] == Decimal("500.00")
+        assert ledger[impact_id]["processing_fees"] == Decimal("4.00")
+        assert ledger[impact_id]["expenses"] == Decimal("4.00")
+        assert ledger[impact_id]["result"] == Decimal("496.00")
+        assert sum(1 for entry in entries if entry.get("processing_fee")) == 1
+    html = browser.get("/finance-control/")
+    assert html.status_code == 200
+    assert b"Comisiones de cobro USD" in html.data
+    assert b"Tarifas de tarjeta, Zelle y otros" in html.data
+
+
+def test_payment_fee_rule_changes_are_not_retroactive(app):
+    from app.services import add_payment
+    from app.payment_fee_models import PaymentProcessingFee
+
+    browser = app.test_client()
+    login(browser, "chief")
+    browser.post("/finance-control/payment-fees", data={
+        "method_key": "Zelle", "percentage": "2", "fixed_amount": "1",
+    })
+    with app.app_context():
+        sale = Sale.query.filter_by(sale_no="FC-VEN-1270").one()
+        earlier = add_payment(sale, 100, "Zelle", effective_date=local_today())
+        db.session.commit()
+        earlier_id = earlier.id
+    browser.post("/finance-control/payment-fees", data={
+        "method_key": "Zelle", "percentage": "5", "fixed_amount": "0",
+    })
+    with app.app_context():
+        original = PaymentProcessingFee.query.filter_by(payment_id=earlier_id).one()
+        assert original.amount == Decimal("3.00")
+        sale = Sale.query.filter_by(sale_no="FC-VEN-1270").one()
+        newer = add_payment(sale, 50, "Zelle", effective_date=local_today())
+        db.session.commit()
+        assert PaymentProcessingFee.query.filter_by(payment_id=newer.id).one().amount == Decimal("2.50")
+        assert PaymentProcessingFee.query.filter_by(payment_id=earlier_id).one().amount == Decimal("3.00")
+        ledger, _, _ = monthly_ledger(local_today().year, local_today().month)
+        assert ledger[sale.advisor.advisor_project_id]["processing_fees"] == Decimal("5.50")
+        # Pago cargado manualmente antes de la configuración no se retarifa.
+        assert PaymentProcessingFee.query.count() == 2
+
+
+def test_fees_reversed_payment_and_access_controls(app):
+    from app.services import add_payment
+
+    browser = app.test_client()
+    login(browser, "admin")
+    assert browser.get("/finance-control/payment-fees").status_code == 403
+    assert browser.post("/finance-control/payment-fees", data={
+        "method_key": "tarjeta", "percentage": "40", "fixed_amount": "100"
+    }).status_code == 403
+    assert browser.get("/finance-control/").status_code == 200
+    browser.post("/auth/logout")
+    login(browser, "advisor")
+    assert browser.get("/finance-control/payment-fees").status_code == 403
+    assert browser.get("/finance-control/").status_code == 403
+    with app.app_context():
+        sale = Sale.query.filter_by(sale_no="FC-VEN-1270").one()
+        payment = add_payment(sale, 100, "tarjeta", effective_date=local_today())
+        db.session.commit()
+        payment.status = "reversado"
+        db.session.commit()
+        ledger, _, _ = monthly_ledger(local_today().year, local_today().month)
+        assert ledger[sale.advisor.advisor_project_id]["processing_fees"] == Decimal("0.00")
+
+
+def test_zelle_fee_is_allocated_to_novax_only(app):
+    from app.services import add_payment
+
+    browser = app.test_client()
+    login(browser, "chief")
+    response = browser.post("/finance-control/payment-fees", data={
+        "method_key": "Zelle", "percentage": "2.5", "fixed_amount": "0",
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        other = User.query.filter_by(email="other1270@test.local").one().collaborator
+        novax = other.advisor_project_id
+        customer = Client(
+            code="NOVAX-FEE-1271", business_name="Cliente Novax Pago",
+            contact_name="Persona", record_type="cliente", owner_id=other.id,
+        )
+        db.session.add(customer)
+        db.session.flush()
+        sale = Sale(
+            sale_no="NOVAX-VEN-FEE-1271", client_id=customer.id,
+            advisor_id=other.id, sale_date=local_today(), status="confirmada",
+            currency="USD", total=200, amount_paid=0, balance=200,
+        )
+        db.session.add(sale)
+        db.session.flush()
+        db.session.add(SaleItem(sale_id=sale.id, description="Video",
+                                quantity=1, total=200))
+        db.session.flush()
+        add_payment(sale, 200, "Zelle", effective_date=local_today())
+        db.session.commit()
+        ledger, _, _ = monthly_ledger(local_today().year, local_today().month)
+        impacto = AdvisorProject.query.filter_by(code="IMPACTO").one().id
+        assert ledger[novax]["processing_fees"] == Decimal("5.00")
+        assert ledger[impacto]["processing_fees"] == Decimal("0.00")
+        assert ledger[novax]["income"] == Decimal("200.00")
+        assert ledger[novax]["result"] == Decimal("195.00")
+
+
+
+def test_daniel_generates_four_percent_of_net_received_but_keeps_advisor_base(app):
+    from app.services import add_payment
+    from app.finance_control_models import FinanceProjectMovement
+    from app.lead_commission_models import LeadGenerator, LeadCommissionPayout
+    from app.lead_commission_service import assign_client_origin, net_sale_commission
+
+    with app.app_context():
+        sale = Sale.query.filter_by(sale_no="FC-VEN-1270").one()
+        chief = User.query.filter_by(email="chief1270@test.local").one()
+        daniel = LeadGenerator.query.filter_by(code="DANIEL").one()
+        assert daniel.name == "Daniel" and daniel.percentage == Decimal("4.000")
+        assign_client_origin(sale.client, daniel.id, chief.id)
+        db.session.flush()
+        add_payment(sale, 600, "transferencia", effective_date=local_today(), registered_by_id=chief.id)
+        for category, amount in (("imprenta", 200), ("meta_ads", 100)):
+            db.session.add(FinanceProjectMovement(
+                project_id=sale.advisor.advisor_project_id, sale_id=sale.id,
+                category=category, description="Coste ejecutado",
+                amount=amount, status="ejecutado", requested_by_id=chief.id,
+                executed_on=local_today(),
+            ))
+        db.session.commit()
+        commission = net_sale_commission(sale)
+        assert commission["collected"] == Decimal("1000.00")
+        assert commission["deductions"] == Decimal("300.00")
+        assert commission["base"] == Decimal("700.00")
+        assert commission["percentage"] == Decimal("4.000")
+        assert commission["commission"] == Decimal("28.00")
+        assert commission["available"] == Decimal("28.00")
+        assert fortnight_summary(sale.advisor)["net"] == Decimal("700.00")
+        assert fortnight_summary(sale.advisor)["earned"] == Decimal("70.00")
+        sale_id = sale.id
+        project_id = sale.advisor.advisor_project_id
+
+    browser = app.test_client()
+    login(browser, "chief")
+    response = browser.get("/finance-control/lead-commissions")
+    assert response.status_code == 200 and b"Daniel" in response.data
+    response = browser.post("/finance-control/lead-commissions", data={
+        "sale_id": sale_id, "amount": "28", "notes": "Pago del generador",
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        assert LeadCommissionPayout.query.count() == 1
+        ledger, _, _ = monthly_ledger(local_today().year, local_today().month)
+        assert ledger[project_id]["income"] == Decimal("1000.00")
+        assert ledger[project_id]["expenses"] == Decimal("328.00")
+        assert ledger[project_id]["result"] == Decimal("672.00")
+        sale = db.session.get(Sale, sale_id)
+        assert net_sale_commission(sale)["available"] == Decimal("0.00")
+        assert fortnight_summary(sale.advisor)["net"] == Decimal("700.00")
+    browser.post("/finance-control/lead-commissions", data={"sale_id": sale_id, "amount": "0.01"})
+    with app.app_context():
+        assert LeadCommissionPayout.query.count() == 1
+
+
+def test_oscar_two_percent_empresa_zero_and_attribution_snapshots(app):
+    from app.services import add_payment
+    from app.lead_commission_models import LeadGenerator
+    from app.lead_commission_service import assign_client_origin, net_sale_commission
+    from app.finance_control_models import FinanceProjectMovement
+
+    with app.app_context():
+        other = User.query.filter_by(email="other1270@test.local").one().collaborator
+        chief = User.query.filter_by(email="chief1270@test.local").one()
+        oscar = LeadGenerator.query.filter_by(code="OSCAR").one()
+        empresa = LeadGenerator.query.filter_by(code="EMPRESA").one()
+        assert oscar.name == "Oscar" and oscar.percentage == Decimal("2.000")
+        assert empresa.percentage == Decimal("0.000")
+        client = Client(code="OSCAR-LEAD", business_name="Lead Oscar",
+                        contact_name="Contacto", owner_id=other.id, record_type="cliente")
+        db.session.add(client)
+        db.session.flush()
+        assign_client_origin(client, oscar.id, chief.id)
+        sale = Sale(sale_no="LEAD-OSCAR-SALE", client_id=client.id, advisor_id=other.id,
+                    sale_date=local_today(), status="confirmada",
+                    currency="USD", total=500, amount_paid=0, balance=500)
+        db.session.add(sale)
+        db.session.flush()
+        db.session.add(SaleItem(sale_id=sale.id, description="Servicio video",
+                                quantity=1, total=500))
+        db.session.flush()
+        add_payment(sale, 500, "Zelle", effective_date=local_today())
+        db.session.add(FinanceProjectMovement(
+            project_id=other.advisor_project_id, sale_id=sale.id,
+            category="meta_ads", description="Campaña", amount=100,
+            status="ejecutado", requested_by_id=chief.id, executed_on=local_today(),
+        ))
+        db.session.commit()
+        data = net_sale_commission(sale)
+        assert data["base"] == Decimal("400.00")
+        assert data["commission"] == Decimal("8.00")
+        assert data["generator"].name == "Oscar"
+        assign_client_origin(client, empresa.id, chief.id)
+        db.session.commit()
+        assert net_sale_commission(sale)["generator"].name == "Oscar"
+        assert net_sale_commission(sale)["commission"] == Decimal("8.00")
+
+        other_client = Client(code="EMPRESA-LEAD", business_name="Lead Empresa",
+                              contact_name="Contacto", owner_id=other.id, record_type="cliente")
+        db.session.add(other_client)
+        db.session.flush()
+        company_sale = Sale(sale_no="LEAD-EMPRESA-SALE", client_id=other_client.id,
+                            advisor_id=other.id, sale_date=local_today(), status="confirmada",
+                            currency="USD", total=100, amount_paid=0, balance=100)
+        db.session.add(company_sale)
+        db.session.flush()
+        db.session.add(SaleItem(sale_id=company_sale.id, description="Diseño",
+                                quantity=1, total=100))
+        db.session.flush()
+        add_payment(company_sale, 100, "transferencia", effective_date=local_today())
+        db.session.commit()
+        assert net_sale_commission(company_sale)["percentage"] == Decimal("0.000")
+        assert net_sale_commission(company_sale)["commission"] == Decimal("0.00")
+        assert company_sale.lead_attribution.generator.name == "Empresa"
+
+
+def test_lead_generator_prospect_selection_and_permissions(app):
+    from app.lead_commission_models import LeadGenerator, ClientLeadOrigin
+
+    browser = app.test_client()
+    login(browser, "advisor")
+    with app.app_context():
+        oscar_id = LeadGenerator.query.filter_by(code="OSCAR").one().id
+        daniel_id = LeadGenerator.query.filter_by(code="DANIEL").one().id
+
+    response = browser.post("/crm/new", data={
+        "business_name": "Lead de origen identificado",
+        "contact_name": "Prospecto",
+        "phone": "(999) 111-2233",
+        "preferred_channel": "Llamada",
+        "priority": "media",
+        "lead_generator_id": oscar_id,
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        client = Client.query.filter_by(business_name="Lead de origen identificado").one()
+        assert client.lead_origin.generator.name == "Oscar"
+        cid = client.id
+    assert browser.get("/finance-control/lead-commissions").status_code == 403
+    assert browser.post(f"/crm/{cid}/lead-origin", data={"lead_generator_id": daniel_id}).status_code == 403
+    browser.post("/auth/logout")
+    login(browser, "admin")
+    response = browser.post(f"/crm/{cid}/lead-origin", data={"lead_generator_id": daniel_id})
+    assert response.status_code == 302
+    with app.app_context():
+        assert db.session.get(Client, cid).lead_origin.generator.name == "Daniel"
+    assert browser.get("/finance-control/lead-commissions").status_code == 403

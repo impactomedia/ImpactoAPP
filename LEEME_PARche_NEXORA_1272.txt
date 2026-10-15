@@ -1,0 +1,53 @@
+NEXORA v1.27.2 — PARCHE ACUMULATIVO DE GENERADORES DE LEADS
+
+CONFIGURACION INICIAL
+Daniel: 4% sobre neto de sus ventas (procede de base generada por Daniel).
+Oscar: 2% sobre neto de ventas provenientes de su base.
+Empresa: 0%, sin comisiones de leads.
+
+BASE Y MOMENTO DE CALCULO
+- Venta neta COBRADA = dinero confirmado recibido de la venta menos
+  SOLO Imprenta y Meta Ads efectivamente ejecutados vinculados a esa venta.
+- Se multiplica esa base neta por el porcentaje del generador.
+- Esa comisión no se resta de dicha base neta ni de las metas o
+  comisiones del asesor. Es un gasto comercial independiente.
+- El gasto empresarial se reconoce en la cuenta cuando se registre
+  realmente el PAGO al generador.
+- Pagos a cuotas/abonos: se consideran al ser cobrados; las deducciones
+  ejecutadas se restan de la venta, sin modificar el efectivo bruto cobrado.
+- Comisión por medio de pago se gestiona APARTE, no afecta esta base.
+- Para clientes nuevos: el asesor elige origen Daniel, Oscar o Empresa.
+- Administración puede cambiar generador en el seguimiento o ficha,
+  pero NO reescribe el generador de ventas que ya tuvieron un cobro.
+- Los clientes previos sin origen asignado se consideran Empresa
+  hasta que Administración configure explícitamente su procedencia.
+- Las ventas antiguas ya cobradas NO se retarifan automáticamente.
+
+INSTALACIÓN (NO REQUIERE PYTHON EN TU COMPUTADORA)
+1. RESPALDAR la base de datos Railway MySQL y el código del repositorio.
+2. Descargar y EXTRAE este ZIP, copia sólo la carpeta app/ y el archivo
+   scripts/seed.py en su misma estructura dentro del proyecto original.
+3. Reemplaza los archivos anteriores y conserva todos los nuevos.
+   La carpeta tests/ del ZIP es opcional.
+4. Sube estos cambios a la rama main de GitHub, como los anteriores.
+5. Railway debe ejecutar "python -m scripts.init_db" al arrancar.
+   Así se crean las tablas faltantes antes de atender peticiones.
+6. Accede como Superadmin a Finanzas por proyecto >
+   Comisiones de leads · Daniel / Oscar para verificar/cobrar.
+7. Registra un seguimiento eligiendo un generador y luego
+   registra una venta con cobro confirmado para comprobar el cálculo.
+8. Los egresos se contabilizan al marcar el pago, no cuando
+   se genera una comisión estimada.
+
+IMPORTANTE
+- Este parche es ACUMULATIVO: incorpora también la v1.27.1
+  de tarifas por tarjeta, Zelle, ACH, Wise y otros medios.
+  Puedes aplicarlo sobre Nexora v1.27.0 o después de v1.27.1,
+  sin perder la pantalla de tarifas bancarias.
+- v1.27.1 empieza con tarifas bancarias 0% y cargo fijo $0.00
+  hasta que Superadministración configure los valores reales.
+- Reversar un pago hace que deje de contar en comisiones devengadas.
+  Los gastos bancarios no reembolsables se registran separadamente.
+- No se han importado datos antiguos del Excel, ni reclasificado
+  contactos anteriores: se conservan a salvo.
+- El ZIP no fusiona ni despliega nada automáticamente.

@@ -229,6 +229,13 @@ def add_payment(
     db.session.add(payment)
     db.session.flush()
 
+    from app.payment_fee_service import record_processing_fee
+    record_processing_fee(payment)
+
+    if status == "confirmado":
+        from app.lead_commission_service import snapshot_at_first_payment
+        snapshot_at_first_payment(sale)
+
     if status == "confirmado":
         income = Income(
             effective_date=payment.effective_date,
