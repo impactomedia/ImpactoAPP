@@ -228,13 +228,18 @@ def adjustment_balance(advisor, before):
         AdvisorFortnightGoal.advisor_id == advisor.id,
         AdvisorFortnightGoal.period_start < before,
     ).order_by(AdvisorFortnightGoal.period_start.asc()).all()
-    total_earned = money(0)
-    for goal in goals:
-        total_earned += fortnight_summary(advisor, goal.period_start)["earned"]
     old_payouts = AdvisorFortnightPayout.query.filter(
         AdvisorFortnightPayout.advisor_id == advisor.id,
         AdvisorFortnightPayout.period_start < before,
     ).all()
+    # Un supervisor no necesita tener una meta para comisionar. Incluir
+    # quincenas con pagos históricos evita contarlos íntegros como sobrepagos.
+    periods = {g.period_start for g in goals}
+    periods.update(x.period_start for x in old_payouts)
+    total_earned = sum(
+        (fortnight_summary(advisor, start)["earned"] for start in sorted(periods)),
+        money(0),
+    )
     total_paid = sum((money(x.amount) for x in old_payouts), money(0))
     return max(money(0), total_paid - total_earned)
 
