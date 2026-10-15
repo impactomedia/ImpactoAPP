@@ -29,6 +29,16 @@
       <p><strong>Etapa:</strong> {{ client.pipeline_stage|label }}</p>
       <p><strong>Responsable:</strong> {{ client.owner.user.name if client.owner else 'Sin asignar' }}</p>
       <p><strong>Fuente:</strong> {{ client.source or '—' }}</p>
+      <p><strong>Generador de leads:</strong> {{ lead_generator.name }}</p>
+      {% if current_user.is_superadmin or (current_user.role and current_user.role.name == 'admin') %}
+      <form method="post" action="{{ url_for('crm.change_lead_origin', client_id=client.id) }}" class="mb-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label">Cambiar generador para ventas futuras</label>
+        <div class="d-flex gap-2"><select name="lead_generator_id" class="form-select">
+          {% for generator in lead_generators %}<option value="{{ generator.id }}" {% if lead_generator.id == generator.id %}selected{% endif %}>{{ generator.name }}</option>{% endfor %}
+        </select><button class="btn btn-sm btn-outline-primary">Guardar</button></div>
+      </form>
+      {% endif %}
       <p><strong>Interés:</strong> {{ client.main_interest or '—' }}</p>
       {% if current_user.has_permission('crm.edit') %}
       <form method="post" action="{{ url_for('crm.move_stage', client_id=client.id) }}">
