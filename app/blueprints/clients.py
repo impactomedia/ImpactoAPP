@@ -11,6 +11,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import or_, and_
 
 from app.commercial_plans import maintenance_label
+from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.decorators import permission_required, roles_required
 from app.access_control import _commercial_client_allowed, _project_allowed, _task_allowed
@@ -160,6 +161,10 @@ def _visible_client_query(query=None):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import client_scope_condition
+        return query.filter(client_scope_condition())
+
     if role == "advisor" and collaborator:
         return query.filter(Client.owner_id == collaborator.id)
 
@@ -179,7 +184,10 @@ def _active_collaborators():
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
-    if role == "advisor" and collaborator:
+    if role == "admin" and is_project_admin():
+        from app.project_admin_scope import project_id_for_admin
+        query = query.filter(Collaborator.advisor_project_id == (project_id_for_admin() or -1))
+    elif role == "advisor" and collaborator:
         query = query.filter(Collaborator.id == collaborator.id)
     elif role == "supervisor" and collaborator:
         allowed_ids = [collaborator.id] + [c.id for c in collaborator.subordinates]
