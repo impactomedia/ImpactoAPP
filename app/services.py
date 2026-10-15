@@ -228,6 +228,10 @@ def add_payment(
     )
     db.session.add(payment)
     db.session.flush()
+    # Cargo de procesamiento administrativo. No modifica la venta ni la base
+    # comisionable; la nueva tarifa solo afecta cobros registrados después.
+    from app.payment_fee_service import record_processing_fee
+    record_processing_fee(payment)
 
     if status == "confirmado":
         income = Income(
