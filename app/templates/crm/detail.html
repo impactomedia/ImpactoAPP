@@ -28,6 +28,7 @@
       <h2 class="h5">Información comercial</h2>
       <p><strong>Etapa:</strong> {{ client.pipeline_stage|label }}</p>
       <p><strong>Responsable:</strong> {{ client.owner.user.name if client.owner else 'Sin asignar' }}</p>
+      <p class="small text-secondary mb-2"><i class="bi bi-clock-history me-1"></i>{% if followup_protected %}Reservado hasta el {{ protected_until.strftime('%d/%m/%Y %H:%M') }}{% else %}Plazo de 30 días vencido: recuperable por otro asesor de este proyecto{% endif %}</p>
       <p><strong>Fuente:</strong> {{ client.source or '—' }}</p>
       <p><strong>Generador de leads:</strong> {{ lead_generator.name }}</p>
       {% if current_user.is_superadmin or (current_user.role and current_user.role.name == 'admin') %}
