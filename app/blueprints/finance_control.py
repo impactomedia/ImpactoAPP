@@ -8,6 +8,8 @@ from flask_login import current_user, login_required
 from app.decorators import roles_required
 from app.extensions import db
 from app.helpers import audit
+from app.lead_commission_models import LeadCommissionPayout, SaleLeadAttribution
+from app.lead_commission_service import lead_commission_rows, net_sale_commission
 from app.models import AdvisorProject, Collaborator, Sale, User
 from app.finance_control_models import (
     AdvisorFortnightGoal, AdvisorFortnightPayout,
@@ -103,11 +105,62 @@ def index():
         income = sum((row["income"] for row in grouped.values()), money(0))
         expenses = sum((row["expenses"] for row in grouped.values()), money(0))
     return render_template(
-        "finance_control/index.html", year=year, month=month,
+        "finance_control/index.html", can_manage_lead_commissions=role() == "superadmin",
+        year=year, month=month,
         projects=projects, grouped=grouped, selected_id=requested_id,
         entries=entries[:300], income=income, expenses=expenses,
         result=income - expenses, nio=nio, can_consolidate=role() == "superadmin",
         unassigned=grouped[None],
+    )
+
+
+@bp.route("/lead-commissions", methods=["GET", "POST"])
+@login_required
+@roles_required("superadmin")
+def lead_commissions():
+    """Los generadores ganan sobre neto cobrado; el pago es un egreso separado."""
+    if request.method == "POST":
+        sale = db.get_or_404(Sale, request.form.get("sale_id", type=int))
+        attribution = sale.lead_attribution
+        if not attribution or attribution.percentage <= 0:
+            abort(403)
+        row = net_sale_commission(sale)
+        if not row["project_id"]:
+            flash("Asigna primero el proyecto comercial de la venta.", "danger")
+            return redirect(url_for("finance_control.lead_commissions"))
+        try:
+            amount = positive_amount(request.form.get("amount"))
+            if amount > row["available"]:
+                raise ValueError("El importe excede la comisión disponible de esta venta.")
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("finance_control.lead_commissions"))
+        payout = LeadCommissionPayout(
+            sale_id=sale.id, generator_id=attribution.generator_id,
+            project_id=row["project_id"], amount=amount, paid_on=local_today(),
+            paid_by_id=current_user.id,
+            notes=(request.form.get("notes") or "")[:2000],
+        )
+        db.session.add(payout)
+        audit("pagar_comision_generador_leads", "LeadCommissionPayout",
+              after={"sale_id": sale.id, "generador": attribution.generator.name,
+                     "porcentaje": str(attribution.percentage),
+                     "base_neta": str(row["base"]), "monto": str(amount)})
+        db.session.commit()
+        flash("Pago registrado como gasto comercial, sin modificar la base neta del asesor.", "success")
+        return redirect(url_for("finance_control.lead_commissions"))
+
+    rows = lead_commission_rows()
+    total_earned = sum((x["commission"] for x in rows), money(0))
+    total_paid = sum((x["paid"] for x in rows), money(0))
+    payouts = LeadCommissionPayout.query.order_by(
+        LeadCommissionPayout.paid_on.desc(), LeadCommissionPayout.id.desc()
+    ).limit(100).all()
+    return render_template(
+        "finance_control/lead_commissions.html", rows=rows,
+        earned=total_earned, paid=total_paid,
+        outstanding=max(money(0), total_earned-total_paid),
+        payouts=payouts,
     )
 
 
