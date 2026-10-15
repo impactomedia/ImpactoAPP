@@ -160,15 +160,10 @@ def _visible_operational_attachments(client_id):
 
 
 def _visible_operational_comments(client_id):
-    return (
-        ClientComment.query
-        .filter(
-            ClientComment.client_id == client_id,
-            ClientComment.process_type.in_(OPERATIONAL_COMMENT_TYPES),
-        )
-        .order_by(ClientComment.created_at.desc())
-        .all()
-    )
+    # Los usuarios de Desarrollo necesitan ver también los comentarios creados
+    # en la ficha comercial: son parte del historial del cliente asignado.
+    return (ClientComment.query.filter_by(client_id=client_id)
+            .order_by(ClientComment.created_at.desc()).all())
 
 
 @bp.route("/mine")
@@ -284,12 +279,8 @@ def coordination(client_id):
     else:
         can_open_full_detail = True
 
-    operational_comments = (
-        ClientComment.query.filter_by(client_id=client.id)
-        .order_by(ClientComment.created_at.desc()).all()
-        if role in {"developer", DEVELOPMENT_COORDINATOR_ROLE}
-        else _visible_operational_comments(client.id)
-    )
+    operational_comments = _visible_operational_comments(client.id)
+    plan_benefit_tasks = [task for task in visible_tasks if task.task_type == "beneficio_plan"]
     operational_attachments = _visible_operational_attachments(client.id)
 
     db.session.commit()
@@ -310,6 +301,7 @@ def coordination(client_id):
         can_comment=(current_user.has_permission("clients.comment") or role in {"developer", DEVELOPMENT_COORDINATOR_ROLE}),
         can_files=current_user.has_permission("clients.files"),
         operational_comments=operational_comments,
+        plan_benefit_tasks=plan_benefit_tasks,
         operational_attachments=operational_attachments,
         operational_comment_types=OPERATIONAL_COMMENT_ORDER,
         operational_document_categories=OPERATIONAL_DOCUMENT_LABELS,
