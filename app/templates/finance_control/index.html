@@ -2,7 +2,7 @@
 {% block title %}Finanzas por proyecto | Nexora{% endblock %}
 {% block app_content %}
 <div class="page-heading"><div><span class="eyebrow">Nexora · Control financiero</span><h1>Finanzas por proyecto</h1><p>Ingresos cobrados, egresos ejecutados y resultado del mes. No sustituye la contabilidad fiscal.</p></div>
-<div class="d-flex flex-wrap gap-2"><a class="btn btn-brand" href="{{ url_for('finance_control.movements') }}">Gastos y autorizaciones</a><a class="btn btn-light border" href="{{ url_for('finance_control.payouts') }}">Comisiones quincenales</a><a class="btn btn-outline-success" href="{{ url_for('finance_control.export_csv',year=year,month=month,project_id=selected_id) }}">Exportar CSV / Excel</a>{% if can_manage_lead_commissions %}<a class="btn btn-outline-primary" href="{{ url_for('finance_control.lead_commissions') }}">Comisiones de leads · Daniel / Oscar</a>{% endif %}<a class="btn btn-light border" href="{{ url_for('finance.dashboard') }}">Finanzas anteriores</a></div></div>
+<div class="d-flex flex-wrap gap-2"><a class="btn btn-brand" href="{{ url_for('finance_control.movements') }}">Gastos y autorizaciones</a><a class="btn btn-light border" href="{{ url_for('finance_control.payouts') }}">Comisiones quincenales</a><a class="btn btn-outline-success" href="{{ url_for('finance_control.export_csv',year=year,month=month,project_id=selected_id) }}">Exportar CSV / Excel</a>{% if can_manage_lead_commissions %}<a class="btn btn-outline-primary" href="{{ url_for('finance_control.lead_commissions') }}">Comisiones de leads · Daniel / Oscar</a>{% endif %}{% if can_manage_payment_fees %}<a class="btn btn-outline-primary" href="{{ url_for('finance_control.payment_fees') }}">Tarifas de tarjeta, Zelle y otros</a>{% endif %}<a class="btn btn-light border" href="{{ url_for('finance.dashboard') }}">Finanzas anteriores</a></div></div>
 <section class="panel-card mb-4">
 <form method="get" class="row g-2 align-items-end">
 <div class="col-md-2"><label class="form-label">Mes</label><select name="month" class="form-select">{% for m in range(1,13) %}<option value="{{ m }}" {% if month==m %}selected{% endif %}>{{ '%02d'|format(m) }}</option>{% endfor %}</select></div>
@@ -17,14 +17,15 @@
 <div class="metric-grid mb-4">
 <div class="metric-card"><span>Ingresos USD</span><strong>{{ income|money }}</strong><small>Cobros confirmados + ingresos manuales sin duplicar</small></div>
 <div class="metric-card"><span>Egresos USD</span><strong>{{ expenses|money }}</strong><small>Gastos registrados como ejecutados o pagados</small></div>
+<div class="metric-card"><span>Comisiones de cobro USD</span><strong>{{ processing_fees|money }}</strong><small>Tarjeta, Zelle y otros métodos · incluidas en egresos</small></div>
 <div class="metric-card"><span>Resultado USD</span><strong>{{ result|money }}</strong><small>Ingresos menos egresos</small></div>
 <div class="metric-card"><span>Movimientos sin proyecto</span><strong>{{ unassigned.entries|length }}</strong><small>Clasificar registros históricos cuando corresponda</small></div>
 </div>
 {% if can_consolidate %}
 <section class="panel-card mb-4"><h2 class="h5">Resultados por proyecto</h2>
-<div class="table-responsive"><table class="table modern-table"><thead><tr><th>Proyecto</th><th>Ingresos USD</th><th>Egresos USD</th><th>Resultado USD</th><th></th></tr></thead><tbody>
-{% for project in projects %}{% set x=grouped[project.id] %}<tr><td>{{ project.name }}</td><td>{{ x.income|money }}</td><td>{{ x.expenses|money }}</td><td>{{ x.result|money }}</td><td><a href="{{ url_for('finance_control.index',year=year,month=month,project_id=project.id) }}">Ver proyecto</a></td></tr>{% endfor %}
-<tr><td>Sin proyecto asignado</td><td>{{ unassigned.income|money }}</td><td>{{ unassigned.expenses|money }}</td><td>{{ unassigned.result|money }}</td><td></td></tr>
+<div class="table-responsive"><table class="table modern-table"><thead><tr><th>Proyecto</th><th>Ingresos USD</th><th>Comisiones por cobro</th><th>Egresos USD (incluyen comisiones)</th><th>Resultado USD</th><th></th></tr></thead><tbody>
+{% for project in projects %}{% set x=grouped[project.id] %}<tr><td>{{ project.name }}</td><td>{{ x.income|money }}</td><td>{{ x.processing_fees|money }}</td><td>{{ x.expenses|money }}</td><td>{{ x.result|money }}</td><td><a href="{{ url_for('finance_control.index',year=year,month=month,project_id=project.id) }}">Ver proyecto</a></td></tr>{% endfor %}
+<tr><td>Sin proyecto asignado</td><td>{{ unassigned.income|money }}</td><td>{{ unassigned.processing_fees|money }}</td><td>{{ unassigned.expenses|money }}</td><td>{{ unassigned.result|money }}</td><td></td></tr>
 </tbody></table></div></section>
 {% endif %}
 {% if nio.income or nio.expenses %}<div class="alert alert-warning">Hay importes en NIO sin convertir: ingresos C$ {{ nio.income|money }} y egresos C$ {{ nio.expenses|money }}. No se suman a los totales USD sin una tasa verificada.</div>{% endif %}
