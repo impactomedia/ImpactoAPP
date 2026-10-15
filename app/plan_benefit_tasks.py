@@ -32,15 +32,14 @@ def contracted_benefits(text):
 
 
 def _contract_for_project(project):
-    if not project.sale_id or not project.product_id:
+    if not project.product_id:
         return None
-    return (
-        ClientContract.query.filter_by(
-            client_id=project.client_id,
-            sale_id=project.sale_id,
-            product_id=project.product_id,
-        ).order_by(ClientContract.id.desc()).first()
-    )
+    query = ClientContract.query.filter_by(client_id=project.client_id, product_id=project.product_id)
+    if project.sale_id:
+        return query.filter_by(sale_id=project.sale_id).order_by(ClientContract.id.desc()).first()
+    # Contratos manuales: solo hacer atribución automática cuando no hay ambigüedad.
+    matches = query.limit(2).all()
+    return matches[0] if len(matches) == 1 else None
 
 
 def sync_project_benefits(project, contract=None):
@@ -97,7 +96,6 @@ def sync_existing_plan_benefits():
     total = 0
     projects = Project.query.filter(
         Project.product_id.isnot(None),
-        Project.sale_id.isnot(None),
     ).order_by(Project.id).all()
     for project in projects:
         total += sync_project_benefits(project)
