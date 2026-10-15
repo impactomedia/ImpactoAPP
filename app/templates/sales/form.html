@@ -65,7 +65,7 @@
         <label class="form-label fw-semibold" for="saleLeadGenerator">¿De quién provino el lead de esta venta?</label>
         <select name="lead_generator_id" id="saleLeadGenerator" class="form-select" required>
           {% for generator in lead_generators %}
-          <option value="{{ generator.id }}" {% if request.form.get('lead_generator_id', type='')|string == generator.id|string or (not request.form.get('lead_generator_id') and generator.id == company_lead_id) %}selected{% endif %}>{{ generator.name }}</option>
+          <option value="{{ generator.id }}" {% if request.form.get('lead_generator_id')|string == generator.id|string or (not request.form.get('lead_generator_id') and generator.id == company_lead_id) %}selected{% endif %}>{{ generator.name }}</option>
           {% endfor %}
         </select>
         <small class="text-secondary">Daniel, Oscar o Empresa. Este origen pertenece a la venta y no cambia el asesor responsable.</small>
