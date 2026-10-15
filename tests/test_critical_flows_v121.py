@@ -289,8 +289,7 @@ def test_quality_center_loads_for_admin(client):
     _login(client)
     response = client.get("/quality/")
     assert response.status_code == 200
-    assert b"Auditor" in response.data
-    assert b"Flujos Cr" in response.data
+    assert "Verificación de procesos esenciales".encode("utf-8") in response.data
 
 
 def test_audit_detects_hierarchy_warning(app):
