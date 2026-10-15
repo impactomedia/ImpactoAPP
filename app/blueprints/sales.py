@@ -9,6 +9,9 @@ from werkzeug.exceptions import HTTPException
 from app.commercial_plans import cortesias, VIP_CHOICES
 from app.extensions import db
 from app.helpers import audit, next_code
+from app.decorators import roles_required
+from app.lead_commission_service import available_generators, source_for_client, set_sale_generator
+from app.lead_commission_models import LeadCommissionPayout
 from app.models import (
     AccountReceivable,
     Client,
@@ -162,6 +165,8 @@ def _sale_form_context():
         "advisors": advisors,
         "today": date.today(),
         "selected_client_id": selected_client_id,
+        "lead_generators": available_generators(),
+        "company_lead_id": next(g.id for g in available_generators() if g.code == "EMPRESA"),
     }
 
 
@@ -373,6 +378,14 @@ def new_sale():
         )
         db.session.add(sale)
         db.session.flush()
+        lead_generator_id = request.form.get("lead_generator_id", type=int)
+        if lead_generator_id is None:
+            lead_generator_id = source_for_client(client).id
+        lead_assignment = set_sale_generator(sale, lead_generator_id, current_user.id)
+        audit("atribuir_lead_venta", "Sale", sale.id,
+              after={"generador": lead_assignment.generator.name,
+                     "porcentaje": str(lead_assignment.percentage),
+                     "origen": "registro_compra_adicional"})
 
         payment_mode = _payment_mode_from_request()
 
@@ -623,6 +636,8 @@ def principal_service(client_id):
             current_price=current_price,
             recognized_credit=recognized_credit,
             today=date.today(),
+            lead_generators=available_generators(),
+            selected_lead_generator_id=source_for_client(client).id,
         )
 
     try:
@@ -680,6 +695,14 @@ def principal_service(client_id):
         )
         db.session.add(sale)
         db.session.flush()
+        lead_generator_id = request.form.get("lead_generator_id", type=int)
+        if lead_generator_id is None:
+            lead_generator_id = source_for_client(client).id
+        lead_assignment = set_sale_generator(sale, lead_generator_id, current_user.id)
+        audit("atribuir_lead_venta", "Sale", sale.id,
+              after={"generador": lead_assignment.generator.name,
+                     "porcentaje": str(lead_assignment.percentage),
+                     "origen": "plan_principal_o_upgrade"})
 
         db.session.add(
             SaleItem(
@@ -834,8 +857,50 @@ def principal_service(client_id):
 @bp.route("/<int:sale_id>")
 @login_required
 def detail(sale_id):
-    sale = db.get_or_404(Sale, sale_id)
-    return render_template("sales/detail.html", sale=sale)
+    sale = _visible_sales_query().filter(Sale.id == sale_id).first_or_404()
+    assignment = sale.lead_attribution
+    suggested = source_for_client(sale.client) if not assignment else None
+    return render_template(
+        "sales/detail.html", sale=sale, lead_assignment=assignment,
+        suggested_generator=suggested,
+        lead_generators=available_generators() if _role_name() in {"superadmin", "admin"} else [],
+        lead_has_confirmed_payment=any(p.status == "confirmado" for p in sale.payments),
+        lead_has_payout=LeadCommissionPayout.query.filter_by(sale_id=sale.id).first() is not None,
+    )
+
+
+@bp.route("/<int:sale_id>/lead-generator", methods=["POST"])
+@login_required
+@roles_required("superadmin", "admin")
+def change_sale_lead_generator(sale_id):
+    sale = _visible_sales_query().filter(Sale.id == sale_id).first_or_404()
+    requested_id = request.form.get("lead_generator_id", type=int)
+    existing = sale.lead_attribution
+    if existing and existing.generator_id == requested_id:
+        flash("La venta ya está atribuida al generador seleccionado.", "info")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+    has_payment = any(p.status == "confirmado" for p in sale.payments)
+    if has_payment and _role_name() != "superadmin":
+        abort(403)
+    reason = (request.form.get("reason") or "").strip()
+    if has_payment and not reason:
+        flash("Para corregir una venta que ya tiene cobros debes justificar el cambio.", "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+    previous = {"generator": existing.generator.name, "percentage": str(existing.percentage)} if existing else None
+    try:
+        updated = set_sale_generator(sale, requested_id, current_user.id,
+                                     allow_collected=has_payment, reason=reason)
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+    audit("corregir_origen_lead_venta", "Sale", sale.id, before=previous,
+          after={"generator": updated.generator.name,
+                 "percentage": str(updated.percentage)},
+          reason=reason or "Corrección antes del primer cobro")
+    db.session.commit()
+    flash("Origen del lead de la venta actualizado. No se modificaron las metas del asesor.", "success")
+    return redirect(url_for("sales.detail", sale_id=sale.id))
 
 
 @bp.route("/<int:sale_id>/payment", methods=["POST"])
