@@ -631,3 +631,147 @@ def test_lead_generator_prospect_selection_and_permissions(app):
     with app.app_context():
         assert db.session.get(Client, cid).lead_origin.generator.name == "Daniel"
     assert browser.get("/finance-control/lead-commissions").status_code == 403
+
+
+
+def test_new_sale_explicit_origin_oscar_overrides_client_and_shows_on_sales(app):
+    from app.lead_commission_models import LeadGenerator
+    from app.lead_commission_service import assign_client_origin, net_sale_commission
+
+    browser = app.test_client()
+    login(browser, "admin")
+    with app.app_context():
+        customer = Client.query.filter_by(code="FC-1270-1").one()
+        daniel = LeadGenerator.query.filter_by(code="DANIEL").one()
+        oscar = LeadGenerator.query.filter_by(code="OSCAR").one()
+        assign_client_origin(customer, daniel.id,
+            User.query.filter_by(email="admin1270@test.local").one().id)
+        db.session.commit()
+        customer_id, oscar_id = customer.id, oscar.id
+
+    response = browser.get("/sales/new?client_id=" + str(customer_id))
+    assert response.status_code == 200
+    assert b"De qui" in response.data
+    assert b"Oscar" in response.data
+    assert b"Daniel" in response.data
+
+    response = browser.post("/sales/new", data={
+        "client_id": customer_id,
+        "lead_generator_id": oscar_id,
+        "sale_date": str(today_date(app)),
+        "product_id[]": [""],
+        "description[]": ["Video promocional"],
+        "quantity[]": ["1"],
+        "unit_price[]": ["200"],
+        "discount[]": ["0"],
+        "payment_mode": "contado",
+        "initial_payment": "200",
+        "initial_payment_date": str(today_date(app)),
+        "payment_method": "Zelle",
+    }, follow_redirects=False)
+    assert response.status_code == 302
+    assert "/sales/" in response.headers.get("Location", "")
+    with app.app_context():
+        sales = Sale.query.filter(Sale.sale_no != "FC-VEN-1270").all()
+        assert len(sales) == 1
+        sale = sales[0]
+        assert sale.lead_attribution.generator.name == "Oscar"
+        assert sale.lead_attribution.percentage == Decimal("2.000")
+        assert sale.client.lead_origin.generator.name == "Daniel"
+        assert net_sale_commission(sale)["commission"] == Decimal("4.00")
+        sale_id = sale.id
+    detail = browser.get(f"/sales/{sale_id}")
+    assert detail.status_code == 200
+    assert b"Origen del lead de esta venta" in detail.data
+    assert b"Oscar" in detail.data
+    listing = browser.get("/sales/")
+    assert listing.status_code == 200
+    assert b"Origen del lead" in listing.data
+
+
+def test_existing_sale_paid_origin_correction_superadmin_only_and_audited(app):
+    from app.lead_commission_models import LeadGenerator, LeadCommissionPayout
+    from app.lead_commission_service import net_sale_commission
+    from app.models import AuditLog
+
+    browser = app.test_client()
+    with app.app_context():
+        sale = Sale.query.filter_by(sale_no="FC-VEN-1270").one()
+        sale_id = sale.id
+        daniel_id = LeadGenerator.query.filter_by(code="DANIEL").one().id
+        oscar_id = LeadGenerator.query.filter_by(code="OSCAR").one().id
+        chief_id = User.query.filter_by(email="chief1270@test.local").one().id
+
+    login(browser, "admin")
+    assert browser.post(f"/sales/{sale_id}/lead-generator", data={
+        "lead_generator_id": daniel_id, "reason": "Corrected source"
+    }).status_code == 403
+    browser.post("/auth/logout")
+    login(browser, "chief")
+    missing_reason = browser.post(f"/sales/{sale_id}/lead-generator", data={
+        "lead_generator_id": daniel_id,
+    })
+    assert missing_reason.status_code == 302
+    with app.app_context():
+        assert db.session.get(Sale, sale_id).lead_attribution is None
+
+    corrected = browser.post(f"/sales/{sale_id}/lead-generator", data={
+        "lead_generator_id": daniel_id,
+        "reason": "Cliente de base de Daniel",
+    })
+    assert corrected.status_code == 302
+    with app.app_context():
+        sale = db.session.get(Sale, sale_id)
+        assert sale.lead_attribution.generator.name == "Daniel"
+        assert sale.lead_attribution.percentage == Decimal("4.000")
+        assert net_sale_commission(sale)["commission"] == Decimal("16.00")
+        audit_row = AuditLog.query.filter_by(
+            action="corregir_origen_lead_venta"
+        ).order_by(AuditLog.id.desc()).first()
+        assert audit_row is not None
+        db.session.add(LeadCommissionPayout(
+            sale_id=sale_id, generator_id=daniel_id,
+            project_id=sale.advisor.advisor_project_id,
+            amount=16, paid_on=local_today(), paid_by_id=chief_id,
+        ))
+        db.session.commit()
+
+    response = browser.post(f"/sales/{sale_id}/lead-generator", data={
+        "lead_generator_id": oscar_id, "reason": "Cambio tardío",
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        sale = db.session.get(Sale, sale_id)
+        assert sale.lead_attribution.generator.name == "Daniel"
+    assert b"bloqueada" in browser.get(f"/sales/{sale_id}").data.lower()
+
+
+def test_sale_lead_editor_permissions_for_advisor_and_unpaid_sale(app):
+    from app.lead_commission_models import LeadGenerator
+    browser = app.test_client()
+    with app.app_context():
+        adviser = User.query.filter_by(email="advisor1270@test.local").one().collaborator
+        customer = Client.query.filter_by(code="FC-1270-1").one()
+        sale = Sale(
+            sale_no="FC-UNPAID-1273",
+            client_id=customer.id, advisor_id=adviser.id,
+            sale_date=local_today(), status="confirmada",
+            currency="USD", total=100, balance=100, amount_paid=0,
+        )
+        db.session.add(sale)
+        db.session.commit()
+        sale_id = sale.id
+        oscar_id = LeadGenerator.query.filter_by(code="OSCAR").one().id
+
+    login(browser, "advisor")
+    assert browser.post(f"/sales/{sale_id}/lead-generator", data={
+        "lead_generator_id": oscar_id,
+    }).status_code == 403
+    browser.post("/auth/logout")
+    login(browser, "admin")
+    response = browser.post(f"/sales/{sale_id}/lead-generator", data={
+        "lead_generator_id": oscar_id,
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        assert db.session.get(Sale, sale_id).lead_attribution.generator.name == "Oscar"
