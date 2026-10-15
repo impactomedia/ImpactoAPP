@@ -11,6 +11,7 @@ from app.development_scope import (
     development_projects_query,
     development_team_query,
 )
+from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.helpers import audit, next_code
 from app.models import ChangeRequest, Client, Collaborator, Notification, Project, Task, TaskComment
@@ -52,7 +53,7 @@ def _visible_projects_query():
     role = _role_name()
     collaborator = current_user.collaborator
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_scope_condition
         return query.filter(Project.client.has(client_scope_condition()))
 
@@ -85,10 +86,10 @@ def _visible_tasks_query():
     role = _role_name()
     collaborator = current_user.collaborator
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_scope_condition
         return query.filter(Task.client.has(client_scope_condition()))
-    if role in {"superadmin", "manager"}:
+    if role in {"superadmin", "manager"} or (role == "admin" and not is_project_admin()):
         return query
     if not collaborator:
         return query.filter(Task.id == -1)
@@ -142,7 +143,7 @@ def _visible_clients_for_task():
     role = _role_name()
     collaborator = current_user.collaborator
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_scope_condition
         query = query.filter(client_scope_condition())
     elif role == "advisor" and collaborator:
@@ -172,7 +173,7 @@ def _assignable_collaborators():
 
     query = Collaborator.query.filter_by(status="activo")
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import project_id_for_admin
         query = query.filter(Collaborator.advisor_project_id == (project_id_for_admin() or -1))
     elif role == "supervisor" and collaborator:
