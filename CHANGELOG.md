@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.28.0 — Vigencia comercial de seguimientos (30 días)
+
+- Se reserva cada seguimiento al asesor responsable durante 30 días desde el registro o la última actividad documentada (llamada, WhatsApp, correo, reunión o nota).
+- Vencidos 30 días sin nueva actividad, otro asesor del mismo proyecto comercial puede recuperar el registro al intentar ingresarlo; se conserva el historial y se registra el cambio de responsable.
+- Las transferencias reinician la protección. Antes del vencimiento, una transferencia manual requiere autorización excepcional de Superadministración con justificación.
+- Teléfonos con diferentes formatos y +1, nombre comercial y correo se cotejan para detectar registros existentes; no se permiten duplicados y las coincidencias múltiples requieren revisión.
+- Los clientes convertidos no se liberan automáticamente, y un seguimiento nunca se adjudica entre proyectos IMPACTO y NOVAX.
+- No se requieren nuevas tablas ni cambios de esquema. Se añadieron pruebas de vigencia, contacto, recuperación y permisos.
+
 ## 1.27.9 — Revisión final de textos y consistencia visual
 
 - Unificación de nombres de navegación: Seguimientos, Embudo de ventas y Finanzas históricas.

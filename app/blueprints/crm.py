@@ -6,6 +6,10 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 
 from app.decorators import roles_required
+from app.crm_exclusivity import (
+    classify_match, is_protected, matching_contacts, protected_until,
+    recover_followup, same_business_project,
+)
 from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.helpers import audit, next_code
@@ -195,26 +199,6 @@ def new_prospect():
             flash("El presupuesto estimado no puede ser negativo.", "danger")
             return render_template("crm/prospect_form.html", collaborators=collaborators, lead_generators=available_generators())
 
-        duplicate_conditions = [Client.business_name == business_name]
-        if phone:
-            duplicate_conditions.append(Client.phone == phone)
-        if email:
-            duplicate_conditions.append(Client.email == email)
-        possible = Client.query.filter(or_(*duplicate_conditions)).first()
-        if possible:
-            visible_duplicate = visible_clients().filter(Client.id == possible.id).first()
-            if visible_duplicate:
-                flash(
-                    f"Posible duplicado: {possible.business_name}. Revisa el registro existente antes de continuar.",
-                    "warning",
-                )
-            else:
-                flash(
-                    "Ya existe un registro coincidente fuera de tu cartera. Solicita una revisión antes de crear un duplicado.",
-                    "warning",
-                )
-            return render_template("crm/prospect_form.html", collaborators=collaborators, lead_generators=available_generators())
-
         owner_id = request.form.get("owner_id", type=int)
         role = _role_name()
         if role == "advisor" and current_user.collaborator:
@@ -223,6 +207,42 @@ def new_prospect():
             abort(403)
         elif not owner_id and current_user.collaborator:
             owner_id = current_user.collaborator.id
+
+        # La exclusividad no se evade registrando el mismo teléfono con guiones,
+        # espacios o prefijo +1. Nunca se crea otro registro coincidente.
+        owner = db.session.get(Collaborator, owner_id) if owner_id else None
+        matches = matching_contacts(business_name, phone, email)
+        if matches:
+            # Con varias coincidencias, no hacer reasignaciones automáticas
+            # que puedan mezclar historiales distintos.
+            if len(matches) == 1:
+                existing = matches[0]
+                state = classify_match(existing, owner)
+                if state == "own" and visible_clients().filter(Client.id == existing.id).first():
+                    flash("Este seguimiento ya está en tu cartera. Abre el registro existente.", "info")
+                    return redirect(url_for("crm.detail", client_id=existing.id))
+                if state == "recoverable":
+                    previous_id = recover_followup(existing, owner, current_user.id)
+                    audit("recuperar_seguimiento_vencido", "Client", existing.id,
+                          before={"owner_id": previous_id},
+                          after={"owner_id": owner.id},
+                          reason="30 días sin actividad comercial registrada")
+                    db.session.commit()
+                    flash(
+                        "Seguimiento recuperado y asignado a tu cartera. "
+                        "Se conservan las actividades anteriores y comienza una nueva vigencia de 30 días.",
+                        "success",
+                    )
+                    return redirect(url_for("crm.detail", client_id=existing.id))
+                if state == "existing_client":
+                    flash("El contacto ya figura como cliente; no puede volver a registrarse como seguimiento.", "warning")
+                elif state == "reserved":
+                    flash("El seguimiento pertenece a otra cartera y está protegido por actividad dentro de los últimos 30 días.", "warning")
+                else:
+                    flash("El contacto ya existe y no está disponible para registro. Solicita revisión a Superadministración.", "warning")
+            else:
+                flash("Hay varios registros coincidentes. Solicita una revisión antes de continuar.", "warning")
+            return render_template("crm/prospect_form.html", collaborators=collaborators, lead_generators=available_generators())
 
         generators = available_generators()
         chosen_generator = request.form.get("lead_generator_id", type=int)
@@ -288,6 +308,8 @@ def detail(client_id):
         "crm/detail.html", client=client, interactions=interactions,
         quotes=quotes, stages=STAGES, timeline=timeline,
         note_edits=note_edits, timeline_count=len(timeline),
+        protected_until=protected_until(client),
+        followup_protected=is_protected(client),
         lead_generator=source_for_client(client), lead_generators=available_generators(),
     )
 
@@ -418,6 +440,20 @@ def transfer(client_id):
     if new_owner_id == client.owner_id:
         flash("El prospecto ya está asignado a ese responsable.", "info")
         return redirect(url_for("crm.detail", client_id=client.id))
+
+    new_owner = db.session.get(Collaborator, new_owner_id)
+    if client.record_type != "seguimiento":
+        abort(403)
+    if not same_business_project(client, new_owner):
+        flash("No se pueden transferir seguimientos entre proyectos comerciales diferentes.", "danger")
+        return redirect(url_for("crm.detail", client_id=client.id))
+    if is_protected(client):
+        if _role_name() != "superadmin":
+            flash("Este seguimiento sigue protegido por 30 días desde su última actividad.", "warning")
+            return redirect(url_for("crm.detail", client_id=client.id))
+        if not (request.form.get("reason") or "").strip():
+            flash("Las transferencias anticipadas de Superadministración requieren un motivo.", "warning")
+            return redirect(url_for("crm.detail", client_id=client.id))
 
     db.session.add(
         OwnershipHistory(
