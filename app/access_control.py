@@ -344,6 +344,7 @@ def _enforce_project_admin_boundary(endpoint):
     # Importaciones masivas: requieren validación de tenant fila por fila.
     # RRHH, nómina, finanzas, reportes y ajustes globales son Superadministración.
     if endpoint in {
+        "operations.development_dashboard",
         "clients.import_csv", "clients.export_csv",
         "crm.export_csv", "crm.export",
     }:
