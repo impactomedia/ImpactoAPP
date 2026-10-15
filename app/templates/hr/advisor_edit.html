@@ -1,0 +1,60 @@
+{% extends "app_base.html" %}
+{% block title %}Editar perfil del asesor | Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div><span class="eyebrow">Administración del equipo comercial</span>
+    <h1>Editar perfil · {{ advisor.user.name }}</h1>
+    <p>{{ advisor.advisor_project.name if advisor.advisor_project else 'Sin proyecto' }} · {{ advisor.supervisor.user.name if advisor.supervisor and advisor.supervisor.user else 'Sin supervisor asignado' }}</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('hr.advisors') }}">Volver a los asesores</a>
+</div>
+<section class="panel-card">
+  <h2 class="h5 mb-2">Datos laborales y salario fijo</h2>
+  <p class="text-secondary small">Los cambios quedan registrados con el usuario que los realizó. El rol, el proyecto comercial y el acceso a la cuenta no se modifican desde este formulario.</p>
+  <form method="post" class="row g-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="col-md-6">
+      <label class="form-label" for="advisorName">Nombre completo</label>
+      <input id="advisorName" class="form-control" name="name" maxlength="160" value="{{ advisor.user.name }}" required>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Correo de acceso</label>
+      <input class="form-control" value="{{ advisor.user.email }}" disabled>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label" for="advisorPhone">Teléfono</label>
+      <input id="advisorPhone" class="form-control" name="phone" maxlength="50" value="{{ advisor.phone or '' }}">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label" for="advisorContract">Tipo de contrato</label>
+      <input id="advisorContract" class="form-control" name="contract_type" maxlength="80" value="{{ advisor.contract_type or '' }}">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="advisorSalary">Salario fijo</label>
+      <div class="input-group"><span class="input-group-text">$</span>
+        <input id="advisorSalary" class="form-control" type="number" name="base_salary" min="0" step="0.01" required value="{{ advisor.base_salary or 0 }}">
+      </div>
+      <small class="text-secondary">Este valor es independiente de las comisiones quincenales.</small>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="advisorMode">Modalidad laboral</label>
+      <select id="advisorMode" class="form-select" name="work_mode">
+      {% for value,label in [('presencial','Presencial'),('remoto','Remoto'),('hibrido','Híbrido')] %}
+        <option value="{{ value }}" {% if advisor.work_mode == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="advisorStatus">Estado laboral</label>
+      <select id="advisorStatus" class="form-select" name="status">
+      {% for value,label in [('activo','Activo'),('inactivo','Inactivo'),('suspendido','Suspendido')] %}
+        <option value="{{ value }}" {% if advisor.status == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+      </select>
+    </div>
+    <div class="col-12">
+      <button class="btn btn-brand"><i class="bi bi-save me-1"></i> Guardar cambios del asesor</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
