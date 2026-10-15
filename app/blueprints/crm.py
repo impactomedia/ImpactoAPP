@@ -57,7 +57,10 @@ def visible_clients():
     query = Client.query
     role = _role_name()
     collaborator = current_user.collaborator
-    if role == "advisor" and collaborator:
+    if role == "admin":
+        from app.project_admin_scope import client_scope_condition
+        query = query.filter(client_scope_condition())
+    elif role == "advisor" and collaborator:
         query = query.filter(Client.owner_id == collaborator.id)
     elif role == "supervisor" and collaborator:
         query = query.filter(Client.owner_id.in_(_team_ids()))
@@ -69,7 +72,10 @@ def _assignable_owners():
     role = _role_name()
     collaborator = current_user.collaborator
 
-    if role == "advisor" and collaborator:
+    if role == "admin":
+        from app.project_admin_scope import project_id_for_admin
+        query = query.filter(Collaborator.advisor_project_id == (project_id_for_admin() or -1))
+    elif role == "advisor" and collaborator:
         query = query.filter(Collaborator.id == collaborator.id)
     elif role == "supervisor" and collaborator:
         query = query.filter(Collaborator.id.in_(_team_ids()))
