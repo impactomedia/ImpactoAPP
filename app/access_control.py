@@ -194,6 +194,9 @@ def _commercial_client_allowed(client):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
+    if role == "admin":
+        from app.project_admin_scope import client_allowed
+        return client_allowed(client)
     if role not in {"advisor", "supervisor"}:
         return True
     if not collaborator:
@@ -209,6 +212,9 @@ def _sale_allowed(sale):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
+    if role == "admin":
+        from app.project_admin_scope import client_allowed
+        return client_allowed(sale.client)
     if role not in {"advisor", "supervisor"}:
         return True
     if not collaborator:
@@ -225,7 +231,10 @@ def _project_allowed(project):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
-    if role in {"superadmin", "admin", "manager"}:
+    if role == "admin":
+        from app.project_admin_scope import client_allowed
+        return client_allowed(project.client)
+    if role in {"superadmin", "manager"}:
         return True
 
     if role == DEVELOPMENT_COORDINATOR_ROLE:
@@ -247,7 +256,10 @@ def _task_allowed(task):
     role = current_user.role.name if current_user.role else ""
     collaborator = current_user.collaborator
 
-    if role in {"superadmin", "admin", "manager"}:
+    if role == "admin":
+        from app.project_admin_scope import client_allowed
+        return bool(task.client and client_allowed(task.client))
+    if role in {"superadmin", "manager"}:
         return True
     if not collaborator:
         return False
@@ -304,6 +316,78 @@ def _task_write_allowed(task):
     return False
 
 
+def _enforce_project_admin_boundary(endpoint):
+    """Límite de empresa aplicado incluso si se cambia manualmente el ID en la URL.
+
+    Los módulos con resultados agregados globales se mantienen deshabilitados
+    mientras no tengan consultas multiempresa auditadas. No se confía en menús.
+    """
+    from app.project_admin_scope import (
+        client_allowed, collaborator_allowed, project_id_for_admin,
+    )
+    from app.models import (
+        Client, Collaborator, Payment, Project, Quote, Renewal, Sale, Task,
+    )
+
+    # Un administrador sin proyecto queda suspendido del acceso a datos.
+    if request.blueprint == "auth":
+        return
+    if request.endpoint == "dashboard.index":
+        return
+    if not project_id_for_admin():
+        abort(403)
+
+    if request.blueprint not in {"crm", "clients", "clients_v3", "sales", "operations"}:
+        abort(403)
+
+    # Importaciones masivas: requieren validación de tenant fila por fila.
+    # RRHH, nómina, finanzas, reportes y ajustes globales son Superadministración.
+    if endpoint in {
+        "clients.import_csv", "clients.export_csv",
+        "crm.export_csv", "crm.export",
+    }:
+        abort(403)
+
+    args = request.view_args or {}
+
+    def value_of(key):
+        raw = args.get(key)
+        if raw is None and request.method != "GET":
+            raw = request.form.get(key)
+        try:
+            return int(raw) if raw not in (None, "") else None
+        except (TypeError, ValueError):
+            abort(403)
+
+    def ensure_client(client):
+        if client is not None and not client_allowed(client):
+            abort(403)
+
+    for key in ("client_id",):
+        record_id = value_of(key)
+        if record_id:
+            ensure_client(db.session.get(Client, record_id))
+
+    for key, cls in (
+        ("sale_id", Sale), ("quote_id", Quote), ("payment_id", Payment),
+        ("renewal_id", Renewal), ("project_id", Project), ("task_id", Task),
+    ):
+        record_id = value_of(key)
+        if record_id:
+            row = db.session.get(cls, record_id)
+            if row is None:
+                abort(403)
+            ensure_client(row.client if hasattr(row, "client") else row.project.client)
+
+    # Impedir reasignar clientes, tareas o ventas a miembros de otra empresa.
+    if request.method != "GET":
+        for key in ("owner_id", "advisor_id", "assignee_id",
+                    "coordinator_id", "collaborator_id", "new_owner_id"):
+            record_id = value_of(key)
+            if record_id and not collaborator_allowed(db.session.get(Collaborator, record_id)):
+                abort(403)
+
+
 def _enforce_record_scope(endpoint):
     """Evita saltarse filtros de propiedad escribiendo IDs directamente en la URL."""
     if not current_user.is_authenticated:
@@ -311,6 +395,9 @@ def _enforce_record_scope(endpoint):
 
     role = current_user.role.name if current_user.role else ""
     args = request.view_args or {}
+
+    if role == "admin":
+        _enforce_project_admin_boundary(endpoint)
 
     # CRM: asesor = su cartera; supervisor = su equipo.
     if request.blueprint == "crm":
