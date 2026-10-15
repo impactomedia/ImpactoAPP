@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.27.6 — Nexora · Desarrollo, entregables y proyectos empresariales
+
+- Desarrollo consulta comentarios internos y el historial de los clientes asignados y puede registrar notas con su autor real.
+- Se generan tareas independientes de los beneficios contratados y cortesías seleccionadas, sin duplicar tareas completadas.
+- El Centro de coordinación muestra beneficios pendientes y completados con acceso a cada tarea.
+- Administradores asociados a un proyecto comercial (IMPACTO/NOVAX) ven únicamente clientes, ventas y operaciones de su ámbito.
+- Módulos con datos financieros o globales no segmentados quedan restringidos para estos administradores hasta contar con vistas aisladas.
+- Un administrador sin proyecto asignado no puede consultar clientes ni operaciones; asignar el proyecto desde Superadministración antes del despliegue.
+- Incluye pruebas de permisos, historial y cumplimiento de beneficios.
+
 ## 1.12.0 — Impacto Nexora · Bloque 5: Timeline automático del expediente
 
 - La ficha del cliente obtiene un Timeline automático único construido desde los módulos reales, sin tabla paralela ni duplicación manual.
