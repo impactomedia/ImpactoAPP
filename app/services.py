@@ -536,6 +536,8 @@ def generate_principal_operational_work(sale, product, previous_contract=None, c
                 due_at=datetime.utcnow() + timedelta(days=3),
             )
         )
+    from app.plan_benefit_tasks import sync_project_benefits
+    sync_project_benefits(project, contract)
     return contract
 
 
@@ -549,6 +551,7 @@ def generate_operational_work(sale):
     """
     for item in sale.items:
         product = item.product
+        contract = None
 
         # Contratos de mantenimiento y Community Manager: renovaciones mensuales
         # independientes, sin reemplazar el plan principal del cliente.
@@ -662,6 +665,10 @@ def generate_operational_work(sale):
                     due_at=datetime.utcnow() + timedelta(days=3),
                 )
             )
+
+        if contract is not None:
+            from app.plan_benefit_tasks import sync_project_benefits
+            sync_project_benefits(project, contract)
 
 
 def update_print_order_status(order):
