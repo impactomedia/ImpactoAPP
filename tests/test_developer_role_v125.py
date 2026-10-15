@@ -89,7 +89,7 @@ def test_developer_exact_permissions(app):
     with app.app_context():
         user=User.query.filter_by(email="role1@test.local").one()
         assert user.role.name == "developer"
-        allowed={"clients.view","tasks.view","tasks.update"}
+        allowed={"clients.view","clients.comment","tasks.view","tasks.update"}
         assert {p.code for p in user.role.permissions} == allowed
         assert user.has_permission("tasks.update")
         assert not user.has_permission("clients.edit")
@@ -108,7 +108,7 @@ def test_developer_can_read_only_assigned_client(client,app):
     assert client.get(f"/clients/{ids['client1']}/coordination").status_code==200
     assert client.get(f"/clients/{ids['client2']}/coordination").status_code==403
     assert client.get(f"/clients/{ids['client1']}").status_code==403
-    assert client.post(f"/clients/{ids['client1']}/coordination/comment",data={"body":"intento"}).status_code==403
+    assert client.post(f"/clients/{ids['client1']}/coordination/comment",data={"body":"Seguimiento de desarrollo","process_type":"Desarrollo web"}).status_code==302
 
 
 def test_developer_can_update_only_own_task(client,app):
