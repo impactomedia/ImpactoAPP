@@ -266,7 +266,7 @@ def test_planning_index_is_available_to_advisor(client):
     response = client.get("/planning/")
     assert response.status_code == 200
     assert b"Planificaci" in response.data
-    assert b"Agenda CRM" in response.data
+    assert b"Agenda de seguimientos" in response.data
 
 
 def test_crm_agenda_respects_advisor_portfolio(client):
