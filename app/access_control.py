@@ -261,7 +261,7 @@ def _task_allowed(task):
     if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_allowed
         return bool(task.client and client_allowed(task.client))
-    if role in {"superadmin", "manager"}:
+    if role in {"superadmin", "manager"} or (role == "admin" and not is_project_admin()):
         return True
     if not collaborator:
         return False
