@@ -477,7 +477,7 @@ def build_client_timeline(client, can_financial=False):
         add(
             comment.created_at,
             "Comentario interno",
-            f"{comment.user.name if comment.user else 'Usuario'} · {comment.process_type}",
+            f"{comment.user.name if comment.user and comment.user.name else 'Usuario no disponible'} · {comment.process_type}",
             comment.body,
         )
 
