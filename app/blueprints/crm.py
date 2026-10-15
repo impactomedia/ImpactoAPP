@@ -6,6 +6,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 
 from app.decorators import roles_required
+from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.helpers import audit, next_code
 from app.lead_commission_service import available_generators, assign_client_origin, source_for_client
@@ -57,7 +58,7 @@ def visible_clients():
     query = Client.query
     role = _role_name()
     collaborator = current_user.collaborator
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import client_scope_condition
         query = query.filter(client_scope_condition())
     elif role == "advisor" and collaborator:
@@ -72,7 +73,7 @@ def _assignable_owners():
     role = _role_name()
     collaborator = current_user.collaborator
 
-    if role == "admin":
+    if role == "admin" and is_project_admin():
         from app.project_admin_scope import project_id_for_admin
         query = query.filter(Collaborator.advisor_project_id == (project_id_for_admin() or -1))
     elif role == "advisor" and collaborator:
