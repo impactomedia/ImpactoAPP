@@ -619,7 +619,10 @@ def principal_service(client_id):
     client = _visible_clients_query().filter(Client.id == client_id).first_or_404()
     plans = (
         ProductService.query
-        .filter_by(active=True, category="paquete")
+        .filter(
+            ProductService.active.is_(True),
+            ProductService.category.in_(("paquete", "community_manager")),
+        )
         .order_by(ProductService.base_price, ProductService.name)
         .all()
     )
