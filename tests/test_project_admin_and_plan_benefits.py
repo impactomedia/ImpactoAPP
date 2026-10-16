@@ -238,3 +238,46 @@ def test_project_admin_can_only_renew_services_in_own_company(prepared):
         "payment_mode": "contado", "payment_date": date.today().isoformat(),
         "amount": "120", "payment_method": "Zelle",
     }).status_code == 403
+
+
+
+def test_edit_sales_obeys_business_project_and_advisor_cartridge(prepared):
+    from app.models import Sale, SaleItem, AuditLog
+    app, accounts, novax_id, impacto_id, *_ = prepared
+    with app.app_context():
+        rows = []
+        for idx, (customer_id, advisor) in enumerate((
+            (novax_id, accounts["Novax Asesor"][1]),
+            (impacto_id, accounts["Impacto Asesor"][1]),
+        ), 1):
+            sale = Sale(sale_no=f"SALE-PROJECT-{idx}",client_id=customer_id,
+                        advisor_id=advisor,sale_date=date.today(),
+                        status="confirmada",currency="USD",total=40,amount_paid=0,balance=40)
+            db.session.add(sale)
+            db.session.flush()
+            item=SaleItem(sale_id=sale.id,description="Accesorio comercial",
+                          quantity=1,list_price=40,discount=0,unit_price=40,total=40)
+            db.session.add(item)
+            rows.append((sale.id,item))
+        db.session.commit()
+        novax_sale, impacto_sale = rows[0][0],rows[1][0]
+        impacto_item = rows[1][1].id
+
+    browser=app.test_client()
+    login(browser,accounts["Novax Admin"][2])
+    assert browser.get(f"/sales/{novax_sale}/edit").status_code == 200
+    assert browser.get(f"/sales/{impacto_sale}/edit").status_code in (403,404)
+    denied=browser.post(f"/sales/{impacto_sale}/edit",data={
+        "sale_date":"2026-03-20",
+        f"item_description_{impacto_item}":"Accesorio editado indebidamente",
+        "reason":"Intento de cambio fuera del proyecto",
+    })
+    assert denied.status_code in (403,404)
+    with app.app_context():
+        assert db.session.get(Sale, impacto_sale).sale_date==date.today()
+        assert AuditLog.query.filter_by(action="editar_venta",entity_id=str(impacto_sale)).count()==0
+
+    browser.post("/auth/logout")
+    login(browser,accounts["Novax Asesor"][2])
+    assert browser.get(f"/sales/{novax_sale}/edit").status_code == 200
+    assert browser.get(f"/sales/{impacto_sale}/edit").status_code in (403,404)
