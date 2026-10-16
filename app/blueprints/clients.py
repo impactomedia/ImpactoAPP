@@ -1501,7 +1501,7 @@ def update_contract(client_id, contract_id):
         if not months or not 1 <= months <= 60:
             flash("Esencial Plus requiere una duración válida entre 1 y 60 meses.", "danger")
             return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
-    if contract.product and is_principal_product(contract.product):
+    if contract.product and is_principal_product(contract.product) and (contract.principal or contract.product.category == "paquete"):
         ends_on = contract_end(contract.product, starts_on, duration_months=months)
     else:
         ends_on = _date_or_none(request.form.get("ends_on"))
