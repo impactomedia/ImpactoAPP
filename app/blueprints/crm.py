@@ -544,7 +544,7 @@ def new_quote(client_id):
                     flash("Uno de los productos seleccionados ya no está disponible.", "danger")
                     return render_template("crm/quote_form.html", client=client, products=products)
                 product = db.session.get(ProductService, product_id)
-                if product and product.category == "paquete":
+                if product and product.category in {"paquete", "community_manager"} and product.name != "Impacto Esencial Plus":
                     if product.base_price is None or Decimal(str(product.base_price)) <= 0:
                         db.session.rollback()
                         flash(f"El paquete {product.name} todavía no tiene precio fijo configurado.", "danger")
