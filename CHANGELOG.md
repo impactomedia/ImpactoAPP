@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.28.4 — Importación segura de fechas y planes históricos de Excel
+
+- Se reconocen planes antiguos como «Esencial - 6 meses», variantes de Community Manager y los planes actuales, sin convertir accesorios en servicios principales.
+- La activación exacta del Excel se conserva. Si falta vencimiento pero el catálogo define la duración, se calcula con meses reales (no desde la fecha de importación).
+- Contratos de propiedad indefinida solo se importan sin vencimiento cuando el catálogo lo permite.
+- Si el vencimiento original contradice el plazo, indica «PERMANENTE» para un contrato limitado, o está incompleto/incierto, queda en revisión y no crea automáticamente un contrato erróneo.
+- Esencial Plus requiere conocer precio y duración pactados: no se inventan sus condiciones financieras.
+- Vista previa muestra activación, vencimiento original o calculado y motivos de discrepancias.
+- Se amplían alias de asesoras: Roxana→Lia Mendez, Jessenia→Jessy Montalvan, Jennifer/Jennyfher/Jennyfer→Diana Gutierrez, Rachel→Nicole Cuadra. Se exige coincidencia inequívoca con una cuenta activa.
+- Se mantienen sin importar automáticamente las ventas, pagos y negociaciones históricas, que requieren conciliación.
+- Incluye pruebas automatizadas de fechas, contratos sin duplicados y asignación de responsables.
+
 ## 1.28.3 — Corrección de ventas históricas con auditoría
 
 - Botón «Editar venta» para quienes tengan permiso sales.edit dentro de su cartera o proyecto.
