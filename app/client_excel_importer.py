@@ -21,11 +21,14 @@ from app.client_v2_models import (
     ClientPlatform,
 )
 from app.client_excel_parser import normalize_text
+from app.commercial_plans import OWNED_PLANS, contract_end, is_custom_plan
 
 
 _OWNER_ALIAS_GROUPS = [
     {"jessenia", "jessy"},
-    {"roxana", "roxy"},
+    {"roxana", "roxy", "lia"},
+    {"jennifer", "jennyfher", "jennyfer", "diana"},
+    {"rachel", "rachell", "nicole"},
 ]
 
 
@@ -147,69 +150,109 @@ def _client_match(payload):
 
 
 def _product_mapping(plan_label):
+    """Solo equivalencias explícitas del catálogo. No adivinar acuerdos."""
     norm = normalize_text(plan_label)
     if not norm:
-        return None, "none", "Sin plan"
+        return None, "none", "Sin plan en el Excel"
+
+    active_products = ProductService.query.filter_by(active=True).all()
+    exact = [p for p in active_products if normalize_text(p.name) == norm]
+    if len(exact) == 1:
+        return exact[0], "high", "Coincidencia exacta con el catálogo"
 
     target = None
-    confidence = "none"
-    reason = "Plan no mapeado"
-
-    if "golden" in norm:
-        target, confidence, reason = "Golden", "high", "Golden detectado"
+    confidence = "high"
+    reason = "Nombre histórico reconocido"
+    if "esencial plus" in norm:
+        target = "Impacto Esencial Plus"
+        confidence = "manual"
+        reason = "Esencial Plus: precio individual y duración requieren validar el contrato"
+    elif "community manager" in norm or "comunity manager" in norm:
+        tier = next(
+            (label for label in ("Esencial", "Silver", "Golden")
+             if re.search(r"\b" + label.lower() + r"\b", norm)), None
+        )
+        social_only = "solo redes" in norm or "solo social" in norm
+        full = any(s in norm for s in ("website", "web", "google", "completo", "todas las plataformas"))
+        if not tier or social_only == full:
+            return None, "manual", "Community Manager: confirma nivel y alcance (solo redes o completo)"
+        scope = "Solo Redes Sociales" if social_only else "Website + GBP + Redes Sociales"
+        target = f"Community Manager {tier} - {scope}"
     elif re.search(r"\bvip\b", norm):
-        target, confidence, reason = "VIP", "high", "VIP detectado"
+        target = "Impacto VIP"
+    elif re.search(r"\bgolden\b", norm):
+        target = "Impacto Golden"
+    elif "esencial" in norm and re.search(r"\b6\s*meses?\b", norm):
+        target = "Impacto Esencial - 6 Meses"
+    elif norm in {"6 meses", "plan 6 meses", "paquete 6 meses"}:
+        target = "Impacto Esencial - 6 Meses"
     elif "accesor" in norm:
-        target, confidence, reason = (
-            "Accesorios",
-            "high",
-            "Accesorios detectado",
-        )
-    elif "3 meses" in norm:
-        target, confidence, reason = (
-            "3 Meses",
-            "high",
-            "Paquete 3 Meses detectado",
-        )
-    elif "8 meses" in norm:
-        target, confidence, reason = (
-            "8 Meses",
-            "high",
-            "Paquete 8 Meses detectado",
-        )
-    elif norm.strip() == "6 meses":
-        target, confidence, reason = (
-            "6 Meses",
-            "high",
-            "Paquete 6 Meses detectado",
-        )
-    elif "community" in norm:
-        target, confidence, reason = (
-            "Redes Sociales",
-            "medium",
-            "Community Manager se relaciona con Redes Sociales",
-        )
-    elif "esencial plus" in norm:
-        target, confidence, reason = (
-            None,
-            "manual",
-            "Esencial Plus requiere revisión manual",
-        )
-    elif "esencial" in norm:
-        target, confidence, reason = (
-            "6 Meses",
-            "medium",
-            "Esencial se relaciona de forma operativa con 6 Meses",
-        )
+        return None, "manual", "Accesorios son una compra; no se crea contrato principal automáticamente"
+    else:
+        return None, "manual", "Plan no identificado inequívocamente en el catálogo"
 
-    if not target:
-        return None, confidence, reason
+    matched = [p for p in active_products if p.name == target]
+    if len(matched) != 1:
+        return None, "manual", f"El producto {target} no está disponible en el catálogo"
+    return matched[0], confidence, reason
 
-    product = ProductService.query.filter_by(name=target).first()
+
+def _contract_dates(payload, product):
+    """Decide la vigencia sin sustituir fechas reales ni inventar vencimientos."""
+    starts_on = _date_from_iso(payload.get("plan_start"))
+    given_end = _date_from_iso(payload.get("plan_end"))
+    end_kind = payload.get("plan_end_kind") or ("date" if given_end else "missing")
+
+    if not starts_on or payload.get("plan_start_precision") != "exact":
+        return starts_on, given_end, "review", "La activación no tiene una fecha exacta verificable"
+
     if not product:
-        return None, "manual", f"No existe el producto {target} en catálogo"
+        return starts_on, given_end, "review", "Falta identificar el plan contratado"
 
-    return product, confidence, reason
+    if is_custom_plan(product):
+        return starts_on, given_end, "review", (
+            "Esencial Plus requiere precio y meses pactados; no se inferirán del Excel"
+        )
+
+    if product.category not in {"paquete", "community_manager"}:
+        return starts_on, given_end, "review", "No es un contrato principal renovable reconocido"
+
+    indefinite = product.name in OWNED_PLANS
+    expected_end = contract_end(product, starts_on)
+
+    if end_kind == "unrecognized":
+        return starts_on, given_end, "review", "El vencimiento del Excel no es reconocible"
+
+    if end_kind == "permanent":
+        if indefinite:
+            return starts_on, None, "permanent", "Contrato de propiedad sin vencimiento"
+        return starts_on, None, "review", (
+            "El Excel indica PERMANENTE, pero el plan tiene duración limitada"
+        )
+
+    if indefinite:
+        if given_end:
+            return starts_on, given_end, "review", (
+                "El plan es de propiedad sin vencimiento; revisa la fecha consignada"
+            )
+        return starts_on, None, "permanent", "Sin vencimiento contractual, según el catálogo"
+
+    if not expected_end:
+        return starts_on, given_end, "review", "El producto no tiene una duración definida"
+
+    if given_end:
+        if payload.get("plan_end_precision") != "exact":
+            return starts_on, given_end, "review", "El vencimiento no es exacto"
+        if given_end != expected_end:
+            return starts_on, given_end, "review", (
+                f"Fechas inconsistentes: el plazo del plan vence el "
+                f"{expected_end:%d/%m/%Y} y el Excel indica {given_end:%d/%m/%Y}"
+            )
+        return starts_on, given_end, "original", "Fecha original del Excel validada"
+
+    return starts_on, expected_end, "calculated", (
+        f"Vencimiento calculado: {product.duration_months} mes(es) desde la activación"
+    )
 
 
 def analyze_client_payload(payload):
@@ -218,31 +261,22 @@ def analyze_client_payload(payload):
     product, product_confidence, product_reason = _product_mapping(
         payload.get("current_plan_label")
     )
-
-    start_date = _date_from_iso(payload.get("plan_start"))
+    starts_on, ends_on, date_status, date_reason = _contract_dates(payload, product)
     safe_contract = bool(
         product
         and product_confidence == "high"
-        and start_date
-        and payload.get("plan_start_precision") == "exact"
+        and date_status in {"original", "calculated", "permanent"}
         and not payload.get("multiple_investments")
     )
 
-    contract_reason = (
-        "Contrato apto para importación segura"
-        if safe_contract
-        else product_reason
-    )
     if payload.get("multiple_investments"):
-        contract_reason = (
-            "Tiene inversiones adicionales; contrato automático desactivado"
-        )
-    elif payload.get("plan_start_precision") == "approximate":
-        contract_reason = (
-            "La fecha de activación es aproximada; requiere revisión"
-        )
-    elif not start_date and product:
-        contract_reason = "No hay fecha exacta de activación"
+        contract_reason = "Inversiones adicionales: requiere conciliar el contrato y pagos"
+    elif product_confidence != "high":
+        contract_reason = product_reason
+    elif not safe_contract:
+        contract_reason = date_reason
+    else:
+        contract_reason = f"Contrato apto para importación · {date_reason}"
 
     return {
         "payload": payload,
@@ -254,6 +288,10 @@ def analyze_client_payload(payload):
         "product": product,
         "product_confidence": product_confidence,
         "product_reason": product_reason,
+        "contract_start": starts_on,
+        "contract_end": ends_on,
+        "date_status": date_status,
+        "date_reason": date_reason,
         "safe_contract": safe_contract,
         "contract_reason": contract_reason,
     }
@@ -429,8 +467,8 @@ def _upsert_safe_contract(
         return None, False, "manual_review"
 
     product = analysis["product"]
-    starts_on = _date_from_iso(payload.get("plan_start"))
-    ends_on = _date_from_iso(payload.get("plan_end"))
+    starts_on = analysis["contract_start"]
+    ends_on = analysis["contract_end"]
 
     contract = ClientContract.query.filter_by(
         client_id=client.id,
