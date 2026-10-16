@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.28.1 — Renovación del mismo servicio con pago simplificado
+
+- Se elimina el botón «Cotizar» del Centro de Renovaciones.
+- «Renovar» abre una pantalla propia con el plan existente, la duración y el importe prellenados (sin poder modificar el plan).
+- El nuevo vencimiento se calcula automáticamente con los meses reales del plan; dominio y hosting externos se renuevan por un año sin pedir nueva fecha de vencimiento.
+- Formas de pago: contado, cuotas o financiamiento, con fecha del pago inicial, referencia, método y calendario de cuotas.
+- Se registran los cobros confirmados, saldos, cuentas por cobrar, cuotas y modalidad de pago en la venta de renovación, sin borrar el historial de contratos.
+- Se preservan rutas históricas para compatibilidad y se agregan pruebas automatizadas.
+
 ## 1.28.0 — Vigencia comercial de seguimientos (30 días)
 
 - Se reserva cada seguimiento al asesor responsable durante 30 días desde el registro o la última actividad documentada (llamada, WhatsApp, correo, reunión o nota).

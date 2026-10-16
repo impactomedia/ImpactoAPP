@@ -302,3 +302,137 @@ def test_no_renewal_records_reason(client, app):
         row = db.session.get(Renewal, renewal_id)
         assert row.status == "no_renueva"
         assert "otro proveedor" in row.notes
+
+
+
+def test_renewal_center_hides_quote_and_opens_prefilled_page(client, app):
+    _login(client)
+    response = client.get("/renewals/")
+    assert response.status_code == 200
+    with app.app_context():
+        rid = Renewal.query.filter_by(renewal_type="6 Meses").one().id
+    body = response.get_data(as_text=True)
+    assert "Cotizar</button>" not in body
+    assert f'/renewals/{rid}/renew' in body
+    assert f'id="complete-{rid}"' not in body
+
+    form = client.get(f"/renewals/{rid}/renew")
+    assert form.status_code == 200
+    html = form.get_data(as_text=True)
+    assert "6 Meses" in html
+    assert 'name="payment_date"' in html
+    assert 'name="payment_mode"' in html
+    assert 'name="next_due_date"' not in html
+    assert 'name="balance_due"' not in html
+
+
+def test_renewal_cash_keeps_plan_and_uses_payment_date(client, app):
+    from app.models import Payment
+    from app.nexora_models import SaleOperationMeta
+    _login(client)
+    client.get("/renewals/")
+    with app.app_context():
+        old_contract = ClientContract.query.one()
+        rid = Renewal.query.filter_by(contract_id=old_contract.id).one().id
+        old_product = old_contract.product_id
+    paid_on = date.today() - timedelta(days=2)
+    response = client.post(f"/renewals/{rid}/complete", data={
+        "payment_mode": "contado",
+        "payment_date": paid_on.isoformat(),
+        "payment_method": "Zelle",
+        "payment_reference": "RENEW-CASH-TEST",
+        "amount": "5",  # No puede alterar el precio del plan contratado.
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        sale = Sale.query.one()
+        renewal = db.session.get(Renewal, rid)
+        new_contract = ClientContract.query.order_by(ClientContract.id.desc()).first()
+        assert new_contract.product_id == old_product
+        assert Decimal(str(new_contract.agreed_price)) == Decimal("750.00")
+        assert Decimal(str(sale.total)) == Decimal("750.00")
+        assert Decimal(str(sale.amount_paid)) == Decimal("750.00")
+        assert Payment.query.one().effective_date == paid_on
+        assert Payment.query.one().reference == "RENEW-CASH-TEST"
+        assert SaleOperationMeta.query.filter_by(sale_id=sale.id).one().payment_mode == "contado"
+        assert renewal.status == "renovado"
+
+
+def test_renewal_financing_creates_correct_installments(client, app):
+    from app.client_v2_models import ClientInstallment
+    from app.nexora_models import SaleOperationMeta
+    from app.models import Payment
+    _login(client)
+    client.get("/renewals/")
+    with app.app_context():
+        rid = Renewal.query.filter_by(renewal_type="6 Meses").one().id
+    pay_date = date.today() - timedelta(days=1)
+    due_1 = date.today() + timedelta(days=15)
+    due_2 = date.today() + timedelta(days=30)
+    response = client.post(f"/renewals/{rid}/complete", data={
+        "payment_mode": "financiamiento",
+        "payment_date": pay_date.isoformat(),
+        "payment_method": "transferencia",
+        "initial_payment": "150",
+        "payment_terms": "Dos cuotas quincenales",
+        "installment_amount[]": ["300", "300"],
+        "installment_due_date[]": [due_1.isoformat(), due_2.isoformat()],
+        "installment_notes[]": ["primera", "segunda"],
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        sale = Sale.query.one()
+        assert Decimal(str(sale.total)) == Decimal("750.00")
+        assert Decimal(str(sale.amount_paid)) == Decimal("150.00")
+        assert Decimal(str(sale.balance)) == Decimal("600.00")
+        assert Payment.query.one().effective_date == pay_date
+        installments = ClientInstallment.query.filter_by(sale_id=sale.id).order_by(ClientInstallment.sequence).all()
+        assert [float(row.amount) for row in installments] == [300, 300]
+        assert [row.due_date for row in installments] == [due_1, due_2]
+        assert sale.receivable.due_date == due_1
+        meta = SaleOperationMeta.query.filter_by(sale_id=sale.id).one()
+        assert meta.payment_mode == "financiamiento"
+        assert meta.payment_terms == "Dos cuotas quincenales"
+
+
+def test_renewal_rejects_incorrect_installment_total_without_partial_changes(client, app):
+    _login(client)
+    client.get("/renewals/")
+    with app.app_context():
+        rid = Renewal.query.filter_by(renewal_type="6 Meses").one().id
+    response = client.post(f"/renewals/{rid}/complete", data={
+        "payment_mode": "cuotas", "payment_date": date.today().isoformat(),
+        "payment_method": "efectivo", "initial_payment": "200",
+        "installment_amount[]": ["400"],
+        "installment_due_date[]": [(date.today()+timedelta(days=15)).isoformat()],
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        assert Sale.query.count() == 0
+        assert Renewal.query.filter_by(id=rid).one().status == "pendiente"
+
+
+def test_external_renewal_auto_calculates_one_year_without_expiry_input(client, app):
+    from app.commercial_plans import add_months
+    _login(client)
+    client.get("/renewals/")
+    with app.app_context():
+        row = Renewal.query.filter_by(renewal_type="Dominio").one()
+        rid = row.id
+        original_due = row.due_date
+    response = client.post(f"/renewals/{rid}/complete", data={
+        "payment_mode": "contado",
+        "payment_date": date.today().isoformat(),
+        "payment_method": "Zelle",
+        "amount": "120",
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        renewed = db.session.get(Renewal, rid)
+        assert renewed.status == "renovado"
+        expected_due = add_months(max(date.today(), original_due), 12)
+        next_row = Renewal.query.filter_by(
+            client_id=renewed.client_id, renewal_type="Dominio",
+            due_date=expected_due, status="pendiente",
+        ).first()
+        assert next_row is not None

@@ -345,6 +345,15 @@ def _enforce_project_admin_boundary(endpoint):
                     "finance_control.goals", "finance_control.payouts"}:
         return
 
+    if request.blueprint == "renewals":
+        # Aislar también las renovaciones por empresa y bloquear IDs ajenos.
+        renewal_id = (request.view_args or {}).get("renewal_id")
+        if renewal_id:
+            renewal = db.session.get(Renewal, renewal_id)
+            if renewal is None or not client_allowed(renewal.client):
+                abort(403)
+        return
+
     if request.blueprint not in {"crm", "clients", "clients_v3", "sales", "operations"}:
         abort(403)
 

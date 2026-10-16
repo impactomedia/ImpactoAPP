@@ -1,10 +1,11 @@
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.client_v2_models import ClientInstallment
+from app.project_admin_scope import is_project_admin, client_scope_condition
 from app.decorators import permission_required
 from app.commercial_plans import HOSTING_TYPE, add_months
 from app.extensions import db
@@ -13,6 +14,7 @@ from app.renewal_services import (
     OPEN_RENEWAL_STATUSES,
     complete_contract_renewal,
     complete_external_renewal,
+    _next_contract_period,
     create_renewal_quote,
     decline_renewal,
     ensure_renewal_alerts,
@@ -44,6 +46,8 @@ def _visible_renewals_query():
         query = query.filter(Renewal.client.has(Client.owner_id == collaborator.id))
     elif role == "supervisor" and collaborator:
         query = query.filter(Renewal.client.has(Client.owner_id.in_(_team_ids())))
+    elif role == "admin" and is_project_admin():
+        query = query.filter(Renewal.client.has(client_scope_condition()))
     return query
 
 
@@ -55,6 +59,8 @@ def _visible_installments_query():
         query = query.filter(Client.owner_id == collaborator.id)
     elif role == "supervisor" and collaborator:
         query = query.filter(Client.owner_id.in_(_team_ids()))
+    elif role == "admin" and is_project_admin():
+        query = query.filter(client_scope_condition())
     return query
 
 
@@ -161,46 +167,118 @@ def quote(renewal_id):
         return redirect(url_for("renewals.index"))
 
 
+@bp.route("/<int:renewal_id>/renew", methods=["GET"])
+@login_required
+@permission_required("sales.create")
+def renew(renewal_id):
+    """Pantalla independiente: servicio original fijo y datos solo de pago."""
+    renewal = _visible_renewals_query().filter(Renewal.id == renewal_id).first_or_404()
+    if renewal.status not in OPEN_RENEWAL_STATUSES:
+        flash("Esta renovación ya se encuentra cerrada.", "warning")
+        return redirect(url_for("renewals.index"))
+    if renewal.contract_id:
+        contract = renewal.contract
+        if not contract or not contract.product:
+            flash("El contrato no tiene un servicio válido para renovar.", "danger")
+            return redirect(url_for("renewals.index"))
+        starts_on, ends_on = _next_contract_period(contract)
+    else:
+        starts_on = max(date.today(), renewal.due_date)
+        ends_on = add_months(starts_on, 12)
+    return render_template(
+        "renewals/renew_form.html",
+        renewal=renewal, amount=renewal_amount(renewal),
+        starts_on=starts_on, ends_on=ends_on,
+        today=date.today(),
+    )
+
+
 @bp.route("/<int:renewal_id>/complete", methods=["POST"])
 @login_required
 @permission_required("sales.create")
 def complete(renewal_id):
     renewal = _visible_renewals_query().filter(Renewal.id == renewal_id).first_or_404()
-    balance_due = _parse_date(request.form.get("balance_due"))
+    if renewal.status not in OPEN_RENEWAL_STATUSES:
+        flash("Esta renovación ya fue procesada.", "warning")
+        return redirect(url_for("renewals.index"))
 
+    # Peticiones anteriores sin modalidad mantienen compatibilidad histórica.
+    modern_form = bool(request.form.get("payment_mode"))
+    balance_due = _parse_date(request.form.get("balance_due"))
+    payment_date = None
+    payment_reference = None
+    payment_mode = None
+    payment_terms = None
+    installment_rows = None
     try:
+        amount_raw = (renewal_amount(renewal) if renewal.contract_id or
+                      renewal.renewal_type == HOSTING_TYPE
+                      else request.form.get("amount"))
+        amount = Decimal(str(amount_raw or "0"))
+        if not amount.is_finite() or amount <= 0:
+            raise ValueError("El monto de este servicio debe ser mayor que cero.")
+
+        if modern_form:
+            from app.blueprints.sales import (
+                PAYMENT_METHODS, _parse_money, _payment_plan_from_request,
+            )
+            payment_mode = request.form.get("payment_mode", "").strip().lower()
+            if payment_mode not in {"contado", "cuotas", "financiamiento"}:
+                raise ValueError("Elige contado, cuotas o financiamiento.")
+            payment_date = _parse_date(request.form.get("payment_date"))
+            if not payment_date:
+                raise ValueError("Indica una fecha de pago válida.")
+            method = request.form.get("payment_method", "transferencia")
+            if method not in PAYMENT_METHODS:
+                raise ValueError("Selecciona un método de pago válido.")
+            payment_reference = (request.form.get("payment_reference") or "").strip()[:120]
+            payment_terms = (request.form.get("payment_terms") or "").strip()[:1000]
+            initial = (
+                amount if payment_mode == "contado"
+                else _parse_money(request.form.get("initial_payment") or "0", "El pago inicial")
+            )
+            if initial > amount:
+                raise ValueError("El pago inicial no puede superar el importe del servicio.")
+            if initial >= amount:
+                payment_mode = "contado"
+            installment_rows = _payment_plan_from_request(
+                amount - initial, date.today(), payment_mode=payment_mode,
+            )
+            next_due_date = add_months(max(date.today(), renewal.due_date), 12)
+        else:
+            # Se conserva el flujo de solicitudes antiguas y pruebas existentes.
+            initial = request.form.get("initial_payment") or "0"
+            method = request.form.get("payment_method", "transferencia")
+            next_due_date = _parse_date(request.form.get("next_due_date"))
+            if not next_due_date and not renewal.contract_id:
+                next_due_date = add_months(max(date.today(), renewal.due_date), 12)
+
         if renewal.contract_id:
             sale, _contract = complete_contract_renewal(
-                renewal,
-                amount=request.form.get("amount"),
-                initial_payment=request.form.get("initial_payment") or 0,
-                payment_method=request.form.get("payment_method", "transferencia"),
-                balance_due=balance_due,
-                user_id=current_user.id,
+                renewal, amount=amount,
+                initial_payment=initial, payment_method=method,
+                balance_due=balance_due, user_id=current_user.id,
+                payment_date=payment_date, payment_reference=payment_reference,
+                payment_mode=payment_mode, payment_terms=payment_terms,
+                installment_rows=installment_rows,
             )
         else:
-            next_due_date = _parse_date(request.form.get("next_due_date"))
-            if renewal.renewal_type == HOSTING_TYPE and not next_due_date:
-                next_due_date = add_months(renewal.due_date, 12)
             sale = complete_external_renewal(
-                renewal,
-                next_due_date=next_due_date,
-                amount=request.form.get("amount") or 0,
-                initial_payment=request.form.get("initial_payment") or 0,
-                payment_method=request.form.get("payment_method", "transferencia"),
-                balance_due=balance_due,
+                renewal, next_due_date=next_due_date,
+                amount=amount, initial_payment=initial,
+                payment_method=method, balance_due=balance_due,
                 user_id=current_user.id,
+                payment_date=payment_date, payment_reference=payment_reference,
+                payment_mode=payment_mode, payment_terms=payment_terms,
+                installment_rows=installment_rows,
             )
-
         db.session.commit()
-        flash("Renovación confirmada y nuevo período registrado.", "success")
-        if sale:
-            return redirect(url_for("sales.detail", sale_id=sale.id))
-        return redirect(url_for("renewals.index"))
+        flash("Renovación confirmada: se conservó el mismo servicio y su nueva vigencia fue calculada automáticamente.", "success")
+        return redirect(url_for("sales.detail", sale_id=sale.id)) if sale else redirect(url_for("renewals.index"))
     except (ValueError, InvalidOperation) as exc:
         db.session.rollback()
         flash(str(exc), "danger")
-        return redirect(url_for("renewals.index"))
+        return redirect(url_for("renewals.renew", renewal_id=renewal_id))
 
 
 @bp.route("/<int:renewal_id>/decline", methods=["POST"])

@@ -206,3 +206,35 @@ def test_novax_admin_cannot_access_impacto_records_or_global_modules(prepared):
         "body": "Un nuevo comentario", "process_type": "Seguimiento / CRM",
         "owner_id": accounts["Impacto Asesor"][1],
     }).status_code == 403
+
+
+
+def test_project_admin_can_only_renew_services_in_own_company(prepared):
+    from datetime import timedelta
+    from app.models import Renewal
+    app, accounts, novax_id, impacto_id, *_ = prepared
+    with app.app_context():
+        own = Renewal(
+            client_id=novax_id, renewal_type="Dominio",
+            due_date=date.today() + timedelta(days=12), status="pendiente",
+        )
+        other = Renewal(
+            client_id=impacto_id, renewal_type="Dominio",
+            due_date=date.today() + timedelta(days=12), status="pendiente",
+        )
+        db.session.add_all([own, other])
+        db.session.commit()
+        own_id, other_id = own.id, other.id
+
+    browser = app.test_client()
+    login(browser, accounts["Novax Admin"][2])
+    assert browser.get("/renewals/").status_code == 200
+    html = browser.get("/renewals/").get_data(as_text=True)
+    assert "Cliente Novax" in html
+    assert "Cliente Impacto" not in html
+    assert browser.get(f"/renewals/{own_id}/renew").status_code == 200
+    assert browser.get(f"/renewals/{other_id}/renew").status_code == 403
+    assert browser.post(f"/renewals/{other_id}/complete", data={
+        "payment_mode": "contado", "payment_date": date.today().isoformat(),
+        "amount": "120", "payment_method": "Zelle",
+    }).status_code == 403
