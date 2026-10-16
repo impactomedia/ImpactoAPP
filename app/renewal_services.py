@@ -1,7 +1,7 @@
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
-from app.commercial_plans import HOSTING_TYPE, HOSTING_FEE, OWNED_PLANS, add_months
+from app.commercial_plans import HOSTING_TYPE, HOSTING_FEE, OWNED_PLANS, add_months, contract_months
 from app.client_v2_models import ClientContractDetail, ClientInstallment, ClientOperationalProfile
 from app.extensions import db
 from app.helpers import audit, next_code
@@ -415,8 +415,9 @@ def _next_contract_period(contract):
         else today
     )
 
-    if product and product.duration_months:
-        ends_on = add_months(starts_on, product.duration_months)
+    months = contract_months(contract)
+    if months:
+        ends_on = add_months(starts_on, months)
     elif contract.starts_on and contract.ends_on:
         span = max(1, (contract.ends_on - contract.starts_on).days)
         ends_on = starts_on + timedelta(days=span)
