@@ -1518,6 +1518,9 @@ def update_contract(client_id, contract_id):
             if agreed_price is None or agreed_price <= 0:
                 flash("Esencial Plus requiere un precio acordado mayor que cero.", "danger")
                 return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+            if contract.sale_id and agreed_price != Decimal(str(contract.agreed_price or 0)):
+                flash("No puedes cambiar el precio de un contrato con venta registrada desde la ficha: afectaría los pagos y saldos. Utiliza una operación comercial para modificarlo.", "danger")
+                return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
         elif contract.product.category == "paquete" and contract.product.base_price is not None:
             agreed_price = Decimal(str(contract.product.base_price))
 
