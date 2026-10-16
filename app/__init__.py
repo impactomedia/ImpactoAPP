@@ -12,7 +12,7 @@ from app.security_controls import init_security_controls
 from app.catalog_runtime import init_catalog_runtime
 from app.extensions import csrf, db, login_manager, migrate
 from app.helpers import human_label, money
-from app.commercial_plans import maintenance_label
+from app.commercial_plans import maintenance_label, contract_months
 from app.production_hardening import (
     init_paginated_views,
     init_production_hardening,
@@ -101,6 +101,7 @@ def create_app(config_object=Config):
 
     app.jinja_env.globals["primary_client_logo"] = primary_client_logo
     app.jinja_env.globals["maintenance_label"] = maintenance_label
+    app.jinja_env.globals["contract_months"] = contract_months
 
     init_production_hardening(app)
     init_catalog_runtime(app)
