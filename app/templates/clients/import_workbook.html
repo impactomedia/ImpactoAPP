@@ -111,6 +111,7 @@
           <th>Asesor</th>
           <th>Plan detectado</th>
           <th>Contrato seguro</th>
+          <th>Fechas del servicio</th>
           <th>Plataformas</th>
           <th>Revisión</th>
         </tr>
@@ -156,11 +157,25 @@
             {% endif %}
             <small class="d-block text-secondary mt-1">{{ row.contract_reason }}</small>
           </td>
+          <td>
+            <small class="d-block"><strong>Activación:</strong> {{ row.contract_start.strftime('%d/%m/%Y') if row.contract_start else 'Sin fecha exacta' }}</small>
+            <small class="d-block"><strong>Vencimiento:</strong> {{ row.contract_end.strftime('%d/%m/%Y') if row.contract_end else ('Sin vencimiento' if row.date_status == 'permanent' else 'Pendiente de revisar') }}</small>
+            {% if row.date_status == 'calculated' %}
+              <span class="badge-soft info">Calculado por duración</span>
+            {% elif row.date_status == 'original' %}
+              <span class="badge-soft success">Validado del Excel</span>
+            {% elif row.date_status == 'permanent' %}
+              <span class="badge-soft info">Sin vencimiento</span>
+            {% else %}
+              <span class="badge-soft warning">Revisión de fechas</span>
+            {% endif %}
+            <small class="d-block text-secondary">{{ row.date_reason }}</small>
+          </td>
           <td>{{ p.platforms|length }} adicional(es)</td>
           <td><button class="btn btn-sm btn-light border" type="button" data-bs-toggle="collapse" data-bs-target="#detail-{{ loop.index }}">Ver detalle</button></td>
         </tr>
         <tr class="collapse" id="detail-{{ loop.index }}">
-          <td colspan="8">
+          <td colspan="9">
             <div class="row g-3 py-2">
               <div class="col-md-4">
                 <strong>Datos operativos</strong>
@@ -194,7 +209,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="8" class="text-center text-secondary py-4">No se detectaron fichas.</td></tr>
+        <tr><td colspan="9" class="text-center text-secondary py-4">No se detectaron fichas.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -222,7 +237,7 @@
       <div class="col-md-6">
         <label class="form-check border rounded-3 p-3 h-100">
           <input class="form-check-input" type="checkbox" name="import_contracts" checked>
-          <span class="ms-2"><strong>Importar contratos seguros</strong><small class="d-block text-secondary">Solo planes con mapeo de alta confianza, fecha exacta y sin inversiones múltiples.</small></span>
+          <span class="ms-2"><strong>Importar contratos seguros y sus fechas</strong><small class="d-block text-secondary">Incluye activación exacta y vencimiento validado o calculado por duración. Fechas ambiguas e inversiones múltiples quedan pendientes.</small></span>
         </label>
       </div>
       <div class="col-md-6">
