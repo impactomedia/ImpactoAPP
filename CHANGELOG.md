@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.28.2 — Community Manager principal, Esencial Plus y coherencia de fechas
+
+- Community Manager es servicio principal, no una compra extra; la selección de servicios principales incluye planes Impacto y Community Manager, con historial y vigencias independientes por contrato.
+- Los cambios entre familias requieren confirmación explícita y saldo anterior liquidado. Solo los upgrades dentro de la misma familia de paquetes reconocen créditos anteriores.
+- Nuevo Impacto Esencial Plus con precio negociado y duración configurable entre 1 y 60 meses por contrato (8, 10 y 12 meses, por ejemplo), sin alterar el precio de otros clientes.
+- Fecha de venta y fecha de activación independientes al contratar: el vencimiento depende de la activación y la duración exacta en meses.
+- Edición de fecha de activación sincroniza vencimiento y alerta de renovación de planes principales; contratos de vigencia fija no aceptan fechas de vencimiento incoherentes.
+- Las fichas señalan discrepancias en contratos antiguos sin mutar registros históricos silenciosamente; al corregir y guardar la activación se repara el vencimiento del contrato.
+- Esencial Plus permite editar meses; el precio asociado a ventas con pagos queda protegido ante cambios que descuadren Finanzas.
+- Las renovaciones de Esencial Plus conservan el plazo contratado por meses de calendario.
+- El plan Golden conserva mantenimiento de 12 meses; VIP mantiene su garantía de mantenimiento según catálogo.
+- Se añadieron pruebas de creación y modificación de contratos, cambios de fecha y ventas.
+
 ## 1.28.1 — Renovación del mismo servicio con pago simplificado
 
 - Se elimina el botón «Cotizar» del Centro de Renovaciones.

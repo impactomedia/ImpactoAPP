@@ -9,6 +9,7 @@ from app.models import ProductService, Renewal
 HOSTING_FEE = Decimal("250.00")
 HOSTING_TYPE = "Hosting y dominio"
 OWNED_PLANS = {"Impacto Golden", "Impacto VIP"}
+CUSTOM_PLAN_NAME = "Impacto Esencial Plus"
 HOSTING_CREATION = {"Website - Creación", "Website + GBP - Creación"}
 VIP_CHOICES = {
     "uniformes": "6 playeras + 6 gorras",
@@ -38,6 +39,17 @@ PLANS = [
      "Mantenimiento básico incluido: 2 cambios y 2 posteos de contenido al mes.",
      "Servicio administrado: el cliente no recibe accesos.", "Sin pagos mensuales."],
     "inquilino", True),
+    item(CUSTOM_PLAN_NAME, "0", None, "paquete", {
+        "Google": GOOGLE,
+        "Website": ["Dominio web .com", "Website responsive con 5 pestañas",
+                    "Certificado SSL", "Click To Call", "Estimador virtual vinculado al correo"],
+        "Redes sociales": ["Facebook", "Instagram", "Diseño de portada profesional",
+                           "2 infografías comerciales"],
+    }, terms=["Beneficios base de Esencial; extras de Plus únicamente si se documentan.",
+              "Precio y duración personalizados por contrato (meses).",
+              "Mantenimiento según condiciones expresamente pactadas.",
+              "Renovación por el importe y plazo acordados."],
+    modality="inquilino", renewable=True),
     item("Impacto Golden", "2000", 12, "paquete", {
         "Google": GOOGLE,
         "Website": ["Hosting independiente", "Dominio .com",
@@ -192,25 +204,69 @@ def seed_official():
             active=True, is_physical=False, components=benefit_text(x)))
 
 
-def contract_end(product, starts_on):
+def is_principal_product(product):
+    """Los paquetes de Impacto y Community Manager se contratan como principales."""
+    return bool(product and product.category in {"paquete", "community_manager"})
+
+
+def is_custom_plan(product):
+    return bool(product and product.name == CUSTOM_PLAN_NAME)
+
+
+def contract_months(contract):
+    """Duración contractual efectiva, sin depender del catálogo mutable.
+
+    En Plus se obtiene a partir del vencimiento real pactado. En contratos
+    anteriores se da prioridad a la duración fija del catálogo.
+    """
+    if not contract or not contract.product:
+        return None
+    if is_custom_plan(contract.product):
+        if not contract.starts_on or not contract.ends_on:
+            return None
+        for months in range(1, 61):
+            if add_months(contract.starts_on, months) == contract.ends_on:
+                return months
+        return None
+    return contract.product.duration_months or None
+
+
+def contract_end(product, starts_on, duration_months=None):
     if product.name in OWNED_PLANS:
         return None
-    months = product.duration_months or 0
+    months = duration_months if is_custom_plan(product) else product.duration_months
     if not months:
         return None
-    return (add_months(starts_on, months) if is_official(product)
-            else starts_on + timedelta(days=months * 30))
+    return add_months(starts_on, int(months))
 
 
 def maintenance_label(contract, today=None):
-    x = get_plan(contract.product.name if contract.product else "")
-    if not x or x["category"] != "paquete":
+    product = contract.product
+    if not product or product.category != "paquete" or product.name not in BY_NAME:
         return ""
-    if x["months"] is None:
+    if product.name == "Impacto VIP":
         return "Mantenimiento básico gratuito de por vida."
-    finish = add_months(contract.starts_on, x["months"])
-    state = "Finalizado" if (today or date.today()) > finish else "Incluido"
-    return f"{state}: mantenimiento básico hasta {finish:%d/%m/%Y}."
+    if product.name == "Impacto Golden":
+        until = add_months(contract.starts_on, 12)
+        state = "Finalizado" if (today or date.today()) > until else "Incluido"
+        return f"{state}: mantenimiento básico hasta {until:%d/%m/%Y}."
+    if is_custom_plan(product):
+        if not contract.ends_on:
+            return "Sin vencimiento registrado; verifica la duración acordada."
+        until = contract.ends_on
+        return f"Vigencia personalizada hasta {until:%d/%m/%Y}. El mantenimiento depende del acuerdo contratado."
+    expected = contract_end(product, contract.starts_on)
+    if expected and contract.ends_on != expected:
+        return (
+            f"Fechas inconsistentes: un plan de {product.duration_months} meses activado "
+            f"el {contract.starts_on:%d/%m/%Y} debería vencer el {expected:%d/%m/%Y}. "
+            "Revisa la activación y guarda la ficha para corregir el vencimiento."
+        )
+    until = contract.ends_on or expected
+    if not until:
+        return ""
+    state = "Finalizado" if (today or date.today()) > until else "Incluido"
+    return f"{state}: mantenimiento básico hasta {until:%d/%m/%Y}."
 
 
 def cortesias(product, extra="", choice=""):

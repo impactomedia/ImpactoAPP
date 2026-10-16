@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from app.commercial_plans import contract_end, cortesias, ensure_hosting_annuality, OWNED_PLANS
+from app.commercial_plans import contract_end, cortesias, ensure_hosting_annuality, OWNED_PLANS, is_principal_product
 from app.extensions import db
 from app.helpers import audit, notify, next_code
 from app.models import (
@@ -261,7 +261,7 @@ def create_sale_from_quote(quote, initial_payment=0, payment_method="transferenc
         raise ValueError("La cotización no puede convertirse en venta desde su estado actual.")
     if not quote.items:
         raise ValueError("La cotización no contiene ítems para convertir en venta.")
-    if any(item.product and item.product.category == "paquete" for item in quote.items):
+    if any(is_principal_product(item.product) for item in quote.items):
         raise ValueError(
             "Los paquetes principales se confirman desde Servicio principal / Upgrade "
             "para aplicar el precio fijo y reconocer correctamente cualquier crédito previo."
@@ -373,7 +373,7 @@ def active_principal_contract(client):
         .filter(
             ClientContract.client_id == client.id,
             ClientContract.status == "activo",
-            ProductService.category == "paquete",
+            ProductService.category.in_(("paquete", "community_manager")),
         )
         .order_by(ClientContract.starts_on.desc(), ClientContract.id.desc())
         .first()
@@ -436,7 +436,7 @@ def _close_replaced_principal(contract):
             renewal.status = "cancelado"
 
 
-def generate_principal_operational_work(sale, product, previous_contract=None, courtesies=None):
+def generate_principal_operational_work(sale, product, previous_contract=None, courtesies=None, *, activation_date=None, agreed_price=None, duration_months=None):
     """Crea el nuevo plan principal y conserva el anterior como historial."""
     if previous_contract:
         _close_replaced_principal(previous_contract)
@@ -449,8 +449,8 @@ def generate_principal_operational_work(sale, product, previous_contract=None, c
         row.principal = False
         row.status = "inactivo"
 
-    starts_on = sale.sale_date or date.today()
-    end_date = contract_end(product, starts_on)
+    starts_on = activation_date or sale.sale_date or date.today()
+    end_date = contract_end(product, starts_on, duration_months=duration_months)
 
     contract = ClientContract(
         client_id=sale.client_id,
@@ -459,7 +459,7 @@ def generate_principal_operational_work(sale, product, previous_contract=None, c
         status="activo",
         starts_on=starts_on,
         ends_on=end_date,
-        agreed_price=product.base_price,
+        agreed_price=agreed_price if agreed_price is not None else product.base_price,
         principal=True,
         notes=(
             f"Upgrade desde {previous_contract.product.name}."
@@ -555,7 +555,7 @@ def generate_operational_work(sale):
 
         # Contratos de mantenimiento y Community Manager: renovaciones mensuales
         # independientes, sin reemplazar el plan principal del cliente.
-        if product and product.category in {"community_manager", "mantenimiento"}:
+        if product and product.category == "mantenimiento":
             begins = sale.sale_date or date.today()
             expires = contract_end(product, begins)
             contract = ClientContract(
