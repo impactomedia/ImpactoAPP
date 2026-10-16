@@ -1,0 +1,163 @@
+{% extends "app_base.html" %}
+{% block title %}Renovar servicio | Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Continuidad comercial</span>
+    <h1>Renovar {{ renewal.renewal_type }}</h1>
+    <p>{{ renewal.client.business_name }} · El servicio anterior y sus beneficios se mantienen sin modificaciones.</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('renewals.index') }}"><i class="bi bi-arrow-left me-1"></i>Volver a renovaciones</a>
+</div>
+<div class="row g-4">
+  <div class="col-xl-8">
+    <section class="panel-card mb-4">
+      <h2 class="h5">Servicio que se renovará</h2>
+      <div class="row g-3">
+        <div class="col-md-6"><span class="text-secondary small d-block">Cliente</span><strong>{{ renewal.client.business_name }}</strong></div>
+        <div class="col-md-6"><span class="text-secondary small d-block">Servicio actual</span><strong>{{ renewal.contract.product.name if renewal.contract and renewal.contract.product else renewal.renewal_type }}</strong></div>
+        <div class="col-md-6"><span class="text-secondary small d-block">Nuevo período</span><strong>{{ starts_on.strftime('%d/%m/%Y') }} al {{ ends_on.strftime('%d/%m/%Y') if ends_on else 'sin vencimiento' }}</strong></div>
+        <div class="col-md-6"><span class="text-secondary small d-block">Vigencia</span><span class="badge-soft info">Calculada automáticamente</span></div>
+      </div>
+      <p class="small text-secondary mt-3 mb-0">No necesitas seleccionar otra vez el plan ni indicar una fecha de vencimiento. La duración se conserva según el servicio ya contratado.</p>
+    </section>
+
+    <section class="panel-card">
+      <h2 class="h5 mb-3">Pago de la renovación</h2>
+      <form method="post" id="renewalPaymentForm" action="{{ url_for('renewals.complete', renewal_id=renewal.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="renewalPrice" class="form-label fw-semibold">Importe del mismo servicio (USD)</label>
+            {% if not renewal.contract and amount <= 0 %}
+              <input id="renewalPrice" name="amount" class="form-control" type="number" required min="0.01" step="0.01" placeholder="Indica el importe del servicio">
+              <small class="text-secondary">Este servicio externo no tiene un precio registrado.</small>
+            {% else %}
+              <input id="renewalPrice" class="form-control bg-light" value="{{ '%.2f'|format(amount) }}" readonly>
+            {% endif %}
+          </div>
+          <div class="col-md-6">
+            <label for="renewalPaidOn" class="form-label fw-semibold">Fecha del pago</label>
+            <input id="renewalPaidOn" name="payment_date" class="form-control" type="date" value="{{ today.isoformat() }}" required>
+          </div>
+          <div class="col-md-6">
+            <label for="renewalMethod" class="form-label fw-semibold">Método de pago</label>
+            <select id="renewalMethod" name="payment_method" class="form-select" required>
+              {% for m in ['transferencia','efectivo','Zelle','ACH','Wise','tarjeta','otro'] %}
+                <option value="{{ m }}">{{ m|label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="renewalReference" class="form-label">Referencia del pago (opcional)</label>
+            <input id="renewalReference" class="form-control" name="payment_reference" maxlength="120" placeholder="Comprobante / referencia">
+          </div>
+          <div class="col-12">
+            <label for="renewalMode" class="form-label fw-semibold">¿Cómo pagará el cliente?</label>
+            <select id="renewalMode" name="payment_mode" class="form-select">
+              <option value="contado">De contado · Pago completo</option>
+              <option value="cuotas">En cuotas</option>
+              <option value="financiamiento">Financiamiento personalizado</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="renewalFinanced" class="mt-4" hidden>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="renewalInitial" class="form-label fw-semibold">Pago inicial (USD)</label>
+              <input id="renewalInitial" name="initial_payment" class="form-control" type="number" min="0" step="0.01" value="0">
+            </div>
+            <div class="col-md-6">
+              <label for="renewalTerms" class="form-label">Condiciones de pago</label>
+              <input id="renewalTerms" name="payment_terms" class="form-control" placeholder="Ej. pagos quincenales">
+            </div>
+          </div>
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 mb-2">
+            <strong>Programación de cuotas</strong>
+            <button id="addRenewalInstallment" type="button" class="btn btn-sm btn-light border"><i class="bi bi-plus me-1"></i>Agregar cuota</button>
+          </div>
+          <div id="renewalInstallments">
+            <div class="row g-2 mb-2 renewal-installment">
+              <div class="col-md-4"><label class="form-label small">Monto USD</label><input name="installment_amount[]" type="number" min="0.01" step="0.01" class="form-control installment-amount" placeholder="Monto"></div>
+              <div class="col-md-4"><label class="form-label small">Fecha de pago de cuota</label><input name="installment_due_date[]" type="date" class="form-control"></div>
+              <div class="col-md-3"><label class="form-label small">Nota (opcional)</label><input name="installment_notes[]" class="form-control" placeholder="Detalle"></div>
+              <div class="col-md-1 d-flex align-items-end"><button type="button" class="btn btn-outline-danger renewal-remove w-100" aria-label="Eliminar cuota">&times;</button></div>
+            </div>
+          </div>
+          <template id="renewalInstallmentTemplate">
+            <div class="row g-2 mb-2 renewal-installment">
+              <div class="col-md-4"><input name="installment_amount[]" type="number" min="0.01" step="0.01" class="form-control installment-amount" placeholder="Monto USD"></div>
+              <div class="col-md-4"><input name="installment_due_date[]" type="date" class="form-control" aria-label="Fecha de pago de cuota"></div>
+              <div class="col-md-3"><input name="installment_notes[]" class="form-control" placeholder="Nota"></div>
+              <div class="col-md-1"><button type="button" class="btn btn-outline-danger renewal-remove w-100" aria-label="Eliminar cuota">&times;</button></div>
+            </div>
+          </template>
+          <p class="small text-secondary mt-2 mb-0">Las cuotas deben sumar exactamente el saldo después del pago inicial. Sus fechas son de cobro, no vencimientos del servicio.</p>
+        </div>
+
+        <div class="border-top mt-4 pt-3 d-flex justify-content-end">
+          <button type="submit" class="btn btn-brand px-4"><i class="bi bi-check-circle me-1"></i>Confirmar renovación</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  <div class="col-xl-4">
+    <section class="panel-card">
+      <h2 class="h6">Resumen de pago</h2>
+      <div class="d-flex justify-content-between mb-2"><span>Total</span><strong id="renewalTotalText">USD {{ amount|money }}</strong></div>
+      <div class="d-flex justify-content-between mb-2"><span>Pago inicial</span><strong id="renewalInitialText">USD {{ amount|money }}</strong></div>
+      <div class="d-flex justify-content-between"><span>Saldo pendiente</span><strong id="renewalBalanceText">USD 0.00</strong></div>
+      <hr>
+      <small class="text-secondary">La renovación quedará vinculada a una nueva venta y al mismo servicio. Los pagos se registrarán en Finanzas sin reemplazar el historial anterior.</small>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script>
+(() => {
+  const price = document.getElementById('renewalPrice');
+  const mode = document.getElementById('renewalMode');
+  const financed = document.getElementById('renewalFinanced');
+  const initial = document.getElementById('renewalInitial');
+  const rows = document.getElementById('renewalInstallments');
+  const template = document.getElementById('renewalInstallmentTemplate');
+  const form = document.getElementById('renewalPaymentForm');
+  const money = value => 'USD ' + value.toFixed(2);
+  const amount = () => Math.max(0, Number(price.value) || 0);
+  const balance = () => Math.max(0, amount() - Math.max(0, Number(initial.value) || 0));
+  function refresh() {
+    const complete = mode.value === 'contado';
+    financed.hidden = complete;
+    document.getElementById('renewalTotalText').textContent = money(amount());
+    document.getElementById('renewalInitialText').textContent = money(complete ? amount() : Math.max(0, Number(initial.value) || 0));
+    document.getElementById('renewalBalanceText').textContent = money(complete ? 0 : balance());
+  }
+  function bind(row) {
+    row.querySelector('.renewal-remove').addEventListener('click', () => {
+      if (rows.querySelectorAll('.renewal-installment').length > 1) row.remove();
+    });
+  }
+  rows.querySelectorAll('.renewal-installment').forEach(bind);
+  document.getElementById('addRenewalInstallment').addEventListener('click', () => {
+    const fragment = template.content.cloneNode(true);
+    bind(fragment.querySelector('.renewal-installment'));
+    rows.appendChild(fragment);
+  });
+  [mode, initial, price].forEach(control => control.addEventListener('input', refresh));
+  form.addEventListener('submit', event => {
+    if (mode.value === 'contado') return;
+    const total = amount();
+    const start = Number(initial.value) || 0;
+    const sum = [...rows.querySelectorAll('.installment-amount')].reduce((acc, item) => acc + (Number(item.value) || 0), 0);
+    if (start > total || Math.abs(sum - (total - start)) > 0.009) {
+      event.preventDefault();
+      window.alert('Las cuotas deben sumar exactamente el saldo pendiente después del pago inicial.');
+    }
+  });
+  refresh();
+})();
+</script>
+{% endblock %}
