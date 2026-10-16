@@ -634,7 +634,7 @@ def principal_service(client_id):
     eligible_plans = []
     for plan in plans:
         price = D(plan.base_price)
-        if price <= 0:
+        if price <= 0 and not is_custom_plan(plan):
             continue
         if current_contract and plan.id == current_contract.product_id:
             continue
