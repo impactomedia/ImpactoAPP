@@ -1508,6 +1508,8 @@ def update_contract(client_id, contract_id):
     if ends_on and ends_on < starts_on:
         flash("La fecha de vencimiento no puede ser anterior a la activación.", "danger")
         return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+    if status == "activo" and ends_on and ends_on < date.today():
+        status = "caducado"
 
     agreed_price = _decimal_or_none(request.form.get("agreed_price"))
     if agreed_price is not None and agreed_price < 0:
