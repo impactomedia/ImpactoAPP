@@ -1141,6 +1141,75 @@ def change_sale_lead_generator(sale_id):
     return redirect(url_for("sales.detail", sale_id=sale.id))
 
 
+@bp.route("/payments/<int:payment_id>/correct-date", methods=["POST"])
+@login_required
+@roles_required("superadmin")
+def correct_payment_date(payment_id):
+    """Corrección controlada de fecha: pagos, ingresos y comisiones coherentes."""
+    payment_row = db.get_or_404(Payment, payment_id)
+    sale = _visible_sales_query().filter(Sale.id == payment_row.sale_id).first_or_404()
+    if payment_row.status != "confirmado":
+        flash("Solo se puede corregir la fecha de un pago confirmado.", "warning")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+
+    corrected_date = _parse_date((request.form.get("effective_date") or "").strip())
+    reason = (request.form.get("reason") or "").strip()
+    if not corrected_date or len(reason) < 5 or len(reason) > 255:
+        flash("Indica la fecha correcta y un motivo de 5 a 255 caracteres.", "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+    if corrected_date == payment_row.effective_date:
+        flash("La fecha de este pago ya es la indicada.", "info")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+
+    if sale.commission and sale.commission.status == "pagada":
+        flash("La comisión de esta venta ya fue pagada; la fecha requiere conciliación financiera.", "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+    if LeadCommissionPayout.query.filter_by(sale_id=sale.id).first():
+        flash("Hay una comisión de lead liquidada; la corrección requiere conciliación financiera.", "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+
+    from app.finance_control_models import AdvisorFortnightPayout
+    from app.finance_control_service import fortnight_bounds
+    old_period, _ = fortnight_bounds(payment_row.effective_date)
+    new_period, _ = fortnight_bounds(corrected_date)
+    advisor_id = sale.advisor_id or (sale.client.owner_id if sale.client else None)
+    if advisor_id and AdvisorFortnightPayout.query.filter(
+        AdvisorFortnightPayout.advisor_id == advisor_id,
+        AdvisorFortnightPayout.period_start.in_((old_period, new_period)),
+    ).first():
+        flash("Existe una quincena con comisiones pagadas; no se puede cambiar este cobro sin conciliación.", "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+
+    matching_incomes = Income.query.filter_by(
+        sale_id=sale.id, client_id=sale.client_id,
+        effective_date=payment_row.effective_date,
+        amount=payment_row.amount, currency=payment_row.currency,
+        method=payment_row.method, reference=payment_row.reference,
+        status="confirmado",
+    ).all()
+    if len(matching_incomes) != 1:
+        flash("No se puede identificar de forma única el ingreso asociado. Solicita revisión financiera para evitar duplicados.", "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+
+    previous = payment_row.effective_date
+    try:
+        payment_row.effective_date = corrected_date
+        matching_incomes[0].effective_date = corrected_date
+        audit(
+            "corregir_fecha_pago_venta", "Sale", sale.id,
+            before={"effective_date": previous.isoformat()},
+            after={"effective_date": corrected_date.isoformat()},
+            reason=f"Pago #{payment_row.id}. {reason}",
+        )
+        db.session.commit()
+        flash("Fecha del pago corregida y sincronizada con el ingreso. Corrección auditada.", "success")
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Error corrigiendo fecha de pago %s", payment_id)
+        flash("No se guardó la corrección del pago.", "danger")
+    return redirect(url_for("sales.detail", sale_id=sale.id))
+
+
 @bp.route("/<int:sale_id>/payment", methods=["POST"])
 @login_required
 def payment(sale_id):
