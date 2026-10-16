@@ -261,7 +261,7 @@ def create_sale_from_quote(quote, initial_payment=0, payment_method="transferenc
         raise ValueError("La cotización no puede convertirse en venta desde su estado actual.")
     if not quote.items:
         raise ValueError("La cotización no contiene ítems para convertir en venta.")
-    if any(item.product and item.product.category == "paquete" for item in quote.items):
+    if any(is_principal_product(item.product) for item in quote.items):
         raise ValueError(
             "Los paquetes principales se confirman desde Servicio principal / Upgrade "
             "para aplicar el precio fijo y reconocer correctamente cualquier crédito previo."
