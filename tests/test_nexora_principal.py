@@ -398,9 +398,11 @@ def test_edit_fixed_plan_corrects_inconsistent_dates_and_updates_renewal(client,
     from app.commercial_plans import contract_end, maintenance_label
     from app.models import Renewal
     login(client)
-    customer_id, six_id, *_ = principal_ids(app)
+    customer_id, *_ = principal_ids(app)
+    with app.app_context():
+        official_id = ProductService.query.filter_by(name="Impacto Esencial - 6 Meses").one().id
     client.post(f"/sales/principal/{customer_id}", data={
-        "product_id": six_id, "sale_date": date.today().isoformat(),
+        "product_id": official_id, "sale_date": date.today().isoformat(),
         "activation_date": "2026-03-20",
         "initial_payment": "750", "payment_mode": "contado",
     })
