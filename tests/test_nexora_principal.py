@@ -440,3 +440,56 @@ def test_invalid_plus_price_or_duration_does_not_create_sale(client, app):
     with app.app_context():
         assert Sale.query.count() == 0
         assert ClientContract.query.count() == 0
+
+
+
+def test_switch_to_community_manager_requires_confirmation_and_no_unearned_credit(client, app):
+    login(client)
+    customer_id, six_id, *_ = principal_ids(app)
+    with app.app_context():
+        cm = ProductService.query.filter_by(
+            name="Community Manager Esencial - Solo Redes Sociales"
+        ).one()
+        cm_id, cm_price = cm.id, Decimal(str(cm.base_price))
+    client.post(f"/sales/principal/{customer_id}", data={
+        "product_id": six_id, "sale_date": date.today().isoformat(),
+        "initial_payment": "750", "payment_mode": "contado",
+    })
+    common = {
+        "product_id": cm_id, "sale_date": date.today().isoformat(),
+        "initial_payment": str(cm_price), "payment_mode": "contado",
+    }
+    response = client.post(f"/sales/principal/{customer_id}", data=common)
+    assert response.status_code == 302
+    with app.app_context():
+        assert Sale.query.count() == 1  # No se cambió sin confirmar.
+    response = client.post(f"/sales/principal/{customer_id}", data={
+        **common, "confirm_plan_change": "yes",
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        assert Sale.query.count() == 2
+        old, new = Sale.query.order_by(Sale.id).all()
+        assert new.total == cm_price
+        assert new.items[0].discount == Decimal("0")
+        assert old.status == "reemplazada"
+        current = ClientContract.query.filter_by(client_id=customer_id, principal=True).one()
+        assert current.product_id == cm_id
+
+
+def test_esencial_plus_renewal_preserves_individual_calendar_month_duration(client, app):
+    from app.renewal_services import _next_contract_period
+    login(client)
+    customer_id, *_ = principal_ids(app)
+    with app.app_context():
+        plus_id = ProductService.query.filter_by(name="Impacto Esencial Plus").one().id
+    client.post(f"/sales/principal/{customer_id}", data={
+        "product_id": plus_id, "custom_price": "1400", "custom_months": "10",
+        "sale_date": date.today().isoformat(), "activation_date": "2026-03-20",
+        "initial_payment": "1400", "payment_mode": "contado",
+    })
+    with app.app_context():
+        contract = ClientContract.query.filter_by(client_id=customer_id, principal=True).one()
+        start_next, end_next = _next_contract_period(contract)
+        assert start_next == date(2027, 1, 21)
+        assert end_next == date(2027, 11, 21)
