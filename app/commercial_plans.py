@@ -243,8 +243,12 @@ def maintenance_label(contract, today=None):
     product = contract.product
     if not product or product.category != "paquete":
         return ""
-    if product.name in OWNED_PLANS:
+    if product.name == "Impacto VIP":
         return "Mantenimiento básico gratuito de por vida."
+    if product.name == "Impacto Golden":
+        until = add_months(contract.starts_on, 12)
+        state = "Finalizado" if (today or date.today()) > until else "Incluido"
+        return f"{state}: mantenimiento básico hasta {until:%d/%m/%Y}."
     if is_custom_plan(product):
         if not contract.ends_on:
             return "Sin vencimiento registrado; verifica la duración acordada."
