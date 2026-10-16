@@ -4,10 +4,15 @@
 <div class="page-heading">
   <div>
     <span class="eyebrow">Detalle de venta</span>
-    <h1>{{ sale.sale_no }}</h1>
+    <h1>{{ sale.sale_no }}{% if sale_edits %}<span class="badge-soft info ms-2" style="font-size:.75rem;vertical-align:middle">Modificada</span>{% endif %}</h1>
     <p>{{ sale.client.business_name }} · {{ sale.sale_date }}{% if sale.advisor and sale.advisor.user %} · {{ sale.advisor.user.name }}{% endif %}</p>
   </div>
-  <div><a class="btn btn-light border" href="{{ url_for('sales.index') }}">Volver a ventas</a></div>
+  <div class="d-flex flex-wrap gap-2">
+    {% if current_user.has_permission('sales.edit') %}
+      <a class="btn btn-brand" href="{{ url_for('sales.edit', sale_id=sale.id) }}"><i class="bi bi-pencil-square me-1"></i>Editar venta</a>
+    {% endif %}
+    <a class="btn btn-light border" href="{{ url_for('sales.index') }}">Volver a ventas</a>
+  </div>
 </div>
 
 {% if sale.operation_meta %}
@@ -99,6 +104,39 @@
 
 <div class="row g-4">
   <div class="col-xl-8">
+    {% if sale_edits %}
+    <section class="panel-card mb-4" id="historial-correcciones">
+      <div class="panel-header"><div>
+        <h2>Historial de correcciones</h2>
+        <p>Usuario, fecha, motivo y valores anteriores de cada modificación.</p>
+      </div></div>
+      <div class="d-flex flex-column gap-3">
+        {% for row in sale_edits %}
+          <div class="border rounded-3 p-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <strong>{{ row.entry.user.name if row.entry.user else 'Usuario no disponible' }}</strong>
+              <small class="text-secondary">{{ row.entry.created_at.strftime('%d/%m/%Y %H:%M') if row.entry.created_at else '—' }}</small>
+            </div>
+            <small class="text-secondary">{{ 'Fecha del pago' if row.entry.action == 'corregir_fecha_pago_venta' else 'Corrección de venta' }}</small>
+            {% if row.entry.reason %}<div class="small my-2"><strong>Motivo:</strong> {{ row.entry.reason }}</div>{% endif %}
+            {% if row.changes %}
+              <div class="table-responsive">
+                <table class="table table-sm small mb-0">
+                  <thead><tr><th>Dato</th><th>Antes</th><th>Después</th></tr></thead>
+                  <tbody>
+                  {% for field, before, after in row.changes %}
+                    <tr><td>{{ field }}</td><td>{{ before }}</td><td>{{ after }}</td></tr>
+                  {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
     <section class="panel-card mb-4">
       <div class="panel-header"><div><h2>Detalle de la operación</h2><p>Productos y servicios confirmados.</p></div></div>
       <div class="table-responsive">
@@ -164,6 +202,10 @@
               <td>{{ p.reference or '—' }}</td>
               <td><span class="badge-soft {{ 'success' if p.status=='confirmado' else 'muted' }}">{{ p.status|label }}</span></td>
               <td>
+                {% if p.status == 'confirmado' and current_user.is_superadmin %}
+                <button type="button" class="btn btn-sm btn-light border me-1"
+                        data-bs-toggle="collapse" data-bs-target="#correctPaymentDate{{ p.id }}">Corregir fecha</button>
+                {% endif %}
                 {% if p.status == 'confirmado' and current_user.has_permission('sales.edit') %}
                 <form method="post" action="{{ url_for('sales.reverse_payment', payment_id=p.id) }}" onsubmit="return confirm('¿Reversar este pago?');">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -173,6 +215,32 @@
                 {% endif %}
               </td>
             </tr>
+            {% if p.status == 'confirmado' and current_user.is_superadmin %}
+            <tr class="collapse" id="correctPaymentDate{{ p.id }}">
+              <td colspan="6">
+                <form class="row g-2 align-items-end" method="post"
+                      action="{{ url_for('sales.correct_payment_date', payment_id=p.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <div class="col-md-3">
+                    <label class="form-label small">Fecha correcta del pago</label>
+                    <input class="form-control form-control-sm" type="date" name="effective_date"
+                           value="{{ p.effective_date.isoformat() }}" required>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small">Motivo de corrección</label>
+                    <input class="form-control form-control-sm" name="reason"
+                           minlength="5" maxlength="255" required placeholder="Ej. El cobro se recibió en otra fecha">
+                  </div>
+                  <div class="col-md-3">
+                    <button class="btn btn-sm btn-outline-primary w-100">Guardar fecha del pago</button>
+                  </div>
+                  <div class="col-12 small text-secondary">
+                    La corrección sincroniza el ingreso asociado y queda auditada. Los cobros con comisiones pagadas requieren conciliación financiera.
+                  </div>
+                </form>
+              </td>
+            </tr>
+            {% endif %}
           {% else %}
             <tr><td colspan="6">Sin pagos.</td></tr>
           {% endfor %}
