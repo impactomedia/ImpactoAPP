@@ -416,7 +416,7 @@ def _next_contract_period(contract):
     )
 
     if product and product.duration_months:
-        ends_on = starts_on + timedelta(days=product.duration_months * 30)
+        ends_on = add_months(starts_on, product.duration_months)
     elif contract.starts_on and contract.ends_on:
         span = max(1, (contract.ends_on - contract.starts_on).days)
         ends_on = starts_on + timedelta(days=span)
@@ -439,6 +439,8 @@ def _create_renewal_sale(
     description,
     product_id=None,
     operation_type="service_renewal",
+    payment_date=None, payment_reference=None, payment_mode=None,
+    payment_terms=None, installment_rows=None,
 ):
     total = _money(amount)
     initial = _money(initial_payment)
@@ -446,6 +448,19 @@ def _create_renewal_sale(
         raise ValueError("El monto de renovación debe ser mayor que cero.")
     if initial < 0 or initial > total:
         raise ValueError("El pago inicial no puede ser negativo ni superar el total.")
+
+    mode = payment_mode or ("contado" if initial >= total else ("entrega" if balance_due else "financiamiento"))
+    if mode not in {"contado", "entrega", "cuotas", "financiamiento"}:
+        raise ValueError("Modalidad de pago no válida.")
+    if mode == "contado" and initial < total:
+        raise ValueError("El pago al contado debe cubrir la totalidad.")
+    outstanding = (total - initial).quantize(MONEY)
+    scheduled = list(installment_rows or [])
+    if scheduled and sum((_money(x["amount"]) for x in scheduled), Decimal("0")) != outstanding:
+        raise ValueError("Las cuotas programadas deben sumar el saldo restante.")
+    if mode in {"cuotas", "financiamiento"} and outstanding > 0 and not scheduled:
+        raise ValueError("Debes indicar los pagos programados.")
+    first_due = min((x["due_date"] for x in scheduled), default=balance_due)
 
     sale = Sale(
         sale_no=next_code("VEN", Sale),
@@ -475,39 +490,45 @@ def _create_renewal_sale(
         )
     )
 
-    outstanding = total - initial
     receivable = AccountReceivable(
         client_id=renewal.client_id,
         sale_id=sale.id,
         total_amount=total,
         paid_amount=Decimal("0"),
-        due_date=balance_due if outstanding > 0 else None,
+        due_date=first_due if outstanding > 0 else None,
         status="al_dia",
         notes="Saldo generado por renovación.",
     )
     db.session.add(receivable)
 
-    payment_mode = "contado" if initial >= total else ("entrega" if balance_due else "financiamiento")
     db.session.add(
         SaleOperationMeta(
             sale_id=sale.id,
             operation_type=operation_type,
-            payment_mode=payment_mode,
-            payment_terms="Renovación generada desde el Centro de Renovaciones.",
+            payment_mode=mode,
+            payment_terms=payment_terms or "Renovación del servicio contratado.",
             catalog_total=total,
             credit_applied=Decimal("0"),
             created_by_id=user_id,
         )
     )
 
+    db.session.flush()
+    for idx, item in enumerate(sorted(scheduled, key=lambda x: x["due_date"]), 1):
+        db.session.add(ClientInstallment(
+            client_id=sale.client_id, sale_id=sale.id, sequence=idx,
+            amount=_money(item["amount"]), paid_amount=Decimal("0"),
+            base_paid_amount=initial, due_date=item["due_date"],
+            status="vencida" if item["due_date"] < date.today() else "pendiente",
+            notes=item.get("notes"), created_by_id=user_id,
+        ))
+    db.session.flush()
     if initial > 0:
         add_payment(
-            sale,
-            initial,
-            payment_method or "transferencia",
-            effective_date=date.today(),
-            notes="Pago inicial de renovación.",
-            registered_by_id=user_id,
+            sale, initial, payment_method or "transferencia",
+            effective_date=payment_date or date.today(),
+            reference=(payment_reference or "").strip() or None,
+            notes="Pago de renovación.", registered_by_id=user_id,
         )
     recalc_sale(sale)
     return sale
@@ -521,6 +542,8 @@ def complete_contract_renewal(
     payment_method="transferencia",
     balance_due=None,
     user_id=None,
+    payment_date=None, payment_reference=None, payment_mode=None,
+    payment_terms=None, installment_rows=None,
 ):
     if renewal.status in FINAL_RENEWAL_STATUSES:
         raise ValueError("Esta renovación ya fue cerrada.")
@@ -543,6 +566,9 @@ def complete_contract_renewal(
         description=f"Renovación de {contract.product.name}",
         product_id=contract.product_id,
         operation_type="principal_renewal" if was_principal else "service_renewal",
+        payment_date=payment_date, payment_reference=payment_reference,
+        payment_mode=payment_mode, payment_terms=payment_terms,
+        installment_rows=installment_rows,
     )
 
     starts_on, ends_on = _next_contract_period(contract)
@@ -648,6 +674,8 @@ def complete_external_renewal(
     payment_method="transferencia",
     balance_due=None,
     user_id=None,
+    payment_date=None, payment_reference=None, payment_mode=None,
+    payment_terms=None, installment_rows=None,
 ):
     if renewal.status in FINAL_RENEWAL_STATUSES:
         raise ValueError("Esta renovación ya fue cerrada.")
@@ -687,6 +715,9 @@ def complete_external_renewal(
             description=f"Renovación de {renewal.renewal_type}",
             product_id=None,
             operation_type="service_renewal",
+            payment_date=payment_date, payment_reference=payment_reference,
+            payment_mode=payment_mode, payment_terms=payment_terms,
+            installment_rows=installment_rows,
         )
 
     renewal.status = "renovado"
