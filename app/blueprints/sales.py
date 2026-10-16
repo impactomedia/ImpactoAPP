@@ -6,7 +6,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 from werkzeug.exceptions import HTTPException
 
-from app.commercial_plans import cortesias, VIP_CHOICES
+from app.commercial_plans import cortesias, VIP_CHOICES, is_principal_product, is_custom_plan, contract_end
 from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.helpers import audit, next_code
@@ -162,7 +162,7 @@ def _sale_form_context():
         ProductService.query
         .filter(
             ProductService.active.is_(True),
-            ProductService.category != "paquete",
+            ~ProductService.category.in_(("paquete", "community_manager")),
         )
         .order_by(ProductService.name)
         .all()
@@ -636,8 +636,18 @@ def principal_service(client_id):
         price = D(plan.base_price)
         if price <= 0:
             continue
-        if current_contract and (plan.id == current_contract.product_id or price <= current_price):
+        if current_contract and plan.id == current_contract.product_id:
             continue
+        # Cambiar entre familias (Impacto / Community Manager) no es un upgrade
+        # con crédito: requiere confirmación explícita y saldar deudas previas.
+        switching_family = bool(current_contract and
+            current_contract.product.category != plan.category)
+        switching_cm = bool(current_contract and
+            current_contract.product.category == "community_manager" and
+            plan.category == "community_manager")
+        if current_contract and not (switching_family or switching_cm):
+            if not is_custom_plan(plan) and price <= current_price:
+                continue
         eligible_plans.append(plan)
 
     if request.method == "GET":
@@ -658,16 +668,35 @@ def principal_service(client_id):
         plan = next((row for row in eligible_plans if row.id == product_id), None)
         if not plan:
             raise ValueError(
-                "Selecciona un paquete principal con precio fijo superior al plan actual."
+                "Selecciona un servicio principal válido del catálogo."
                 if current_contract
-                else "Selecciona un paquete principal con precio fijo configurado."
+                else "Selecciona un servicio principal disponible."
             )
 
-        catalog_price = D(plan.base_price).quantize(MONEY)
+        if is_custom_plan(plan):
+            raw_price = (request.form.get("custom_price") or "").strip()
+            catalog_price = _parse_money(raw_price, "El precio de Esencial Plus", allow_zero=False)
+            duration_months = request.form.get("custom_months", type=int)
+            if not duration_months or not 1 <= duration_months <= 60:
+                raise ValueError("Indica una duración de Esencial Plus entre 1 y 60 meses.")
+        else:
+            catalog_price = D(plan.base_price).quantize(MONEY)
+            duration_months = None
+
+        previous_category = current_contract.product.category if current_contract and current_contract.product else None
+        changing_family = bool(current_contract and
+            (previous_category != plan.category or previous_category == "community_manager"))
+        if changing_family:
+            if request.form.get("confirm_plan_change") != "yes":
+                raise ValueError("Confirma expresamente el cambio de servicio principal.")
+            previous_sale = db.session.get(Sale, current_contract.sale_id) if current_contract.sale_id else None
+            if previous_sale and D(previous_sale.balance) > 0:
+                raise ValueError("El servicio principal anterior tiene saldo pendiente. Regulariza su saldo antes de cambiar de tipo.")
+        elif current_contract and catalog_price <= current_price:
+            raise ValueError("El nuevo paquete debe tener un importe superior al actual.")
         credit = (
             min(catalog_price, recognized_credit.quantize(MONEY))
-            if current_contract
-            else Decimal("0")
+            if current_contract and not changing_family else Decimal("0")
         )
         net_total = (catalog_price - credit).quantize(MONEY)
         if net_total <= 0:
@@ -691,6 +720,10 @@ def principal_service(client_id):
         if sale_date_raw and not sale_date:
             raise ValueError("La fecha de venta no es válida.")
 
+        activation_raw = (request.form.get("activation_date") or "").strip()
+        activation_date = _parse_date(activation_raw) if activation_raw else sale_date
+        if activation_raw and not activation_date:
+            raise ValueError("La fecha de activación del servicio no es válida.")
         payment_mode = _payment_mode_from_request()
 
         sale = Sale(
@@ -822,7 +855,10 @@ def principal_service(client_id):
             sale,
             plan,
             previous_contract=current_contract,
-            courtesies=cortesias(plan, request.form.get("courtesies"), request.form.get("vip_combo")) ,
+            courtesies=cortesias(plan, request.form.get("courtesies"), request.form.get("vip_combo")),
+            activation_date=activation_date,
+            agreed_price=catalog_price,
+            duration_months=duration_months,
         )
         recalc_sale(sale)
         _refresh_receivable_due_date(sale)
@@ -837,6 +873,8 @@ def principal_service(client_id):
                 "catalog_price": str(catalog_price),
                 "credit": str(credit),
                 "net_total": str(net_total),
+                "activation_date": activation_date.isoformat(),
+                "duration_months": duration_months or plan.duration_months,
                 "sale_no": sale.sale_no,
             },
         )
@@ -844,8 +882,8 @@ def principal_service(client_id):
 
         flash(
             (
-                f"Upgrade aplicado. {plan.name}: USD {catalog_price:,.2f}; "
-                f"crédito reconocido USD {credit:,.2f}; nuevo saldo USD {net_total:,.2f}."
+                f"Servicio principal actualizado. {plan.name}: USD {catalog_price:,.2f}; "
+                f"crédito aplicado USD {credit:,.2f}; importe USD {net_total:,.2f}."
                 if current_contract
                 else f"Servicio principal {plan.name} registrado por USD {catalog_price:,.2f}."
             ),
