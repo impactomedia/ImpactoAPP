@@ -288,3 +288,153 @@ def test_second_upgrade_carries_forward_previous_credit_plus_new_payments(client
         ).one()
         assert active.product.name == "Premium"
         assert Decimal(str(active.agreed_price)) == Decimal("3500.00")
+
+
+
+def test_community_manager_is_a_principal_service_not_an_extra_purchase(client, app):
+    login(client)
+    customer_id, *_ = principal_ids(app)
+    with app.app_context():
+        cm = ProductService.query.filter_by(
+            name="Community Manager Esencial - Solo Redes Sociales"
+        ).one()
+        cm_id, price = cm.id, Decimal(str(cm.base_price))
+    principal_html = client.get(f"/sales/principal/{customer_id}").get_data(as_text=True)
+    assert "Community Manager Esencial - Solo Redes Sociales" in principal_html
+    extra_html = client.get("/sales/new").get_data(as_text=True)
+    assert "Community Manager Esencial - Solo Redes Sociales" not in extra_html
+    response = client.post(f"/sales/principal/{customer_id}", data={
+        "product_id": cm_id,
+        "sale_date": date.today().isoformat(),
+        "activation_date": date(2026, 9, 10).isoformat(),
+        "initial_payment": str(price),
+        "payment_mode": "contado",
+        "payment_method": "Zelle",
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        contract = ClientContract.query.filter_by(client_id=customer_id, principal=True).one()
+        assert contract.product_id == cm_id
+        assert contract.starts_on == date(2026, 9, 10)
+        assert contract.ends_on == date(2026, 10, 10)
+        assert contract.principal
+        assert Decimal(str(contract.agreed_price)) == price
+        assert Sale.query.one().total == price
+
+
+def test_esencial_plus_accepts_individual_price_and_months_without_touching_catalog(client, app):
+    from app.commercial_plans import contract_months
+    login(client)
+    customer_id, *_ = principal_ids(app)
+    with app.app_context():
+        product = ProductService.query.filter_by(name="Impacto Esencial Plus").one()
+        product_id = product.id
+        assert Decimal(str(product.base_price)) == Decimal("0")
+    sale_date = date.today()
+    response = client.post(f"/sales/principal/{customer_id}", data={
+        "product_id": product_id,
+        "custom_price": "1250.00",
+        "custom_months": "10",
+        "sale_date": sale_date.isoformat(),
+        "activation_date": "2026-03-20",
+        "initial_payment": "1250",
+        "payment_method": "Zelle",
+        "payment_mode": "contado",
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        contract = ClientContract.query.filter_by(client_id=customer_id, principal=True).one()
+        assert contract.product.name == "Impacto Esencial Plus"
+        assert Decimal(str(contract.agreed_price)) == Decimal("1250.00")
+        assert contract.starts_on == date(2026, 3, 20)
+        assert contract.ends_on == date(2027, 1, 20)
+        assert contract_months(contract) == 10
+        assert Sale.query.one().sale_date == sale_date
+        assert Decimal(str(Sale.query.one().total)) == Decimal("1250")
+        assert Decimal(str(contract.product.base_price)) == Decimal("0")
+
+
+def test_custom_plan_contract_edit_changes_months_but_protects_sale_amount(client, app):
+    from app.commercial_plans import contract_months
+    from app.models import Renewal
+    login(client)
+    customer_id, *_ = principal_ids(app)
+    with app.app_context():
+        plus_id = ProductService.query.filter_by(name="Impacto Esencial Plus").one().id
+    client.post(f"/sales/principal/{customer_id}", data={
+        "product_id": plus_id, "custom_price": "1100", "custom_months": "8",
+        "activation_date": "2026-03-20", "sale_date": date.today().isoformat(),
+        "initial_payment": "1100", "payment_mode": "contado",
+    })
+    with app.app_context():
+        contract = ClientContract.query.filter_by(client_id=customer_id, principal=True).one()
+        contract_id = contract.id
+
+    update = f"/clients/{customer_id}/contracts/{contract_id}/update"
+    response = client.post(update, data={
+        "status": "activo", "starts_on": "2026-03-20",
+        "ends_on": "2030-08-15",  # Fecha manipulada: debe ignorarse.
+        "custom_months": "12", "agreed_price": "1100",
+        "principal": "on",
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        contract = db.session.get(ClientContract, contract_id)
+        assert contract_months(contract) == 12
+        assert contract.ends_on == date(2027, 3, 20)
+        assert Renewal.query.filter_by(contract_id=contract_id).one().due_date == date(2027, 3, 20)
+        assert Decimal(str(contract.agreed_price)) == Decimal("1100")
+    client.post(update, data={
+        "status": "activo", "starts_on": "2026-03-20",
+        "custom_months": "12", "agreed_price": "999",
+        "principal": "on",
+    })
+    with app.app_context():
+        assert db.session.get(ClientContract, contract_id).agreed_price == Decimal("1100")
+        assert Sale.query.one().total == Decimal("1100")
+
+
+def test_edit_fixed_plan_corrects_inconsistent_dates_and_updates_renewal(client, app):
+    from app.commercial_plans import contract_end, maintenance_label
+    from app.models import Renewal
+    login(client)
+    customer_id, six_id, *_ = principal_ids(app)
+    client.post(f"/sales/principal/{customer_id}", data={
+        "product_id": six_id, "sale_date": date.today().isoformat(),
+        "activation_date": "2026-03-20",
+        "initial_payment": "750", "payment_mode": "contado",
+    })
+    with app.app_context():
+        contract = ClientContract.query.filter_by(client_id=customer_id, principal=True).one()
+        contract_id = contract.id
+        contract.ends_on = date(2027, 4, 16)
+        db.session.commit()
+        assert maintenance_label(contract).startswith("Fechas inconsistentes:")
+        assert contract_end(contract.product, contract.starts_on) == date(2026, 9, 20)
+    response = client.post(f"/clients/{customer_id}/contracts/{contract_id}/update", data={
+        "status": "activo", "starts_on": "2026-03-20",
+        "ends_on": "2027-04-16", "agreed_price": "750", "principal": "on",
+    })
+    assert response.status_code == 302
+    with app.app_context():
+        contract = db.session.get(ClientContract, contract_id)
+        assert contract.starts_on == date(2026, 3, 20)
+        assert contract.ends_on == date(2026, 9, 20)
+        assert contract.status == "caducado"
+        assert Renewal.query.filter_by(contract_id=contract_id).one().due_date == date(2026, 9, 20)
+        assert not maintenance_label(contract).startswith("Fechas inconsistentes:")
+
+
+def test_invalid_plus_price_or_duration_does_not_create_sale(client, app):
+    login(client)
+    customer_id, *_ = principal_ids(app)
+    with app.app_context():
+        plus_id = ProductService.query.filter_by(name="Impacto Esencial Plus").one().id
+    for price, months in (("", "10"), ("-100", "8"), ("1200", "0"), ("1200", "61")):
+        client.post(f"/sales/principal/{customer_id}", data={
+            "product_id": plus_id, "custom_price": price, "custom_months": months,
+            "sale_date": date.today().isoformat(), "initial_payment": "0",
+        })
+    with app.app_context():
+        assert Sale.query.count() == 0
+        assert ClientContract.query.count() == 0
