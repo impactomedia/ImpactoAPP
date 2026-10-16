@@ -4,7 +4,7 @@
 <div class="page-heading">
   <div>
     <span class="eyebrow">Planes comerciales</span>
-    <h1>{{ 'Upgrade de plan' if current_contract else 'Registrar plan principal' }}</h1>
+    <h1>{{ 'Cambiar servicio principal' if current_contract else 'Registrar servicio principal' }}</h1>
     <p>{{ client.business_name }} · USD únicamente</p>
   </div>
   <a class="btn btn-light border" href="{{ url_for('clients.detail', client_id=client.id) }}">Volver al expediente</a>
@@ -15,7 +15,7 @@
   <strong>Plan actual:</strong> {{ current_contract.product.name }}
   · Valor USD {{ current_price|money }}
   · Pagado reconocido para upgrade USD {{ recognized_credit|money }}.
-  <div class="small text-secondary mt-1">Solo se muestran planes con precio superior. El nuevo plan sustituirá al actual; no se sumarán ambas deudas.</div>
+  <div class="small text-secondary mt-1">Los upgrades de paquetes reconocen crédito únicamente si el nuevo paquete es más costoso. Los cambios de Community Manager o de familia no aplican crédito y requieren confirmación expresa y saldo anterior liquidado.</div>
 </div>
 {% endif %}
 
@@ -24,14 +24,14 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="row g-3">
     <div class="col-lg-6">
-      <label class="form-label">Nuevo plan *</label>
+      <label class="form-label">Plan o Community Manager principal *</label>
       <select name="product_id" id="planSelect" class="form-select" required>
         <option value="">Seleccionar</option>
         {% for p in plans %}
-        <option value="{{ p.id }}" data-price="{{ p.base_price or 0 }}">{{ p.name }} — USD {{ p.base_price|money }}</option>
+        <option value="{{ p.id }}" data-price="{{ p.base_price or 0 }}" data-category="{{ p.category }}" data-custom="{{ 'true' if p.name == 'Impacto Esencial Plus' else 'false' }}">{{ p.name }} — {{ 'Precio personalizado' if p.name == 'Impacto Esencial Plus' else 'USD ' ~ (p.base_price|money) }}</option>
         {% endfor %}
       </select>
-      {% if not plans %}<small class="text-danger">No hay planes elegibles con precio fijo configurado.</small>{% endif %}
+      {% if not plans %}<small class="text-danger">No hay servicios principales disponibles para esta operación.</small>{% endif %}
     </div>
     <div class="col-lg-6">
       <label for="principalSaleLead" class="form-label fw-semibold">¿De quién provino el lead de esta venta?</label>
@@ -40,10 +40,19 @@
       </select>
       <small class="text-secondary">Daniel, Oscar o Empresa; independiente del asesor que cerró la venta.</small>
     </div>
-    <div class="col-lg-3"><label class="form-label">Precio catálogo</label><input id="catalogDisplay" class="form-control" value="USD 0.00" disabled></div>
-    <div class="col-lg-3"><label class="form-label">Crédito reconocido</label><input id="creditDisplay" class="form-control" value="USD {{ recognized_credit|money }}" disabled></div>
+    <div class="col-lg-3"><label class="form-label">Precio acordado</label><input id="catalogDisplay" class="form-control" value="USD 0.00" disabled></div>
+    <div class="col-lg-3"><label class="form-label">Crédito aplicable</label><input id="creditDisplay" class="form-control" value="USD 0.00" disabled></div>
+    <div class="col-lg-6 d-none" id="plusPriceWrap">
+      <label for="plusPrice" class="form-label fw-semibold">Precio acordado de Esencial Plus (USD) *</label>
+      <input id="plusPrice" name="custom_price" type="number" step="0.01" min="0.01" class="form-control" placeholder="Ej. 1100.00">
+    </div>
+    <div class="col-lg-6 d-none" id="plusMonthsWrap">
+      <label for="plusMonths" class="form-label fw-semibold">Vigencia acordada (meses) *</label>
+      <input id="plusMonths" name="custom_months" type="number" step="1" min="1" max="60" class="form-control" placeholder="Ej. 8, 10 o 12">
+    </div>
 
-    <div class="col-lg-3"><label class="form-label">Fecha</label><input name="sale_date" type="date" class="form-control" value="{{ today }}"></div>
+    <div class="col-lg-3"><label class="form-label">Fecha de venta</label><input name="sale_date" type="date" class="form-control" value="{{ request.form.get('sale_date') or today }}"></div>
+    <div class="col-lg-3"><label class="form-label fw-semibold">Activación del servicio *</label><input name="activation_date" type="date" class="form-control" required value="{{ request.form.get('activation_date') or request.form.get('sale_date') or today }}"><small class="text-secondary">Se usará para calcular el vencimiento, sin cambiar la fecha de venta.</small></div>
     <div class="col-lg-3"><label class="form-label">Pago inicial</label><input name="initial_payment" id="initialPayment" type="number" min="0" step="0.01" class="form-control" value="0"></div>
     <div class="col-lg-3"><label class="form-label">Método</label><select name="payment_method" class="form-select">{% for m in ['transferencia','efectivo','Zelle','ACH','Wise','tarjeta','otro'] %}<option value="{{ m }}">{{ m|label }}</option>{% endfor %}</select></div>
     <div class="col-lg-3"><label class="form-label">Fecha del pago</label><input name="initial_payment_date" type="date" class="form-control" value="{{ today }}"></div>
@@ -52,6 +61,14 @@
     <div class="col-lg-6"><label class="form-label">Cortesías acordadas</label><textarea name="courtesies" class="form-control" rows="2" placeholder="Ej. Business Cards, QR, portada..."></textarea></div>
   </div>
 
+  {% if current_contract %}
+  <div id="changeFamilyWrap" class="alert alert-warning mt-3 d-none">
+    <label class="form-check">
+      <input class="form-check-input" type="checkbox" name="confirm_plan_change" id="confirmPlanChange" value="yes">
+      <span class="form-check-label">Confirmo sustituir el servicio principal actual por uno diferente. No se aplicará crédito automático y el servicio anterior debe estar liquidado.</span>
+    </label>
+  </div>
+  {% endif %}
   <hr class="my-4">
   <h2 class="h5">Forma de pago</h2>
   <div class="row g-3">
@@ -89,8 +106,8 @@
 
   <div class="border rounded-4 p-3 mt-4">
     <div class="d-flex flex-wrap justify-content-between gap-3">
-      <div><small class="text-secondary">Precio oficial</small><div class="fs-5 fw-bold" id="summaryCatalog">USD 0.00</div></div>
-      <div><small class="text-secondary">Crédito</small><div class="fs-5 fw-bold">USD {{ recognized_credit|money }}</div></div>
+      <div><small class="text-secondary">Precio del servicio</small><div class="fs-5 fw-bold" id="summaryCatalog">USD 0.00</div></div>
+      <div><small class="text-secondary">Crédito</small><div class="fs-5 fw-bold" id="summaryCredit">USD 0.00</div></div>
       <div><small class="text-secondary">Saldo del nuevo plan</small><div class="fs-5 fw-bold" id="summaryNet">USD 0.00</div></div>
       <div><small class="text-secondary">Saldo después del inicial</small><div class="fs-5 fw-bold" id="summaryBalance">USD 0.00</div></div>
     </div>
@@ -103,7 +120,15 @@
 document.addEventListener('DOMContentLoaded', () => {
   const plan = document.getElementById('planSelect');
   const initial = document.getElementById('initialPayment');
-  const credit = parseFloat('{{ recognized_credit or 0 }}') || 0;
+  const upgradeCredit = parseFloat('{{ recognized_credit or 0 }}') || 0;
+  const currentCategory = {{ (current_contract.product.category if current_contract and current_contract.product else '')|tojson }};
+  const currentPrice = parseFloat('{{ current_price or 0 }}') || 0;
+  const customPrice = document.getElementById('plusPrice');
+  const customMonths = document.getElementById('plusMonths');
+  const priceWrap = document.getElementById('plusPriceWrap');
+  const monthsWrap = document.getElementById('plusMonthsWrap');
+  const changeWrap = document.getElementById('changeFamilyWrap');
+  const changeCheck = document.getElementById('confirmPlanChange');
   const mode = document.getElementById('paymentMode');
   const single = document.getElementById('singleDueWrap');
   const custom = document.getElementById('customPlan');
@@ -113,7 +138,19 @@ document.addEventListener('DOMContentLoaded', () => {
   function money(v){ return 'USD ' + Math.max(0,v).toFixed(2); }
   function refresh(){
     const opt=plan.options[plan.selectedIndex];
-    const catalog=parseFloat(opt?.dataset.price||'0')||0;
+    const isCustom=opt?.dataset.custom==='true';
+    priceWrap.classList.toggle('d-none', !isCustom);
+    monthsWrap.classList.toggle('d-none', !isCustom);
+    customPrice.required = isCustom;
+    customMonths.required = isCustom;
+    const catalog=isCustom?(parseFloat(customPrice.value||'0')||0):(parseFloat(opt?.dataset.price||'0')||0);
+    const switching = !!currentCategory && (currentCategory!==opt?.dataset.category || currentCategory==='community_manager');
+    if(changeWrap){
+      changeWrap.classList.toggle('d-none', !switching);
+      changeCheck.required = switching;
+      if(!switching)changeCheck.checked=false;
+    }
+    const credit=switching?0:Math.min(catalog,upgradeCredit);
     const net=Math.max(0,catalog-credit);
     if(mode.value==='contado'){
       initial.value=net.toFixed(2);
@@ -123,6 +160,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const init=parseFloat(initial.value||'0')||0;
     document.getElementById('catalogDisplay').value=money(catalog);
+    document.getElementById('creditDisplay').value=money(credit);
+    document.getElementById('summaryCredit').textContent=money(credit);
     document.getElementById('summaryCatalog').textContent=money(catalog);
     document.getElementById('summaryNet').textContent=money(net);
     document.getElementById('summaryBalance').textContent=money(net-init);
@@ -142,6 +181,8 @@ document.addEventListener('DOMContentLoaded', () => {
   mode.addEventListener('change',togglePayment);
   plan.addEventListener('change',()=>{refresh();const vip=plan.options[plan.selectedIndex]?.textContent.includes("Impacto VIP");document.getElementById("vipComboWrap").style.display=vip?"":"none";document.getElementById("vipCombo").required=!!vip;});
   initial.addEventListener('input',refresh);
+  customPrice.addEventListener('input',refresh);
+  customMonths.addEventListener('input',refresh);
   togglePayment();
 });
 </script>
