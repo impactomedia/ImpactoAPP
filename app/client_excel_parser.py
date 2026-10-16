@@ -438,6 +438,18 @@ def _slot_payload(cells, label_col, slot):
 
     plan_start, start_precision = parse_date_value(get_value(13))
     plan_end, end_precision = parse_date_value(get_value(14))
+    raw_plan_end = _clean_text(get_value(14))
+    normalized_end = normalize_text(raw_plan_end)
+    if plan_end:
+        plan_end_kind = "date"
+    elif any(marker in normalized_end for marker in (
+        "permanente", "indefinido", "de por vida", "sin vencimiento", "lifetime"
+    )):
+        plan_end_kind = "permanent"
+    elif not normalized_end or normalized_end in {"n/a", "na", "no aplica", "pendiente"}:
+        plan_end_kind = "missing"
+    else:
+        plan_end_kind = "unrecognized"
     domain_data = _extract_domain_dates(get_value(15))
 
     benefits = _benefit_text(get_label(18), get_value(18))
@@ -522,6 +534,8 @@ def _slot_payload(cells, label_col, slot):
         "plan_start_precision": start_precision,
         "plan_end": plan_end.isoformat() if plan_end else None,
         "plan_end_precision": end_precision,
+        "plan_end_kind": plan_end_kind,
+        "plan_end_raw": raw_plan_end[:100],
         "benefits": benefits,
         "courtesies": courtesies,
         "operational": operational,
