@@ -10,7 +10,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from sqlalchemy import or_, and_
 
-from app.commercial_plans import maintenance_label
+from app.commercial_plans import maintenance_label, contract_end, contract_months, is_custom_plan, is_principal_product
 from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.decorators import permission_required, roles_required
@@ -1394,9 +1394,9 @@ def add_contract(client_id):
     if not product or not product.active:
         flash("Selecciona un producto o paquete activo.", "danger")
         return redirect(url_for("clients.detail", client_id=client.id))
-    if product.category == "paquete":
+    if is_principal_product(product):
         flash(
-            "Los paquetes principales se registran desde Servicio principal / Upgrade para mantener precio, pagos y saldo sincronizados.",
+            "Los paquetes y Community Manager se contratan como servicios principales para mantener precio, pagos y saldo sincronizados.",
             "info",
         )
         return redirect(url_for("sales.principal_service", client_id=client.id))
@@ -1483,8 +1483,28 @@ def update_contract(client_id, contract_id):
         flash("Estado de paquete no válido.", "danger")
         return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
 
-    starts_on = _date_or_none(request.form.get("starts_on")) or contract.starts_on
-    ends_on = _date_or_none(request.form.get("ends_on"))
+    submitted_date = (request.form.get("starts_on") or "").strip()
+    starts_on = _date_or_none(submitted_date) if submitted_date else contract.starts_on
+    if not starts_on:
+        flash("La fecha de activación no es válida.", "danger")
+        return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+    months = None
+    if contract.product and is_custom_plan(contract.product):
+        raw_months = (request.form.get("custom_months") or "").strip()
+        if raw_months:
+            try:
+                months = int(raw_months)
+            except ValueError:
+                months = None
+        else:
+            months = contract_months(contract)
+        if not months or not 1 <= months <= 60:
+            flash("Esencial Plus requiere una duración válida entre 1 y 60 meses.", "danger")
+            return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+    if contract.product and is_principal_product(contract.product):
+        ends_on = contract_end(contract.product, starts_on, duration_months=months)
+    else:
+        ends_on = _date_or_none(request.form.get("ends_on"))
     if ends_on and ends_on < starts_on:
         flash("La fecha de vencimiento no puede ser anterior a la activación.", "danger")
         return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
@@ -1493,8 +1513,13 @@ def update_contract(client_id, contract_id):
     if agreed_price is not None and agreed_price < 0:
         flash("El precio acordado no puede ser negativo.", "danger")
         return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
-    if contract.product and contract.product.category == "paquete" and contract.product.base_price is not None:
-        agreed_price = Decimal(str(contract.product.base_price))
+    if contract.product and is_principal_product(contract.product):
+        if is_custom_plan(contract.product):
+            if agreed_price is None or agreed_price <= 0:
+                flash("Esencial Plus requiere un precio acordado mayor que cero.", "danger")
+                return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
+        elif contract.product.category == "paquete" and contract.product.base_price is not None:
+            agreed_price = Decimal(str(contract.product.base_price))
 
     detail = contract.v2_detail or ClientContractDetail(contract_id=contract.id)
     if not contract.v2_detail:
@@ -1528,7 +1553,10 @@ def update_contract(client_id, contract_id):
     detail.courtesies_snapshot = (request.form.get("courtesies_snapshot") or "").strip() or None
     detail.status_reason = status_reason
 
-    renewal = Renewal.query.filter_by(contract_id=contract.id).first()
+    renewal = Renewal.query.filter(
+        Renewal.contract_id == contract.id,
+        Renewal.status.in_(("pendiente", "contactado")),
+    ).order_by(Renewal.id.desc()).first()
     if ends_on:
         if not renewal:
             renewal = Renewal(
@@ -1555,7 +1583,7 @@ def update_contract(client_id, contract_id):
         after={"status": contract.status, "starts_on": str(contract.starts_on), "ends_on": str(contract.ends_on)},
     )
     db.session.commit()
-    flash("Paquete actualizado.", "success")
+    flash("Servicio actualizado: vencimiento sincronizado con activación y duración.", "success")
     return redirect(url_for("clients.detail", client_id=client.id, _anchor="servicios"))
 
 @bp.route("/<int:client_id>/comment", methods=["POST"])
