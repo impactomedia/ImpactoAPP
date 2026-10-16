@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import json
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
@@ -10,16 +11,21 @@ from app.commercial_plans import cortesias, VIP_CHOICES, is_principal_product, i
 from app.project_admin_scope import is_project_admin
 from app.extensions import db
 from app.helpers import audit, next_code
-from app.decorators import roles_required
+from app.decorators import roles_required, permission_required
 from app.lead_commission_service import available_generators, source_for_client, set_sale_generator
 from app.lead_commission_models import LeadCommissionPayout
 from app.models import (
     AccountReceivable,
+    AuditLog,
     Client,
+    ClientContract,
     Collaborator,
     Deduction,
     Income,
     Payment,
+    Income,
+    PrintOrder,
+    Project,
     ProductService,
     Quote,
     Renewal,
@@ -908,6 +914,183 @@ def principal_service(client_id):
         return redirect(url_for("sales.principal_service", client_id=client.id))
 
 
+def _sale_financial_editable(sale):
+    """Evita desajustes con cobros, cuotas, imprenta y trabajo producido."""
+    return bool(
+        sale.status not in {"reemplazada", "cancelada", "anulada"}
+        and not sale.quote_id
+        and not sale.payments
+        and not sale.installments
+        and not sale.deductions
+        and not ClientContract.query.filter_by(sale_id=sale.id).first()
+        and not Project.query.filter_by(sale_id=sale.id).first()
+        and not PrintOrder.query.filter_by(sale_id=sale.id).first()
+        and not (sale.commission and sale.commission.status == "pagada")
+        and not LeadCommissionPayout.query.filter_by(sale_id=sale.id).first()
+    )
+
+
+def _sale_edit_audit_rows(sale):
+    """Historial de modificaciones de esta venta, sin exponer otras cuentas."""
+    entries = AuditLog.query.filter(
+        AuditLog.entity == "Sale",
+        AuditLog.entity_id == str(sale.id),
+        AuditLog.action.in_(("editar_venta", "corregir_fecha_pago_venta")),
+    ).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(30).all()
+    rows = []
+    labels = {
+        "sale_date": "Fecha de venta",
+        "notes": "Notas de la venta",
+        "payment_terms": "Condiciones comerciales",
+        "effective_date": "Fecha de pago",
+    }
+    for entry in entries:
+        before = json.loads(entry.before_json or "{}")
+        after = json.loads(entry.after_json or "{}")
+        changes = []
+        for key, latest in after.items():
+            previous = before.get(key)
+            if previous != latest:
+                field = labels.get(key, key.replace("_", " ").capitalize())
+                if key.startswith("item_"):
+                    parts = key.split("_", 2)
+                    field = "Ítem #" + parts[1] + " · " + parts[-1].replace("_", " ")
+                changes.append((field, "—" if previous is None else previous,
+                                "—" if latest is None else latest))
+        rows.append({"entry": entry, "changes": changes})
+    return rows
+
+
+@bp.route("/<int:sale_id>/edit", methods=["GET", "POST"])
+@login_required
+@permission_required("sales.edit")
+def edit(sale_id):
+    sale = _visible_sales_query().filter(Sale.id == sale_id).first_or_404()
+    can_edit_amounts = _sale_financial_editable(sale)
+    if request.method == "GET":
+        return render_template("sales/edit.html", sale=sale,
+                               can_edit_amounts=can_edit_amounts)
+
+    reason = (request.form.get("reason") or "").strip()
+    if len(reason) < 5 or len(reason) > 255:
+        flash("Escribe un motivo de corrección de 5 a 255 caracteres.", "danger")
+        return redirect(url_for("sales.edit", sale_id=sale.id))
+
+    raw_date = (request.form.get("sale_date") or "").strip()
+    sale_date = _parse_date(raw_date)
+    if not sale_date:
+        flash("Indica una fecha de venta válida.", "danger")
+        return redirect(url_for("sales.edit", sale_id=sale.id))
+    notes = (request.form.get("notes") or "").strip()
+    if len(notes) > 5000:
+        flash("Las notas no deben superar los 5000 caracteres.", "danger")
+        return redirect(url_for("sales.edit", sale_id=sale.id))
+    terms = (request.form.get("payment_terms") or "").strip()
+    if len(terms) > 1000:
+        flash("Las condiciones comerciales no deben superar los 1000 caracteres.", "danger")
+        return redirect(url_for("sales.edit", sale_id=sale.id))
+
+    before, after = {}, {}
+    def put(field, old, new):
+        if old != new:
+            before[field] = old
+            after[field] = new
+
+    put("sale_date", sale.sale_date.isoformat() if sale.sale_date else None,
+        sale_date.isoformat())
+    put("notes", sale.notes or "", notes)
+    if sale.operation_meta:
+        put("payment_terms", sale.operation_meta.payment_terms or "", terms)
+    changes_to_items = []
+    try:
+        for item in sale.items:
+            name = (request.form.get(f"item_description_{item.id}") or "").strip()
+            if not name or len(name) > 255:
+                raise ValueError("Cada ítem necesita una descripción válida (máximo 255 caracteres).")
+            put(f"item_{item.id}_descripcion", item.description, name)
+            revised = {"description": name}
+            if can_edit_amounts:
+                def value(suffix, title, *, min_positive=False):
+                    raw = (request.form.get(f"item_{suffix}_{item.id}") or "").strip()
+                    if not raw:
+                        raise ValueError(f"Falta {title}.")
+                    amount = Decimal(raw).quantize(MONEY, rounding=ROUND_HALF_UP)
+                    if not amount.is_finite() or amount < 0 or (min_positive and amount <= 0):
+                        raise ValueError(f"{title} debe ser positivo.")
+                    return amount
+                qty = value("quantity", "la cantidad", min_positive=True)
+                price = value("price", "el precio unitario")
+                discount = value("discount", "el descuento")
+                if discount > price:
+                    raise ValueError("El descuento no puede superar el precio unitario.")
+                total = (qty * (price - discount)).quantize(MONEY)
+                revised.update(quantity=qty, list_price=price, discount=discount,
+                               unit_price=(price - discount), total=total)
+                for label, old, new in (
+                    ("cantidad", item.quantity, qty),
+                    ("precio", item.list_price, price),
+                    ("descuento", item.discount, discount),
+                ):
+                    put(f"item_{item.id}_{label}", str(old), str(new))
+            changes_to_items.append((item, revised))
+
+        if can_edit_amounts:
+            new_total = sum((row["total"] for _, row in changes_to_items), Decimal("0"))
+            if new_total <= 0:
+                raise ValueError("El importe total de la venta debe ser mayor que cero.")
+        else:
+            # No confiar en valores de precio inyectados por la petición.
+            for item in sale.items:
+                for suffix, old in (("quantity", item.quantity), ("price", item.list_price),
+                                    ("discount", item.discount)):
+                    submitted = request.form.get(f"item_{suffix}_{item.id}")
+                    if submitted not in (None, "") and Decimal(str(submitted)) != Decimal(str(old)):
+                        raise ValueError("Los importes de esta venta tienen movimientos asociados y no pueden cambiarse desde aquí.")
+
+        if not before:
+            flash("No se detectaron modificaciones en esta venta.", "info")
+            return redirect(url_for("sales.detail", sale_id=sale.id))
+
+        # Las comisiones quincenales pagadas impiden mover el historial
+        # comercial ya liquidado, sin prohibir notas/correcciones textuales.
+        if "sale_date" in after and sale.advisor_id:
+            from app.finance_control_models import AdvisorFortnightPayout
+            from app.finance_control_service import fortnight_bounds
+            old_period, _ = fortnight_bounds(sale.sale_date)
+            new_period, _ = fortnight_bounds(sale_date)
+            if (old_period != new_period and
+                AdvisorFortnightPayout.query.filter(
+                    AdvisorFortnightPayout.advisor_id == sale.advisor_id,
+                    AdvisorFortnightPayout.period_start.in_((old_period, new_period)),
+                ).first()):
+                raise ValueError("No se puede cambiar la fecha entre quincenas con comisiones ya pagadas. Solicita conciliación financiera.")
+        sale.sale_date = sale_date
+        sale.notes = notes or None
+        if sale.operation_meta:
+            sale.operation_meta.payment_terms = terms or None
+        for item, values in changes_to_items:
+            for key, value in values.items():
+                setattr(item, key, value)
+        if can_edit_amounts:
+            db.session.flush()
+            recalc_sale(sale)
+            if sale.operation_meta and sale.operation_meta.operation_type == "additional_purchase":
+                sale.operation_meta.catalog_total = sale.total
+        audit("editar_venta", "Sale", sale.id, before=before, after=after, reason=reason)
+        db.session.commit()
+        flash("Venta actualizada. Los cambios quedaron registrados con tu nombre, fecha y motivo.", "success")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+    except (ValueError, InvalidOperation) as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+        return redirect(url_for("sales.edit", sale_id=sale.id))
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Error al corregir venta %s", sale_id)
+        flash("No fue posible actualizar la venta; se conservaron sus datos anteriores.", "danger")
+        return redirect(url_for("sales.edit", sale_id=sale.id))
+
+
 @bp.route("/<int:sale_id>")
 @login_required
 def detail(sale_id):
@@ -920,6 +1103,7 @@ def detail(sale_id):
         lead_generators=available_generators() if _role_name() in {"superadmin", "admin"} else [],
         lead_has_confirmed_payment=any(p.status == "confirmado" for p in sale.payments),
         lead_has_payout=LeadCommissionPayout.query.filter_by(sale_id=sale.id).first() is not None,
+        sale_edits=_sale_edit_audit_rows(sale),
     )
 
 
@@ -954,6 +1138,75 @@ def change_sale_lead_generator(sale_id):
           reason=reason or "Corrección antes del primer cobro")
     db.session.commit()
     flash("Origen del lead de la venta actualizado. No se modificaron las metas del asesor.", "success")
+    return redirect(url_for("sales.detail", sale_id=sale.id))
+
+
+@bp.route("/payments/<int:payment_id>/correct-date", methods=["POST"])
+@login_required
+@roles_required("superadmin")
+def correct_payment_date(payment_id):
+    """Corrección controlada de fecha: pagos, ingresos y comisiones coherentes."""
+    payment_row = db.get_or_404(Payment, payment_id)
+    sale = _visible_sales_query().filter(Sale.id == payment_row.sale_id).first_or_404()
+    if payment_row.status != "confirmado":
+        flash("Solo se puede corregir la fecha de un pago confirmado.", "warning")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+
+    corrected_date = _parse_date((request.form.get("effective_date") or "").strip())
+    reason = (request.form.get("reason") or "").strip()
+    if not corrected_date or len(reason) < 5 or len(reason) > 255:
+        flash("Indica la fecha correcta y un motivo de 5 a 255 caracteres.", "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+    if corrected_date == payment_row.effective_date:
+        flash("La fecha de este pago ya es la indicada.", "info")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+
+    if sale.commission and sale.commission.status == "pagada":
+        flash("La comisión de esta venta ya fue pagada; la fecha requiere conciliación financiera.", "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+    if LeadCommissionPayout.query.filter_by(sale_id=sale.id).first():
+        flash("Hay una comisión de lead liquidada; la corrección requiere conciliación financiera.", "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+
+    from app.finance_control_models import AdvisorFortnightPayout
+    from app.finance_control_service import fortnight_bounds
+    old_period, _ = fortnight_bounds(payment_row.effective_date)
+    new_period, _ = fortnight_bounds(corrected_date)
+    advisor_id = sale.advisor_id or (sale.client.owner_id if sale.client else None)
+    if advisor_id and AdvisorFortnightPayout.query.filter(
+        AdvisorFortnightPayout.advisor_id == advisor_id,
+        AdvisorFortnightPayout.period_start.in_((old_period, new_period)),
+    ).first():
+        flash("Existe una quincena con comisiones pagadas; no se puede cambiar este cobro sin conciliación.", "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+
+    matching_incomes = Income.query.filter_by(
+        sale_id=sale.id, client_id=sale.client_id,
+        effective_date=payment_row.effective_date,
+        amount=payment_row.amount, currency=payment_row.currency,
+        method=payment_row.method, reference=payment_row.reference,
+        status="confirmado",
+    ).all()
+    if len(matching_incomes) != 1:
+        flash("No se puede identificar de forma única el ingreso asociado. Solicita revisión financiera para evitar duplicados.", "danger")
+        return redirect(url_for("sales.detail", sale_id=sale.id))
+
+    previous = payment_row.effective_date
+    try:
+        payment_row.effective_date = corrected_date
+        matching_incomes[0].effective_date = corrected_date
+        audit(
+            "corregir_fecha_pago_venta", "Sale", sale.id,
+            before={"effective_date": previous.isoformat()},
+            after={"effective_date": corrected_date.isoformat()},
+            reason=f"Pago #{payment_row.id}. {reason}",
+        )
+        db.session.commit()
+        flash("Fecha del pago corregida y sincronizada con el ingreso. Corrección auditada.", "success")
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Error corrigiendo fecha de pago %s", payment_id)
+        flash("No se guardó la corrección del pago.", "danger")
     return redirect(url_for("sales.detail", sale_id=sale.id))
 
 

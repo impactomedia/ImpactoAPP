@@ -76,6 +76,8 @@ ENDPOINT_PERMISSIONS = {
     "sales.payment": "sales.payment",
     "sales.deduction": "sales.edit",
     "sales.reverse_payment": "sales.edit",
+    "sales.edit": "sales.edit",
+    "sales.correct_payment_date": "sales.edit",
     "sales.renewal_update": "sales.edit",
 
     # Imprenta

@@ -1,0 +1,98 @@
+{% extends "app_base.html" %}
+{% block title %}Editar venta {{ sale.sale_no }} | Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Corrección comercial con auditoría</span>
+    <h1>Editar venta {{ sale.sale_no }}</h1>
+    <p>{{ sale.client.business_name }} · Modifica los datos de esta operación sin perder su historial.</p>
+  </div>
+  <a href="{{ url_for('sales.detail', sale_id=sale.id) }}" class="btn btn-light border">Volver al detalle</a>
+</div>
+
+<section class="panel-card mb-4">
+  <form method="post" action="{{ url_for('sales.edit', sale_id=sale.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h2 class="h5 mb-3">Información de la venta</h2>
+    <div class="row g-3 mb-4">
+      <div class="col-lg-4">
+        <label class="form-label fw-semibold" for="editSaleDate">Fecha real de la venta *</label>
+        <input class="form-control" type="date" name="sale_date" id="editSaleDate"
+               value="{{ sale.sale_date.isoformat() if sale.sale_date else '' }}" required>
+        <small class="text-secondary">Corregir esta fecha no cambia la fecha de los pagos.</small>
+      </div>
+      {% if sale.operation_meta %}
+      <div class="col-lg-8">
+        <label class="form-label" for="editSaleTerms">Condiciones comerciales</label>
+        <input class="form-control" id="editSaleTerms" name="payment_terms" maxlength="1000"
+               value="{{ sale.operation_meta.payment_terms or '' }}">
+      </div>
+      {% endif %}
+      <div class="col-12">
+        <label class="form-label" for="editSaleNotes">Notas de la venta</label>
+        <textarea class="form-control" id="editSaleNotes" name="notes" rows="3" maxlength="5000">{{ sale.notes or '' }}</textarea>
+      </div>
+    </div>
+
+    <h2 class="h5 mb-2">Productos y accesorios</h2>
+    {% if not can_edit_amounts %}
+      <div class="alert alert-light border py-2">
+        Los importes, cantidades y descuentos están protegidos porque esta operación tiene
+        cobros, cuotas, contratos, trabajo operativo u otros registros relacionados.
+        Puedes corregir fecha, descripciones y notas sin alterar saldos ni comisiones.
+      </div>
+    {% else %}
+      <p class="text-secondary small">Esta venta no tiene movimientos ni trabajo vinculado. Puedes corregir también cantidades, precios y descuentos; el total se recalculará.</p>
+    {% endif %}
+
+    {% for item in sale.items %}
+      <div class="border rounded-3 p-3 mb-3">
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label class="form-label fw-semibold" for="saleItem{{ item.id }}">Descripción del ítem #{{ item.id }} *</label>
+            <input id="saleItem{{ item.id }}" class="form-control" name="item_description_{{ item.id }}"
+                   value="{{ item.description }}" maxlength="255" required>
+            {% if item.product %}
+              <small class="text-secondary">Categoría registrada: {{ item.product.name }}. La clasificación no se reemplaza desde esta corrección.</small>
+            {% endif %}
+          </div>
+          {% if can_edit_amounts %}
+            <div class="col-md-4">
+              <label class="form-label" for="itemQty{{ item.id }}">Cantidad</label>
+              <input id="itemQty{{ item.id }}" class="form-control" name="item_quantity_{{ item.id }}"
+                     type="number" min="0.01" step="0.01" value="{{ item.quantity }}" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="itemPrice{{ item.id }}">Precio unitario USD</label>
+              <input id="itemPrice{{ item.id }}" class="form-control" name="item_price_{{ item.id }}"
+                     type="number" min="0" step="0.01" value="{{ item.list_price }}" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="itemDiscount{{ item.id }}">Descuento unitario USD</label>
+              <input id="itemDiscount{{ item.id }}" class="form-control" name="item_discount_{{ item.id }}"
+                     type="number" min="0" step="0.01" value="{{ item.discount }}" required>
+            </div>
+          {% else %}
+            <div class="col-md-12 small text-secondary">
+              Cantidad: {{ item.quantity }} · Precio: USD {{ item.list_price|money }} ·
+              Descuento: USD {{ item.discount|money }} · Total: USD {{ item.total|money }}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+    <div class="border-top pt-3 mt-4">
+      <label for="saleEditReason" class="form-label fw-semibold">Motivo de la modificación *</label>
+      <textarea id="saleEditReason" class="form-control mb-2" name="reason" rows="2" maxlength="255"
+                minlength="5" placeholder="Ej. Corregir fecha histórica de la compra de accesorios de Corias." required></textarea>
+      <small class="d-block text-secondary mb-3">
+        Nexora guardará qué valores había antes, cuáles quedaron después, tu usuario,
+        la fecha y el motivo de la corrección.
+      </small>
+      <button type="submit" class="btn btn-brand px-4">
+        <i class="bi bi-save me-1"></i>Guardar corrección
+      </button>
+    </div>
+  </form>
+</section>
+{% endblock %}

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.28.3 — Corrección de ventas históricas con auditoría
+
+- Botón «Editar venta» para quienes tengan permiso sales.edit dentro de su cartera o proyecto.
+- Edición de fecha real de la venta, descripción de artículos, notas y condiciones comerciales con motivo obligatorio.
+- Cantidades, precios y descuentos corregibles solo sin cobros, cuotas, contratos ni producción vinculada.
+- Fecha de pago corregible por Superadministración, sincronizando ingreso contable inequívoco y bloqueando comisiones ya pagadas.
+- Etiqueta «Modificada» y registro visible del usuario, fecha, motivo y valores antes/después.
+- No se alteran saldos históricos ni se requieren migraciones; se reutiliza AuditLog.
+- Pruebas de ventas de accesorios anteriores, protección de importes y conciliación de fechas.
+
 ## 1.28.2 — Community Manager principal, Esencial Plus y coherencia de fechas
 
 - Community Manager es servicio principal, no una compra extra; la selección de servicios principales incluye planes Impacto y Community Manager, con historial y vigencias independientes por contrato.
