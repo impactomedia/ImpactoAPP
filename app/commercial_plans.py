@@ -242,7 +242,7 @@ def contract_end(product, starts_on, duration_months=None):
 
 def maintenance_label(contract, today=None):
     product = contract.product
-    if not product or product.category != "paquete":
+    if not product or product.category != "paquete" or product.name not in BY_NAME:
         return ""
     if product.name == "Impacto VIP":
         return "Mantenimiento básico gratuito de por vida."
