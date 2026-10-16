@@ -253,8 +253,7 @@ def maintenance_label(contract, today=None):
         if not contract.ends_on:
             return "Sin vencimiento registrado; verifica la duración acordada."
         until = contract.ends_on
-        state = "Finalizado" if (today or date.today()) > until else "Incluido"
-        return f"{state}: mantenimiento según acuerdo hasta {until:%d/%m/%Y}."
+        return f"Vigencia personalizada hasta {until:%d/%m/%Y}. El mantenimiento depende del acuerdo contratado."
     expected = contract_end(product, contract.starts_on)
     if expected and contract.ends_on != expected:
         return (
