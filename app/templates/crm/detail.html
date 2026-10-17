@@ -15,9 +15,7 @@
     </div>
   </div>
   <div class="d-flex flex-wrap gap-2">
-    {% if current_user.has_permission('clients.edit') %}
-    {% if current_user.has_permission('sales.create') %}<a class="btn btn-outline-success" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Registrar compra</a>{% endif %}
-    {% endif %}
+    {% if current_user.has_permission('sales.create') %}<a class="btn btn-outline-success" href="{{ url_for('sales.register_purchase', client_id=client.id) }}">Registrar compra</a>{% endif %}
     {% if current_user.has_permission('crm.edit') %}<a class="btn btn-brand" href="{{ url_for('crm.new_quote', client_id=client.id) }}">Nueva cotización</a>{% endif %}
   </div>
 </div>
