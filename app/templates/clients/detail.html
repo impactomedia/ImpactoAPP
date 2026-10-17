@@ -14,7 +14,7 @@
     <span class="eyebrow">Expediente del cliente</span>
     <h1>{{ client.business_name }}</h1>
     <p>
-      {{ client.code or 'Sin código' }} · {{ client.contact_name }}
+      {{ client.code or 'Sin código' }} · Propietario / encargado: {{ client.contact_name }}
       {% if client.phone %} · {{ client.phone }}{% endif %}
       {% if client.email %} · {{ client.email }}{% endif %}
     </p>
