@@ -28,7 +28,7 @@
   <form class="row g-2 align-items-end mb-3" method="get">
     <div class="col-lg-4 col-md-6">
       <label class="form-label small fw-semibold">Buscar</label>
-      <input class="form-control" name="q" value="{{ search }}" placeholder="Empresa, contacto, teléfono o código">
+      <input class="form-control" name="q" value="{{ search }}" placeholder="Empresa, propietario, teléfono o código">
     </div>
     <div class="col-lg-2 col-md-3">
       <label class="form-label small fw-semibold">Estado</label>
@@ -71,7 +71,7 @@
   <div class="table-responsive">
     <table class="table modern-table align-middle">
       <thead><tr>
-        <th>Negocio</th><th>Contacto</th><th>Estado</th><th>Asesor</th><th>Proyecto</th>
+        <th>Negocio</th><th>Propietario / encargado</th><th>Estado</th><th>Asesor</th><th>Proyecto</th>
         <th style="min-width:230px">Planes y servicios</th>
         {% if can_financial %}<th>Saldo</th>{% endif %}
         <th style="min-width:260px">Acciones</th>

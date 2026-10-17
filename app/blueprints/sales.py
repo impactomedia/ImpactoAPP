@@ -335,8 +335,29 @@ def index():
     return render_template("sales/index.html", sales=sales)
 
 
+@bp.route("/register", methods=["GET"])
+@login_required
+@permission_required("sales.create")
+def register_purchase():
+    """Elección del tipo de compra sin modificar las reglas de facturación."""
+    clients = _visible_clients_query().order_by(Client.business_name).all()
+    selected_id = request.args.get("client_id", type=int)
+    client = None
+    current_contract = None
+    if selected_id is not None:
+        client = _visible_clients_query().filter(Client.id == selected_id).first_or_404()
+        current_contract = active_principal_contract(client)
+    return render_template(
+        "sales/register_purchase.html",
+        clients=clients,
+        client=client,
+        current_contract=current_contract,
+    )
+
+
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
+@permission_required("sales.create")
 def new_sale():
     context = _sale_form_context()
     clients = context["clients"]
@@ -598,8 +619,11 @@ def new_sale():
 
 @bp.route("/from-quote/<int:quote_id>", methods=["POST"])
 @login_required
+@permission_required("sales.create")
 def from_quote(quote_id):
     quote = db.get_or_404(Quote, quote_id)
+    if not _visible_clients_query().filter(Client.id == quote.client_id).first():
+        abort(404)
     try:
         sale = create_sale_from_quote(
             quote,
@@ -621,6 +645,7 @@ def from_quote(quote_id):
 
 @bp.route("/principal/<int:client_id>", methods=["GET", "POST"])
 @login_required
+@permission_required("sales.create")
 def principal_service(client_id):
     client = _visible_clients_query().filter(Client.id == client_id).first_or_404()
     plans = (
