@@ -1,0 +1,91 @@
+{% extends "app_base.html" %}
+{% block title %}Registrar compra | Nexora{% endblock %}
+{% block app_content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Ventas y contratación</span>
+    <h1>Registrar compra</h1>
+    <p>Selecciona el registro comercial y el tipo de operación. Los planes principales, upgrades y las compras independientes tienen procesos propios.</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('sales.index') }}">Volver a ventas</a>
+</div>
+
+<section class="panel-card mb-4">
+  <form method="get" action="{{ url_for('sales.register_purchase') }}" class="row g-3 align-items-end">
+    <div class="col-lg-9">
+      <label class="form-label fw-semibold" for="selectSaleClient">Seguimiento o cliente *</label>
+      <select class="form-select" id="selectSaleClient" name="client_id" required {% if not clients %}disabled{% endif %}>
+        <option value="">Seleccionar empresa</option>
+        {% for c in clients %}
+        <option value="{{ c.id }}" {% if client and c.id == client.id %}selected{% endif %}>
+          {{ c.business_name }} — {{ 'Seguimiento' if c.record_type == 'seguimiento' else 'Cliente' }}{% if c.owner and c.owner.user %} · {{ c.owner.user.name }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      <small class="text-secondary">Solo se muestran registros dentro de tu cartera o alcance autorizado.</small>
+    </div>
+    <div class="col-lg-3">
+      <button type="submit" class="btn btn-dark w-100" {% if not clients %}disabled{% endif %}>Continuar</button>
+    </div>
+  </form>
+  {% if not clients %}
+  <div class="alert alert-warning mt-3 mb-0">
+    No tienes seguimientos o clientes disponibles.
+    {% if current_user.has_permission('crm.create') %}<a href="{{ url_for('crm.new_prospect') }}">Crear seguimiento</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
+
+{% if client %}
+<div class="mb-3">
+  <h2 class="h5 mb-1">{{ client.business_name }}</h2>
+  <p class="text-secondary mb-0">
+    <strong>Propietario / encargado:</strong> {{ client.contact_name or '—' }}
+    · <strong>Registro:</strong> {{ 'Seguimiento' if client.record_type == 'seguimiento' else 'Cliente' }}
+    · <strong>Plan principal actual:</strong>
+    {{ current_contract.product.name if current_contract and current_contract.product else 'Sin plan principal' }}
+  </p>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <section class="panel-card h-100 d-flex flex-column">
+      <div class="mb-3"><span class="badge-soft info">Planes comerciales</span></div>
+      <h2 class="h4">{{ 'Cambiar o mejorar servicio principal' if current_contract else 'Registrar servicio principal' }}</h2>
+      <p class="text-secondary">
+        {% if current_contract %}
+        Selecciona un upgrade de tu plan o un cambio permitido de servicio, respetando las condiciones y saldos del contrato vigente.
+        {% else %}
+        Registra un plan Impacto (Esencial, Esencial Plus, Golden o VIP) o un plan Community Manager como servicio principal del cliente.
+        {% endif %}
+      </p>
+      <div class="mt-auto">
+        <div class="small text-secondary mb-3">Incluye contrato, vigencia, activación, pagos, atribución de leads y generación del trabajo operativo.</div>
+        <a class="btn btn-brand w-100" href="{{ url_for('sales.principal_service', client_id=client.id) }}">
+          {{ 'Abrir cambios de plan' if current_contract else 'Elegir plan principal' }}
+        </a>
+      </div>
+    </section>
+  </div>
+  <div class="col-lg-6">
+    <section class="panel-card h-100 d-flex flex-column">
+      <div class="mb-3"><span class="badge-soft">Compras independientes</span></div>
+      <h2 class="h4">Servicio individual o compra adicional</h2>
+      <p class="text-secondary">Registra servicios individuales, imprenta, videos, publicidad, diseño o artículos personalizados.</p>
+      <div class="mt-auto">
+        <div class="small text-secondary mb-3">Estas operaciones no sustituyen un plan principal. Pueden registrarse incluso cuando todavía no exista uno.</div>
+        <a class="btn btn-outline-primary w-100" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Registrar compra independiente</a>
+      </div>
+    </section>
+  </div>
+</div>
+
+{% if client.record_type == 'seguimiento' %}
+<div class="alert alert-info mt-4">
+  Cuando confirmes cualquiera de las dos compras, el Seguimiento pasará a Cliente conservando su historial.
+</div>
+{% endif %}
+{% else %}
+<p class="text-secondary">Selecciona primero una empresa para elegir qué tipo de compra deseas registrar.</p>
+{% endif %}
+{% endblock %}
