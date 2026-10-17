@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -8,6 +8,7 @@ from app import create_app
 from app.extensions import db
 from app.models import (
     AccountReceivable,
+    Interaction,
     Client,
     Collaborator,
     ProductService,
@@ -419,3 +420,57 @@ def test_production_cannot_open_purchase_selector(client):
     _login(client, "production-sales@test.local")
     response = client.get("/sales/register", follow_redirects=False)
     assert response.status_code == 403
+
+
+def test_crm_paginated_agenda_has_context_and_filters(client, app):
+    """Regresión producción: /crm/ usa un render paginado diferente de crm.prospects."""
+    with app.app_context():
+        admin = User.query.filter_by(email="admin-sales@test.local").one()
+        overdue = Client.query.filter_by(code="SALES-V2-SEG").one()
+        planned = Client(
+            code="SALES-V2-FUT",
+            business_name="Prospecto Futuro",
+            contact_name="Propietario Futuro",
+            record_type="seguimiento",
+            pipeline_stage="interesado",
+            client_status="activo",
+        )
+        db.session.add(planned)
+        db.session.flush()
+        db.session.add_all([
+            Interaction(
+                client_id=overdue.id,
+                user_id=admin.id,
+                interaction_type="llamada",
+                occurred_at=datetime.utcnow() - timedelta(hours=2),
+                next_followup_at=datetime.now() - timedelta(days=2),
+            ),
+            Interaction(
+                client_id=planned.id,
+                user_id=admin.id,
+                interaction_type="llamada",
+                occurred_at=datetime.utcnow() - timedelta(hours=1),
+                next_followup_at=datetime.now() + timedelta(days=2),
+            ),
+        ])
+        db.session.commit()
+
+    _login(client, "admin-sales@test.local")
+    checks = {
+        "/crm/": (b"Seguimiento Sales V2", b"Prospecto Futuro"),
+        "/crm/?followup=vencidos": (b"Seguimiento Sales V2",),
+        "/crm/?followup=proximos": (b"Prospecto Futuro",),
+    }
+    for endpoint, names in checks.items():
+        response = client.get(endpoint)
+        assert response.status_code == 200, endpoint
+        for name in names:
+            assert name in response.data
+
+    overdue_only = client.get("/crm/?followup=vencidos").data
+    future_only = client.get("/crm/?followup=proximos").data
+    assert b"Prospecto Futuro" not in overdue_only
+    assert b"Seguimiento Sales V2" not in future_only
+
+    for endpoint in ("/crm/?followup=sin_fecha", "/crm/?followup=hoy", "/crm/?per_page=1&page=2"):
+        assert client.get(endpoint).status_code == 200, endpoint
