@@ -52,7 +52,7 @@
     </div>
 
     <div class="col-lg-3"><label class="form-label">Fecha de venta</label><input name="sale_date" type="date" class="form-control" value="{{ request.form.get('sale_date') or today }}"></div>
-    <div class="col-lg-3"><label class="form-label fw-semibold">Activación del servicio *</label><input name="activation_date" type="date" class="form-control" required value="{{ request.form.get('activation_date') or request.form.get('sale_date') or today }}"><small class="text-secondary">Se usará para calcular el vencimiento, sin cambiar la fecha de venta.</small></div>
+    <div class="col-lg-3"><label class="form-label fw-semibold">Activación del servicio *</label><input name="activation_date" type="date" class="form-control" required value="{{ request.form.get('activation_date') or request.form.get('sale_date') or today }}"><small class="text-secondary">Por defecto coincide con la fecha de venta. Puedes cambiarla si el servicio se activó otro día; esta fecha determina el vencimiento.</small></div>
     <div class="col-lg-3"><label class="form-label">Pago inicial</label><input name="initial_payment" id="initialPayment" type="number" min="0" step="0.01" class="form-control" value="0"></div>
     <div class="col-lg-3"><label class="form-label">Método</label><select name="payment_method" class="form-select">{% for m in ['transferencia','efectivo','Zelle','ACH','Wise','tarjeta','otro'] %}<option value="{{ m }}">{{ m|label }}</option>{% endfor %}</select></div>
     <div class="col-lg-3"><label class="form-label">Fecha del pago</label><input name="initial_payment_date" type="date" class="form-control" value="{{ today }}"></div>
@@ -118,6 +118,22 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+  // Evita que las ventas históricas conserven accidentalmente una activación de hoy.
+  // Si el usuario elige otra activación, no se sobrescribe.
+  const saleDateField = document.querySelector('input[name="sale_date"]');
+  const activationDateField = document.querySelector('input[name="activation_date"]');
+  let activationChanged = !!(saleDateField && activationDateField &&
+    activationDateField.value !== saleDateField.value);
+  if (activationDateField) {
+    activationDateField.addEventListener('input', () => {
+      activationChanged = true;
+    });
+  }
+  if (saleDateField && activationDateField) {
+    saleDateField.addEventListener('change', () => {
+      if (!activationChanged) activationDateField.value = saleDateField.value;
+    });
+  }
   const plan = document.getElementById('planSelect');
   const initial = document.getElementById('initialPayment');
   const upgradeCredit = parseFloat('{{ recognized_credit or 0 }}') || 0;

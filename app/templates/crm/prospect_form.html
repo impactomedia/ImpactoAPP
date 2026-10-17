@@ -8,13 +8,13 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="row g-3">
       <div class="col-md-6"><label class="form-label">Negocio *</label><input name="business_name" class="form-control" required value="{{ request.form.get('business_name','') }}"></div>
-      <div class="col-md-6"><label class="form-label">Contacto *</label><input name="contact_name" class="form-control" required value="{{ request.form.get('contact_name','') }}"></div>
+      <div class="col-md-6"><label class="form-label">Propietario / encargado *</label><input name="contact_name" class="form-control" required value="{{ request.form.get('contact_name','') }}"></div>
       <div class="col-md-4"><label class="form-label">Teléfono</label><input name="phone" class="form-control" value="{{ request.form.get('phone','') }}"></div>
       <div class="col-md-4"><label class="form-label">Correo</label><input name="email" type="email" class="form-control" value="{{ request.form.get('email','') }}"></div>
       <div class="col-md-4"><label class="form-label">Canal preferido</label><select name="preferred_channel" class="form-select"><option>WhatsApp</option><option>Llamada</option><option>Email</option></select></div>
       <div class="col-md-4"><label class="form-label">Industria</label><input name="industry" class="form-control" value="{{ request.form.get('industry','') }}"></div>
       <div class="col-md-4"><label class="form-label">Fuente</label><select name="source" class="form-select"><option>Llamada en frío</option><option>Facebook</option><option>Instagram</option><option>Google</option><option>Website</option><option>WhatsApp</option><option>Referido</option><option>Evento</option><option>Importado</option></select></div>
-      <div class="col-md-4"><label class="form-label">Generador del contacto</label>
+      <div class="col-md-4"><label class="form-label">Generador del lead</label>
         <select name="lead_generator_id" class="form-select" required>
           {% for generator in lead_generators %}<option value="{{ generator.id }}" {% if request.form.get('lead_generator_id', 0)|int == generator.id or (not request.form.get('lead_generator_id') and generator.code == 'EMPRESA') %}selected{% endif %}>{{ generator.name }}</option>{% endfor %}
         </select><small class="text-secondary">Origen de la base de leads; diferente del asesor responsable.</small>

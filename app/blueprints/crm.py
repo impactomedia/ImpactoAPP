@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
@@ -107,6 +107,29 @@ def _parse_date(value):
         return None
 
 
+def _followup_dates(clients):
+    """Fecha pendiente más reciente por actividad, sin consultar información de otras carteras."""
+    ids = [client.id for client in clients]
+    if not ids:
+        return {}
+    rows = (db.session.query(Interaction.client_id, Interaction.next_followup_at)
+            .filter(Interaction.client_id.in_(ids), Interaction.next_followup_at.isnot(None))
+            .order_by(Interaction.occurred_at.desc(), Interaction.id.desc()).all())
+    result = {}
+    for client_id, date_value in rows:
+        result.setdefault(client_id, date_value)
+    return result
+
+
+def _require_visible_followup(client_id, permission=None):
+    client = visible_clients().filter(
+        Client.id == client_id, Client.record_type == "seguimiento"
+    ).first_or_404()
+    if permission and not current_user.has_permission(permission):
+        abort(403)
+    return client
+
+
 @bp.route("/")
 @login_required
 def prospects():
@@ -133,9 +156,26 @@ def prospects():
         )
 
     clients = query.order_by(Client.updated_at.desc()).all()
+    followup_dates = _followup_dates(clients)
+    now = datetime.now()
+    followup_filter = request.args.get("followup", "").strip()
+    if followup_filter in {"vencidos", "hoy", "proximos", "sin_fecha"}:
+        def is_match(client):
+            next_at = followup_dates.get(client.id)
+            if followup_filter == "sin_fecha":
+                return next_at is None
+            if not next_at:
+                return False
+            if followup_filter == "vencidos":
+                return next_at < now
+            if followup_filter == "hoy":
+                return next_at.date() == now.date()
+            return next_at > now and next_at.date() > now.date()
+        clients = [client for client in clients if is_match(client)]
     advisor_projects = AdvisorProject.query.filter_by(active=True).order_by(AdvisorProject.name).all()
     return render_template(
         "crm/prospects.html",
+        followup_dates=followup_dates, followup_filter=followup_filter, now=now,
         clients=clients,
         stages=STAGES,
         search=search,
@@ -295,6 +335,7 @@ def detail(client_id):
     client = db.get_or_404(Client, client_id)
     if client.record_type == "cliente":
         return redirect(url_for("clients.detail", client_id=client.id))
+    client = _require_visible_followup(client_id)
     interactions = Interaction.query.filter_by(client_id=client.id).order_by(Interaction.occurred_at.desc()).all()
     note_edits, _ = edit_history("Interaction", interactions)
     quotes = Quote.query.filter_by(client_id=client.id).order_by(Quote.created_at.desc()).all()
@@ -311,6 +352,7 @@ def detail(client_id):
         protected_until=protected_until(client),
         followup_protected=is_protected(client),
         lead_generator=source_for_client(client), lead_generators=available_generators(),
+        next_followup_at=_followup_dates([client]).get(client.id),
     )
 
 
@@ -319,7 +361,7 @@ def detail(client_id):
 @roles_required("superadmin", "admin")
 def change_lead_origin(client_id):
     """Administración asigna procedencia para ventas futuras; los snapshots se conservan."""
-    client = db.get_or_404(Client, client_id)
+    client = visible_clients().filter(Client.id == client_id).first_or_404()
     provider_id = request.form.get("lead_generator_id", type=int)
     previous = source_for_client(client)
     try:
@@ -340,7 +382,7 @@ def change_lead_origin(client_id):
 @bp.route("/<int:client_id>/stage", methods=["POST"])
 @login_required
 def move_stage(client_id):
-    client = db.get_or_404(Client, client_id)
+    client = _require_visible_followup(client_id, "crm.edit")
     stage = request.form.get("stage")
     if stage not in STAGES:
         flash("Etapa no válida.", "danger")
@@ -356,7 +398,7 @@ def move_stage(client_id):
 @bp.route("/<int:client_id>/interaction", methods=["POST"])
 @login_required
 def add_interaction(client_id):
-    client = db.get_or_404(Client, client_id)
+    client = _require_visible_followup(client_id, "crm.edit")
     interaction_type = request.form.get("interaction_type", "nota")
     if interaction_type not in INTERACTION_TYPES:
         interaction_type = "nota"
@@ -427,7 +469,7 @@ def edit_internal_note(client_id, interaction_id):
 @login_required
 @roles_required("superadmin", "admin", "manager", "supervisor")
 def transfer(client_id):
-    client = db.get_or_404(Client, client_id)
+    client = _require_visible_followup(client_id)
     collaborators = _assignable_owners()
     allowed_ids = {row.id for row in collaborators}
     new_owner_id = request.form.get("owner_id", type=int)
@@ -474,7 +516,9 @@ def transfer(client_id):
 @bp.route("/<int:client_id>/quotes/new", methods=["GET", "POST"])
 @login_required
 def new_quote(client_id):
-    client = db.get_or_404(Client, client_id)
+    if not current_user.has_permission("crm.edit"):
+        abort(403)
+    client = visible_clients().filter(Client.id == client_id).first_or_404()
     products = ProductService.query.filter_by(active=True).order_by(ProductService.name).all()
     active_product_ids = {product.id for product in products}
 
@@ -596,4 +640,6 @@ def new_quote(client_id):
 @login_required
 def quote_detail(quote_id):
     quote = db.get_or_404(Quote, quote_id)
+    if not visible_clients().filter(Client.id == quote.client_id).first():
+        abort(404)
     return render_template("crm/quote_detail.html", quote=quote)
