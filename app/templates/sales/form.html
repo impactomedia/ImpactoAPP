@@ -1,10 +1,10 @@
 {% extends "app_base.html" %}
-{% block title %}Nueva compra adicional | Nexora{% endblock %}
+{% block title %}Servicio individual o compra adicional | Nexora{% endblock %}
 {% block app_content %}
 <div class="page-heading">
   <div>
     <span class="eyebrow">Registro de ventas</span>
-    <h1>Nueva compra adicional</h1>
+    <h1>Servicio individual o compra adicional</h1>
     <p>Imprenta, publicidad, video, diseño u otra compra independiente del servicio principal.</p>
   </div>
   <div><a class="btn btn-light border" href="{{ url_for('sales.index') }}">Volver a ventas</a></div>
@@ -76,8 +76,8 @@
 
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div>
-        <h2 class="h5 mb-1">2. Compra adicional</h2>
-        <p class="text-secondary small mb-0">Puedes seleccionar un producto del catálogo o registrar uno personalizado. Los planes principales se gestionan aparte.</p>
+        <h2 class="h5 mb-1">2. Detalle de la compra independiente</h2>
+        <p class="text-secondary small mb-0">Selecciona un servicio individual, producto de imprenta u otra compra del catálogo, o registra uno personalizado. Para contratar un plan principal, usa la opción «Servicio principal».</p>
       </div>
       <button type="button" class="btn btn-light border" id="addSaleRow">+ Agregar ítem</button>
     </div>
@@ -226,7 +226,7 @@
           <div class="d-flex justify-content-between"><span>Pago inicial</span><strong id="summaryInitial">0.00</strong></div>
           <div class="d-flex justify-content-between mt-2"><span>Saldo</span><strong id="summaryBalance">0.00</strong></div>
           <div class="d-flex justify-content-between mt-2"><span>Cuotas programadas</span><strong id="summaryInstallments">0.00</strong></div>
-          <button class="btn btn-brand w-100 mt-4" {% if not clients %}disabled{% endif %}>Registrar compra adicional</button>
+          <button class="btn btn-brand w-100 mt-4" {% if not clients %}disabled{% endif %}>Confirmar compra independiente</button>
           <small class="d-block text-secondary mt-2">Al confirmar, un Seguimiento pasa automáticamente a Cliente Activo. La compra no modifica su servicio principal.</small>
         </div>
       </div>
