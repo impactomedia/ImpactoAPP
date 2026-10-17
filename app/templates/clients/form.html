@@ -21,14 +21,14 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <section class="panel-card form-card mb-4">
-    <div class="panel-header"><div><h2>1. Identificación y contacto</h2><p>Datos principales del negocio y de la persona de contacto.</p></div></div>
+    <div class="panel-header"><div><h2>1. Identificación y propietario</h2><p>Datos principales del negocio y de su propietario o encargado.</p></div></div>
     <div class="row g-3">
       <div class="col-md-6">
         <label class="form-label">Nombre del negocio *</label>
         <input name="business_name" class="form-control" required value="{{ client.business_name or '' }}">
       </div>
       <div class="col-md-6">
-        <label class="form-label">Nombre del contacto *</label>
+        <label class="form-label">Nombre del propietario / encargado *</label>
         <input name="contact_name" class="form-control" required value="{{ client.contact_name or '' }}">
       </div>
       <div class="col-md-4">
