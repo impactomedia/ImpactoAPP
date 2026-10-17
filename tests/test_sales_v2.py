@@ -388,3 +388,34 @@ def test_new_followup_is_forced_to_usa(client, app):
         row = Client.query.filter_by(business_name="USA Followup LLC").one()
         assert row.record_type == "seguimiento"
         assert row.country == "USA"
+
+
+def test_purchase_selector_opens_for_admin_with_and_without_client(client, app):
+    """La nueva pantalla de registro de compras debe renderizar de verdad."""
+    _login(client, "admin-sales@test.local")
+    resp = client.get("/sales/register")
+    assert resp.status_code == 200
+    assert b"Registrar compra" in resp.data
+    assert b"Cliente Sales V2" in resp.data
+    assert b"Seguimiento Sales V2" in resp.data
+
+    with app.app_context():
+        prospect = Client.query.filter_by(code="SALES-V2-SEG").one()
+        prospect_id = prospect.id
+        customer_id = Client.query.filter_by(code="SALES-V2-CLI").one().id
+
+    for target_id in (prospect_id, customer_id):
+        selected = client.get(f"/sales/register?client_id={target_id}")
+        assert selected.status_code == 200
+        assert f"/sales/principal/{target_id}".encode() in selected.data
+        assert f"/sales/new?client_id={target_id}".encode() in selected.data
+
+        principal = client.get(f"/sales/principal/{target_id}")
+        assert principal.status_code == 200
+        assert b"Plan o Community Manager principal" in principal.data
+
+
+def test_production_cannot_open_purchase_selector(client):
+    _login(client, "production-sales@test.local")
+    response = client.get("/sales/register", follow_redirects=False)
+    assert response.status_code == 403
