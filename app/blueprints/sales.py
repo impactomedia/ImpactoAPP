@@ -619,8 +619,11 @@ def new_sale():
 
 @bp.route("/from-quote/<int:quote_id>", methods=["POST"])
 @login_required
+@permission_required("sales.create")
 def from_quote(quote_id):
     quote = db.get_or_404(Quote, quote_id)
+    if not _visible_clients_query().filter(Client.id == quote.client_id).first():
+        abort(404)
     try:
         sale = create_sale_from_quote(
             quote,
