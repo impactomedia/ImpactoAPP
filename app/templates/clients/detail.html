@@ -30,7 +30,7 @@
   <div class="d-flex flex-wrap gap-2">
     {% if can_edit %}<a class="btn btn-light border" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar ficha completa</a>{% endif %}
     {% if can_financial %}<a class="btn btn-outline-secondary" href="{{ url_for('clients.statement', client_id=client.id) }}" target="_blank">Estado de cuenta</a>{% endif %}
-    {% if current_user.has_permission('sales.create') %}<a class="btn btn-brand" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Nueva compra adicional</a>{% endif %}
+    {% if current_user.has_permission('sales.create') %}<a class="btn btn-brand" href="{{ url_for('sales.register_purchase', client_id=client.id) }}">Registrar compra</a>{% endif %}
   </div>
 </div>
 
@@ -68,7 +68,7 @@
           <section class="border rounded-4 p-3 h-100">
             <div class="panel-header mb-3"><div><h2>Resumen ejecutivo</h2><p>Información esencial para atender al cliente sin abrir otros módulos.</p></div></div>
             <div class="row g-3">
-              <div class="col-md-6"><small class="text-secondary">Contacto principal</small><div class="fw-semibold">{{ client.contact_name }}</div><div>{{ client.phone or '—' }}</div><div>{{ client.email or '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Propietario / encargado</small><div class="fw-semibold">{{ client.contact_name }}</div><div>{{ client.phone or '—' }}</div><div>{{ client.email or '—' }}</div></div>
               <div class="col-md-6"><small class="text-secondary">Responsable comercial</small><div class="fw-semibold">{{ client.owner.user.name if client.owner else 'Sin asignar' }}</div><div>{{ client.owner.advisor_project.name if client.owner and client.owner.advisor_project else 'Sin proyecto comercial' }}</div></div>
               <div class="col-md-6"><small class="text-secondary">Ubicación</small><div>{{ client.city or '—' }}{% if client.state %}, {{ client.state }}{% endif %}{% if client.country %}, {{ client.country }}{% endif %}</div><div>{{ client.timezone or 'Zona horaria sin definir' }}</div></div>
               <div class="col-md-6"><small class="text-secondary">Servicio principal actual</small><div>{% if principal_contract %}<span class="badge-soft success me-1 mb-1">{{ principal_contract.product.name }}</span><small class="d-block text-secondary">{{ principal_contract.starts_on }} → {{ principal_contract.ends_on or 'Sin vencimiento' }}</small>{% else %}<span class="text-secondary">Sin servicio principal</span>{% endif %}</div></div>
@@ -91,7 +91,7 @@
           <section class="border rounded-4 p-3">
             <h2 class="h5">Acciones rápidas</h2>
             <div class="d-grid gap-2">
-              {% if current_user.has_permission('sales.create') %}<a class="btn btn-light border" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Registrar compra adicional</a>{% endif %}
+              {% if current_user.has_permission('sales.create') %}<a class="btn btn-light border" href="{{ url_for('sales.register_purchase', client_id=client.id) }}">Registrar compra</a>{% endif %}
               {% if can_financial %}<a class="btn btn-light border" href="{{ url_for('clients.statement', client_id=client.id) }}" target="_blank">Ver estado de cuenta</a>{% endif %}
               {% if current_user.has_permission('tasks.edit') %}<a class="btn btn-light border" href="{{ url_for('operations.new_task') }}">Crear tarea</a>{% endif %}
               {% if current_user.has_permission('support.edit') %}<a class="btn btn-light border" href="{{ url_for('support.index') }}">Abrir ticket</a>{% endif %}
@@ -114,9 +114,9 @@
       <div class="row g-4">
         <div class="col-xl-6">
           <section class="border rounded-4 p-3 h-100">
-            <h3 class="h5">Contacto y ubicación</h3>
+            <h3 class="h5">Propietario y ubicación</h3>
             <div class="row g-3">
-              <div class="col-md-6"><small class="text-secondary">Contacto principal</small><div>{{ client.contact_name or '—' }}</div></div>
+              <div class="col-md-6"><small class="text-secondary">Propietario / encargado</small><div>{{ client.contact_name or '—' }}</div></div>
               <div class="col-md-6"><small class="text-secondary">Canal preferido</small><div>{{ client.preferred_channel or '—' }}</div></div>
               <div class="col-md-6"><small class="text-secondary">Teléfono</small><div>{{ client.phone or '—' }}</div></div>
               <div class="col-md-6"><small class="text-secondary">WhatsApp</small><div>{{ operational_profile.whatsapp_phone if operational_profile and operational_profile.whatsapp_phone else (client.phone or '—') }}</div></div>
@@ -187,7 +187,7 @@
 
     {% if can_financial %}
     <div class="tab-pane fade" id="compras">
-      <div class="panel-header"><div><h2>Historial comercial</h2><p>Planes, upgrades y compras adicionales permanecen dentro del mismo expediente.</p></div>{% if current_user.has_permission('sales.create') %}<a class="btn btn-brand btn-sm" href="{{ url_for('sales.new_sale', client_id=client.id) }}">Nueva compra adicional</a>{% endif %}</div>
+      <div class="panel-header"><div><h2>Historial comercial</h2><p>Planes, upgrades y compras adicionales permanecen dentro del mismo expediente.</p></div>{% if current_user.has_permission('sales.create') %}<a class="btn btn-brand btn-sm" href="{{ url_for('sales.register_purchase', client_id=client.id) }}">Nueva compra adicional</a>{% endif %}</div>
       <div class="table-responsive">
         <table class="table modern-table">
           <thead><tr><th>Operación</th><th>Tipo</th><th>Forma de pago</th><th>Fecha</th><th>Productos / servicios</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Asesor</th><th></th></tr></thead>
