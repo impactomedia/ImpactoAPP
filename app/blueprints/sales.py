@@ -357,6 +357,7 @@ def register_purchase():
 
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
+@permission_required("sales.create")
 def new_sale():
     context = _sale_form_context()
     clients = context["clients"]
@@ -641,6 +642,7 @@ def from_quote(quote_id):
 
 @bp.route("/principal/<int:client_id>", methods=["GET", "POST"])
 @login_required
+@permission_required("sales.create")
 def principal_service(client_id):
     client = _visible_clients_query().filter(Client.id == client_id).first_or_404()
     plans = (
