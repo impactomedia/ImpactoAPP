@@ -361,7 +361,7 @@ def detail(client_id):
 @roles_required("superadmin", "admin")
 def change_lead_origin(client_id):
     """Administración asigna procedencia para ventas futuras; los snapshots se conservan."""
-    client = db.get_or_404(Client, client_id)
+    client = visible_clients().filter(Client.id == client_id).first_or_404()
     provider_id = request.form.get("lead_generator_id", type=int)
     previous = source_for_client(client)
     try:
@@ -469,7 +469,7 @@ def edit_internal_note(client_id, interaction_id):
 @login_required
 @roles_required("superadmin", "admin", "manager", "supervisor")
 def transfer(client_id):
-    client = db.get_or_404(Client, client_id)
+    client = _require_visible_followup(client_id)
     collaborators = _assignable_owners()
     allowed_ids = {row.id for row in collaborators}
     new_owner_id = request.form.get("owner_id", type=int)
@@ -516,7 +516,9 @@ def transfer(client_id):
 @bp.route("/<int:client_id>/quotes/new", methods=["GET", "POST"])
 @login_required
 def new_quote(client_id):
-    client = db.get_or_404(Client, client_id)
+    if not current_user.has_permission("crm.edit"):
+        abort(403)
+    client = visible_clients().filter(Client.id == client_id).first_or_404()
     products = ProductService.query.filter_by(active=True).order_by(ProductService.name).all()
     active_product_ids = {product.id for product in products}
 
@@ -638,4 +640,6 @@ def new_quote(client_id):
 @login_required
 def quote_detail(quote_id):
     quote = db.get_or_404(Quote, quote_id)
+    if not visible_clients().filter(Client.id == quote.client_id).first():
+        abort(404)
     return render_template("crm/quote_detail.html", quote=quote)
