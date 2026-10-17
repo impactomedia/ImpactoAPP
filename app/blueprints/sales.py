@@ -335,6 +335,26 @@ def index():
     return render_template("sales/index.html", sales=sales)
 
 
+@bp.route("/register", methods=["GET"])
+@login_required
+@permission_required("sales.create")
+def register_purchase():
+    """Elección del tipo de compra sin modificar las reglas de facturación."""
+    clients = _visible_clients_query().order_by(Client.business_name).all()
+    selected_id = request.args.get("client_id", type=int)
+    client = None
+    current_contract = None
+    if selected_id is not None:
+        client = _visible_clients_query().filter(Client.id == selected_id).first_or_404()
+        current_contract = active_principal_contract(client)
+    return render_template(
+        "sales/register_purchase.html",
+        clients=clients,
+        client=client,
+        current_contract=current_contract,
+    )
+
+
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
 def new_sale():
