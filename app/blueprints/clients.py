@@ -1018,6 +1018,8 @@ def new_client():
 @login_required
 def detail(client_id):
     client = db.get_or_404(Client, client_id)
+    if not _commercial_client_allowed(client):
+        abort(404)
     if client.record_type != "cliente":
         return redirect(url_for("crm.detail", client_id=client.id))
 
