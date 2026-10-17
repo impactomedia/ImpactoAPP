@@ -40,7 +40,7 @@
         </select><button class="btn btn-sm btn-outline-primary">Guardar</button></div>
       </form>
       {% endif %}
-      <p><strong>Interés:</strong> {{ client.main_interest or '—' }}</p>
+      <p><strong>Interés:</strong> {{ client.main_interest or '—' }}</p><p><strong>Próxima gestión:</strong> {% if next_followup_at %}<span class="">{{ next_followup_at.strftime("%d/%m/%Y %H:%M") }}</span>{% else %}Sin programar{% endif %}</p>
       {% if current_user.has_permission('crm.edit') %}
       <form method="post" action="{{ url_for('crm.move_stage', client_id=client.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -78,7 +78,7 @@
           <strong>{{ i.interaction_type|label }} — {{ i.subject or 'Sin asunto' }}</strong>
           {% if note_edits.get(i.id) %}<span class="badge text-bg-warning ms-2">Editado</span>{% endif %}
           <small class="d-block text-secondary">{{ i.occurred_at.strftime('%d/%m/%Y %H:%M') }} · Registrado por: {{ i.user.name if i.user and i.user.name else 'Usuario no disponible' }}</small>
-          <p class="mb-0 mt-2" style="white-space:pre-line">{{ i.notes or '' }}</p>
+          <p class="mb-0 mt-2" style="white-space:pre-line">{{ i.notes or '' }}</p>{% if i.next_followup_at %}<small class="d-block mt-1">Próxima gestión programada: {{ i.next_followup_at.strftime("%d/%m/%Y %H:%M") }}</small>{% endif %}
           {% if note_edits.get(i.id) %}
           <small class="text-secondary d-block">Modificado por {{ note_edits[i.id].by }} · {{ note_edits[i.id].at.strftime('%d/%m/%Y %H:%M') }}</small>
           {% endif %}
