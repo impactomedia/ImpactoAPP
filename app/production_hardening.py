@@ -292,8 +292,10 @@ def _clients_index():
     )
 
 def _crm_prospects():
-    from app.blueprints.crm import STAGES, visible_clients
-    from app.models import AdvisorProject, Client, Collaborator
+    from datetime import timedelta
+
+    from app.blueprints.crm import STAGES, _followup_dates, visible_clients
+    from app.models import AdvisorProject, Client, Collaborator, Interaction
 
     query = visible_clients().filter(
         Client.record_type == "seguimiento"
@@ -325,6 +327,36 @@ def _crm_prospects():
             Collaborator.advisor_project_id == advisor_project_id
         )
 
+    # El listado /crm/ se sirve desde esta capa de paginación, no desde
+    # crm.prospects(). Mantener aquí los mismos filtros y contexto del template.
+    followup_filter = request.args.get("followup", "").strip()
+    now = datetime.now()
+    if followup_filter in {"vencidos", "hoy", "proximos", "sin_fecha"}:
+        # Fecha de la última actividad que programó un próximo contacto.
+        # La subconsulta correlacionada permite filtrar antes de paginar.
+        last_followup = (
+            db.session.query(Interaction.next_followup_at)
+            .filter(
+                Interaction.client_id == Client.id,
+                Interaction.next_followup_at.isnot(None),
+            )
+            .order_by(Interaction.occurred_at.desc(), Interaction.id.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
+        tomorrow = datetime.combine(
+            now.date() + timedelta(days=1), datetime.min.time()
+        )
+        if followup_filter == "vencidos":
+            query = query.filter(last_followup < now)
+        elif followup_filter == "hoy":
+            today = datetime.combine(now.date(), datetime.min.time())
+            query = query.filter(last_followup >= today, last_followup < tomorrow)
+        elif followup_filter == "proximos":
+            query = query.filter(last_followup >= tomorrow)
+        else:
+            query = query.filter(last_followup.is_(None))
+
     query = query.options(
         joinedload(Client.owner).joinedload(Collaborator.user),
         joinedload(Client.owner).joinedload(
@@ -344,6 +376,9 @@ def _crm_prospects():
         "crm/prospects.html",
         clients=pagination.items,
         pagination=pagination,
+        followup_dates=_followup_dates(pagination.items),
+        followup_filter=followup_filter,
+        now=now,
         stages=STAGES,
         search=search,
         stage=stage,
