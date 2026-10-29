@@ -84,6 +84,7 @@ ROLE_MAP = {
     "supervisor": "Supervisor / Coordinador",
     "advisor": "Asesor(a) de Ventas",
     "developer": "Desarrollador",
+    "content_creator": "Creador de contenido",
     "development_coordinator": "Coordinador de Desarrollo",
     "production": "Operaciones / Producción",
     "finance": "Contabilidad / Finanzas",
@@ -129,6 +130,9 @@ ROLE_PERMISSION_CODES = {
     },
     # Perfil mínimo de Desarrollo: consulta de clientes asignados y actualización de tareas propias.
     "developer": {
+        "clients.view", "clients.comment", "tasks.view", "tasks.update",
+    },
+    "content_creator": {
         "clients.view", "clients.comment", "tasks.view", "tasks.update",
     },
     "development_coordinator": {
