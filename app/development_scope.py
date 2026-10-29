@@ -49,7 +49,7 @@ def development_team_query(active_only=True):
         Collaborator.department.ilike("%development%"),
         Collaborator.job_title.ilike("%desarroll%"),
         Collaborator.job_title.ilike("%developer%"),
-        User.role.has(Role.name.in_([DEVELOPMENT_COORDINATOR_ROLE, "developer"])),
+        User.role.has(Role.name.in_([DEVELOPMENT_COORDINATOR_ROLE, "developer", "content_creator"])),
     )
     query = query.filter(area_condition)
 
@@ -78,5 +78,5 @@ def is_development_collaborator(collaborator):
         or "development" in department
         or "desarroll" in job_title
         or "developer" in job_title
-        or role_name in {DEVELOPMENT_COORDINATOR_ROLE, "developer"}
+        or role_name in {DEVELOPMENT_COORDINATOR_ROLE, "developer", "content_creator"}
     )

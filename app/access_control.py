@@ -276,7 +276,7 @@ def _task_allowed(task):
 
     # Los desarrolladores asignados al cliente pueden verificar cada beneficio
     # contratado, incluso cuando todavía no tiene responsable individual.
-    if role == "developer" and task.task_type == "beneficio_plan" and task.client_id:
+    if role in {"developer", "content_creator"} and task.task_type == "beneficio_plan" and task.client_id:
         from app.client_v3_services import client_coordination_allowed
         return client_coordination_allowed(task.client)
 
@@ -293,7 +293,7 @@ def _task_allowed(task):
 
     # Un colaborador de Producción ve únicamente tareas que están asignadas
     # directamente a él o donde participa como colaborador.
-    if role in {"production", "developer"}:
+    if role in {"production", "developer", "content_creator"}:
         return False
 
     return False
@@ -312,8 +312,8 @@ def _task_write_allowed(task):
     if role == DEVELOPMENT_COORDINATOR_ROLE:
         return _task_allowed(task)
 
-    if role in {"production", "developer", "hr"}:
-        if role == "developer" and task.task_type == "beneficio_plan":
+    if role in {"production", "developer", "content_creator", "hr"}:
+        if role in {"developer", "content_creator"} and task.task_type == "beneficio_plan":
             return _task_allowed(task)
         return task.assignee_id == collaborator.id or collaborator in task.collaborators
 
@@ -435,7 +435,7 @@ def _enforce_record_scope(endpoint):
 
     # El Coordinador de Desarrollo trabaja desde el Centro de coordinación,
     # nunca desde la ficha comercial completa.
-    if request.blueprint == "clients" and role in {DEVELOPMENT_COORDINATOR_ROLE, "developer"}:
+    if request.blueprint == "clients" and role in {DEVELOPMENT_COORDINATOR_ROLE, "developer", "content_creator"}:
         abort(403)
 
     # Clientes: las rutas por ID respetan la misma cartera comercial.
@@ -552,7 +552,7 @@ def init_access_control(app):
             endpoint == "clients_v3.add_operational_comment"
             and request.method == "POST"
             and current_user.role
-            and current_user.role.name in {"developer", DEVELOPMENT_COORDINATOR_ROLE}
+            and current_user.role.name in {"developer", "content_creator", DEVELOPMENT_COORDINATOR_ROLE}
         )
         if permission and not current_user.has_permission(permission) and not development_comment:
             abort(403)

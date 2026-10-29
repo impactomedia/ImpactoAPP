@@ -179,7 +179,7 @@ def my_clients_query():
 
     # El desarrollador solo puede consultar clientes con asignación directa
     # o con tareas donde es responsable/participante. Nunca toda la empresa.
-    if role == "developer":
+    if role in {"developer", "content_creator"}:
         assigned_ids = set(_assignment_client_ids([collaborator.id]))
         own_task = or_(
             Task.assignee_id == collaborator.id,
@@ -258,7 +258,7 @@ def client_coordination_allowed(client):
             is not None
         )
 
-    if role == "developer":
+    if role in {"developer", "content_creator"}:
         return my_clients_query().filter(Client.id == client.id).first() is not None
 
     if role == "production":
@@ -456,7 +456,7 @@ def build_client_alerts(client, can_financial=False, visible_tasks=None, visible
 def build_client_timeline(client, can_financial=False):
     events = []
     role = _user_role()
-    operational_only = role in {"production", "developer", DEVELOPMENT_COORDINATOR_ROLE}
+    operational_only = role in {"production", "developer", "content_creator", DEVELOPMENT_COORDINATOR_ROLE}
 
     def add(when, kind, title, body=""):
         dt = _as_datetime(when)
@@ -496,7 +496,7 @@ def build_client_timeline(client, can_financial=False):
         )
 
     for assignment in client.team_assignments_v3:
-        if role in {"production", "developer"} and (
+        if role in {"production", "developer", "content_creator"} and (
             not current_user.collaborator
             or assignment.collaborator_id != current_user.collaborator.id
         ):

@@ -123,7 +123,7 @@ def _visible_tasks_query():
     if role == "production":
         return query.filter(own)
 
-    if role == "developer":
+    if role in {"developer", "content_creator"}:
         from app.client_v3_services import my_clients_query
         visible_ids = [row.id for row in my_clients_query().all()]
         return query.filter(or_(own, (Task.task_type == "beneficio_plan") &
