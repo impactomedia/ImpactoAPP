@@ -36,6 +36,7 @@ ROLE_PROFILES = {
     "supervisor": ("Supervisor / Coordinador", "Coordinación Comercial"),
     "advisor": ("Asesor(a) de Ventas", "Ventas"),
     "developer": ("Desarrollador", "Desarrollo"),
+    "content_creator": ("Creador de contenido", "Desarrollo"),
     "development_coordinator": ("Coordinador de Desarrollo", "Desarrollo"),
     "production": ("Operaciones / Producción", "Operaciones"),
     "finance": ("Contabilidad / Finanzas", "Finanzas"),
