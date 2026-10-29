@@ -258,7 +258,7 @@
       <select name="user_id" class="form-select" required>
         <option value="">Seleccionar</option>
         {% for item in user_rows %}
-          {% if item.user.role and item.user.role.name not in ['superadmin','admin','manager','hr','supervisor','advisor','development_coordinator','production','finance','audit'] %}
+          {% if item.user.role and item.user.role.name not in ['superadmin','admin','manager','hr','supervisor','advisor','development_coordinator','developer','content_creator','production','finance','audit'] %}
           <option value="{{ item.user.id }}">{{ item.user.name }} · {{ item.user.role.label }}</option>
           {% endif %}
         {% endfor %}
