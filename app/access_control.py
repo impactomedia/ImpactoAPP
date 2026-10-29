@@ -312,7 +312,7 @@ def _task_write_allowed(task):
     if role == DEVELOPMENT_COORDINATOR_ROLE:
         return _task_allowed(task)
 
-    if role in {"production", "developer", "hr"}:
+    if role in {"production", "developer", "content_creator", "hr"}:
         if role in {"developer", "content_creator"} and task.task_type == "beneficio_plan":
             return _task_allowed(task)
         return task.assignee_id == collaborator.id or collaborator in task.collaborators
