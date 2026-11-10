@@ -436,3 +436,40 @@ def test_external_renewal_auto_calculates_one_year_without_expiry_input(client, 
             due_date=expected_due, status="pendiente",
         ).first()
         assert next_row is not None
+
+
+def test_historical_renewal_financing_uses_original_payment_date(client, app):
+    """Cuotas posteriores a la venta histórica no deben rechazarse por ser anteriores a hoy."""
+    from app.client_v2_models import ClientInstallment
+    from app.models import Payment
+
+    _login(client)
+    client.get("/renewals/")
+    with app.app_context():
+        renewal_id = Renewal.query.filter_by(renewal_type="6 Meses").one().id
+
+    paid_on = date.today() - timedelta(days=45)
+    first_due = date.today() - timedelta(days=30)
+    second_due = date.today() + timedelta(days=15)
+    response = client.post(
+        f"/renewals/{renewal_id}/complete",
+        data={
+            "payment_mode": "financiamiento",
+            "payment_date": paid_on.isoformat(),
+            "payment_method": "transferencia",
+            "initial_payment": "150",
+            "installment_amount[]": ["300", "300"],
+            "installment_due_date[]": [first_due.isoformat(), second_due.isoformat()],
+        },
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        sale = Sale.query.one()
+        assert sale.sale_date == paid_on
+        assert Payment.query.one().effective_date == paid_on
+        installments = ClientInstallment.query.filter_by(sale_id=sale.id).order_by(
+            ClientInstallment.sequence
+        ).all()
+        assert [row.due_date for row in installments] == [first_due, second_due]
+        assert installments[0].status == "vencida"
+        assert installments[1].status == "pendiente"

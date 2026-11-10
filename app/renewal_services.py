@@ -467,7 +467,7 @@ def _create_renewal_sale(
         sale_no=next_code("VEN", Sale),
         client_id=renewal.client_id,
         advisor_id=renewal.client.owner_id,
-        sale_date=date.today(),
+        sale_date=payment_date or date.today(),
         status="confirmada",
         currency="USD",
         total=total,
