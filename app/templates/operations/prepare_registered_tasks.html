@@ -1,0 +1,75 @@
+{% extends "app_base.html" %}
+{% block app_content %}
+{% set summary = report.summary %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Superadministración · Organización</span>
+    <h1>Preparar tareas de clientes registrados</h1>
+    <p>Recupera proyectos de planes activos y organiza los entregables históricos, sin cambiar estados ni responsables.</p>
+  </div>
+  <a class="btn btn-light border" href="{{ url_for('operations.tasks') }}">Volver a tareas</a>
+</div>
+
+<div class="alert alert-info mb-4">
+  <strong>Vista previa: todavía no se han aplicado cambios.</strong>
+  Se toman exclusivamente beneficios incluidos en contratos registrados.
+  No se marcarán trabajos como completados ni se crearán servicios que no estén documentados.
+  Los contratos ambiguos o proyectos ya entregados quedan sin modificar.
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><section class="panel-card h-100"><small class="text-secondary d-block">Clientes registrados</small><strong class="fs-3">{{ summary.clients }}</strong></section></div>
+  <div class="col-md-3"><section class="panel-card h-100"><small class="text-secondary d-block">Proyectos por crear</small><strong class="fs-3">{{ summary.projects_created }}</strong></section></div>
+  <div class="col-md-3"><section class="panel-card h-100"><small class="text-secondary d-block">Tareas nuevas a generar</small><strong class="fs-3">{{ summary.tasks_added }}</strong></section></div>
+  <div class="col-md-3"><section class="panel-card h-100"><small class="text-secondary d-block">Tareas existentes a organizar</small><strong class="fs-3">{{ summary.tasks_linked }}</strong></section></div>
+</div>
+
+<section class="panel-card mb-4">
+  <div class="panel-header">
+    <div>
+      <h2 class="h5 mb-1">Detalle de preparación</h2>
+      <p class="text-secondary mb-0">
+        Contratos activos revisados: {{ summary.contracts }} ·
+        Ya tienen proyecto: {{ summary.projects_existing }} ·
+        Sin beneficios documentados: {{ summary.skipped_no_benefits }} ·
+        Casos ambiguos: {{ summary.skipped_ambiguous }} ·
+        Proyectos cerrados respetados: {{ summary.skipped_closed }}
+      </p>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table modern-table align-middle">
+      <thead><tr><th>Cliente</th><th>Plan</th><th>Acción propuesta</th><th>Nuevas</th><th>A organizar</th></tr></thead>
+      <tbody>
+      {% for row in report.rows[:200] %}
+        <tr>
+          <td>{{ row.client }}</td>
+          <td>{{ row.plan }}</td>
+          <td>{{ row.status }}</td>
+          <td>{{ row.tasks }}</td>
+          <td>{{ row.linked }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="text-center text-secondary py-3">No hay contratos activos por preparar.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if report.rows|length > 200 %}
+    <p class="small text-secondary mb-0">Se muestran los primeros 200 registros. Los totales corresponden a todos los contratos.</p>
+  {% endif %}
+</section>
+
+<section class="panel-card">
+  <h2 class="h5">Confirmar preparación</h2>
+  <p>La acción solo crea proyectos y tareas faltantes, y vincula tareas anteriores cuando su proyecto es inequívoco. No elimina registros, no cambia avances y no afecta pagos.</p>
+  <form method="post" action="{{ url_for('operations.prepare_registered_tasks') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="form-check d-flex align-items-start gap-2 mb-3">
+      <input type="checkbox" class="form-check-input mt-1" name="confirmation" value="PREPARAR" required>
+      <span>Revisé el resumen y autorizo organizar los proyectos y tareas de los clientes existentes.</span>
+    </label>
+    <button type="submit" class="btn btn-brand" {% if not (summary.tasks_added or summary.tasks_linked or summary.projects_created) %}disabled{% endif %}>Preparar clientes existentes</button>
+  </form>
+</section>
+{% endblock %}
