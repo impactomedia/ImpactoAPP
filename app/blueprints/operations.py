@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
@@ -14,6 +14,7 @@ from app.development_scope import (
 )
 from app.project_admin_scope import is_project_admin
 from app.task_grouping import filter_task_groups, organize_tasks
+from app.historical_task_backfill import prepare_registered_clients
 from app.extensions import db
 from app.helpers import audit, next_code
 from app.models import ChangeRequest, Client, Collaborator, Notification, Project, Task, TaskComment
@@ -644,6 +645,43 @@ def tasks():
         search=search,
         states=TASK_STATES,
     )
+
+
+@bp.route("/tasks/prepare-registered", methods=["GET", "POST"])
+@login_required
+def prepare_registered_tasks():
+    """Preparación manual de clientes existentes, exclusiva de Superadministración."""
+    if _role_name() != "superadmin":
+        abort(403)
+
+    if request.method == "POST":
+        if request.form.get("confirmation") != "PREPARAR":
+            flash("Confirma la preparación para continuar.", "warning")
+            return redirect(url_for("operations.prepare_registered_tasks"))
+        try:
+            result = prepare_registered_clients(apply=True)
+            summary = result["summary"]
+            audit(
+                "preparar_tareas_clientes_existentes",
+                "Project",
+                after=summary,
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Error al preparar clientes y tareas históricas")
+            flash("No se pudo completar la preparación. No se guardaron cambios parciales.", "danger")
+            return redirect(url_for("operations.prepare_registered_tasks"))
+        flash(
+            f"Preparación aplicada: {summary['projects_created']} proyectos, "
+            f"{summary['tasks_added']} tareas nuevas y "
+            f"{summary['tasks_linked']} tareas existentes organizadas.",
+            "success",
+        )
+        return redirect(url_for("operations.prepare_registered_tasks"))
+
+    report = prepare_registered_clients(apply=False)
+    return render_template("operations/prepare_registered_tasks.html", report=report)
 
 
 @bp.route("/tasks/kanban")
