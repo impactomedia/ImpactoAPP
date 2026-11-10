@@ -23,7 +23,6 @@ PAGINATED_ENDPOINTS = {
     "crm.prospects",
     "sales.index",
     "operations.projects",
-    "operations.tasks",
     "printing.index",
     "support.index",
     "finance.expenses",
@@ -201,8 +200,6 @@ def init_paginated_views(app):
             return _sales_index()
         if endpoint == "operations.projects":
             return _projects_index()
-        if endpoint == "operations.tasks":
-            return _tasks_index()
         if endpoint == "printing.index":
             return _printing_index()
         if endpoint == "support.index":
@@ -430,33 +427,6 @@ def _projects_index():
     return render_template(
         "operations/projects.html",
         projects=pagination.items,
-        pagination=pagination,
-    )
-
-
-def _tasks_index():
-    from app.blueprints.operations import (
-        TASK_STATES,
-        _visible_tasks_query,
-    )
-    from app.models import Collaborator, Task
-
-    query = (
-        _visible_tasks_query()
-        .options(
-            joinedload(Task.assignee).joinedload(Collaborator.user)
-        )
-        .order_by(
-            Task.due_at.is_(None),
-            Task.due_at.asc(),
-            Task.id.desc(),
-        )
-    )
-    pagination = _paginate(query)
-    return render_template(
-        "operations/tasks.html",
-        tasks=pagination.items,
-        states=TASK_STATES,
         pagination=pagination,
     )
 
