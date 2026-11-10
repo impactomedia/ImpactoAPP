@@ -67,7 +67,7 @@
       <a class="nav-item {% if request.endpoint in ['hr.advisors','hr.advisor_edit'] %}active{% endif %}" href="{{ url_for('hr.advisors') }}"><i class="bi bi-person-gear"></i> Perfiles y salarios</a>
       {% endif %}
       {% if role_name == 'supervisor' %}
-      <a class="nav-item {% if request.endpoint == 'finance_control.supervisor_summary' %}active{% endif %}" href="{{ url_for('finance_control.supervisor_summary') }}"><i class="bi bi-cash-stack"></i> Mis comisiones · 15%</a>
+      <a class="nav-item {% if request.endpoint == 'finance_control.supervisor_summary' %}active{% endif %}" href="{{ url_for('finance_control.supervisor_summary') }}"><i class="bi bi-cash-stack"></i> Mis comisiones</a>
       {% endif %}
       {% if scoped_admin or role_name == 'supervisor' %}
       <a class="nav-item {% if request.endpoint == 'finance_control.goals' %}active{% endif %}" href="{{ url_for('finance_control.goals') }}"><i class="bi bi-bullseye"></i> Metas comerciales</a>

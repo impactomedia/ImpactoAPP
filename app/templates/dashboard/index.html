@@ -23,7 +23,7 @@
 <div class="metric-grid mb-4">
   <div class="metric-card"><span>Ingresos cobrados</span><strong>USD {{ role_dashboard.metrics.income|money }}</strong><small>{{ role_dashboard.metrics.period_label }}</small></div>
   <div class="metric-card"><span>Egresos</span><strong>USD {{ role_dashboard.metrics.expenses|money }}</strong><small>{{ role_dashboard.metrics.period_label }}</small></div>
-  <div class="metric-card"><span>Ventas cerradas</span><strong>USD {{ role_dashboard.metrics.sales_total|money }}</strong><small>{{ role_dashboard.metrics.sales_count }} venta(s)</small></div>
+  <div class="metric-card"><span>Ventas cerradas</span><strong>USD {{ role_dashboard.metrics.sales_total|money }}</strong><small>{{ role_dashboard.metrics.sales_count }} {{ 'venta' if role_dashboard.metrics.sales_count == 1 else 'ventas' }}</small></div>
   <div class="metric-card"><span>Cuentas por cobrar</span><strong>USD {{ role_dashboard.metrics.receivable|money }}</strong><small>Saldo pendiente actual</small></div>
   <div class="metric-card"><span>Cuentas por pagar</span><strong>USD {{ role_dashboard.metrics.payable|money }}</strong><small>Saldo pendiente actual</small></div>
   <div class="metric-card"><span>Clientes activos</span><strong>{{ role_dashboard.metrics.active_clients }}</strong><small>{{ role_dashboard.metrics.new_clients }} nuevos este mes</small></div>
@@ -74,8 +74,9 @@
     <strong class="fs-3">USD {{ fortnight.gross|money }} / {{ fortnight.total_goal|money }}</strong>
     <strong>{{ fortnight.gross_progress|round(1) }}%</strong>
   </div>
-  <div class="progress" style="height:20px" role="progressbar" aria-valuenow="{{ fortnight.gross_progress }}" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de meta quincenal">
-    <div class="progress-bar bg-primary" style="width:{{ fortnight.gross_progress }}%">{{ fortnight.gross_progress|round(1) }}%</div>
+  {% set gross_progress_display = 100 if fortnight.gross_progress > 100 else 0 if fortnight.gross_progress < 0 else fortnight.gross_progress %}
+  <div class="progress" style="height:20px" role="progressbar" aria-valuenow="{{ gross_progress_display }}" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de meta quincenal">
+    <div class="progress-bar bg-primary" style="width:{{ gross_progress_display }}%">{{ fortnight.gross_progress|round(1) }}%</div>
   </div>
   {% if not fortnight.goal %}<div class="alert alert-warning mt-3 mb-0">La meta de esta quincena aún no ha sido configurada por Administración.</div>{% endif %}
 </section>
@@ -95,10 +96,10 @@
   <div class="metric-card"><span>Seguimientos vencidos</span><strong>{{ role_dashboard.metrics.followup_overdue }}</strong><small>Requieren atención</small></div>
   <div class="metric-card"><span>Seguimientos hoy</span><strong>{{ role_dashboard.metrics.followup_today }}</strong><small>Agenda de hoy</small></div>
   <div class="metric-card"><span>Cotizaciones pendientes</span><strong>{{ role_dashboard.metrics.quotes_pending }}</strong><small>Borrador o enviadas</small></div>
-  <div class="metric-card"><span>Ventas del mes</span><strong>USD {{ role_dashboard.metrics.sales_total|money }}</strong><small>{{ role_dashboard.metrics.sales_count }} venta(s)</small></div>
+  <div class="metric-card"><span>Ventas del mes</span><strong>USD {{ role_dashboard.metrics.sales_total|money }}</strong><small>{{ role_dashboard.metrics.sales_count }} {{ 'venta' if role_dashboard.metrics.sales_count == 1 else 'ventas' }}</small></div>
   <div class="metric-card"><span>Cobrado de tus ventas</span><strong>USD {{ role_dashboard.metrics.collected|money }}</strong><small>Pagos confirmados</small></div>
 {% if not fortnight %}
-  <div class="metric-card"><span>Meta comercial anterior</span><strong>{{ role_dashboard.metrics.goal_percent if role_dashboard.metrics.goal_percent is not none else '—' }}%</strong><small>Meta existente para informes anteriores</small></div>
+  <div class="metric-card"><span>Meta comercial anterior</span><strong>{% if role_dashboard.metrics.goal_percent is not none %}{{ role_dashboard.metrics.goal_percent }}%{% else %}—{% endif %}</strong><small>Meta existente para informes anteriores</small></div>
 {% endif %}
   <div class="metric-card"><span>Clientes asignados</span><strong>{{ role_dashboard.metrics.clients }}</strong><small>Cartera comercial</small></div>
   <div class="metric-card"><span>Renovaciones</span><strong>{{ role_dashboard.metrics.renewals }}</strong><small>Próximos / vencidos</small></div>

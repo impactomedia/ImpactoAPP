@@ -19,7 +19,7 @@
 
 {% if pending_followups and current_user.has_permission('crm.view') %}
 <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2">
-  <div><strong>{{ pending_followups }} seguimiento(s) pendientes de convertirse en cliente.</strong> Solo aparecen aquí tras confirmar la primera compra.</div>
+  <div><strong>{{ pending_followups }} {{ 'seguimiento pendiente' if pending_followups == 1 else 'seguimientos pendientes' }} de convertirse en cliente.</strong> Solo aparecen aquí tras confirmar la primera compra.</div>
   <a class="btn btn-sm btn-outline-dark" href="{{ url_for('crm.prospects') }}">Ver seguimientos</a>
 </div>
 {% endif %}

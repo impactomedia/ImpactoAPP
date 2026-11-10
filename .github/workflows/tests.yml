@@ -23,6 +23,12 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
+      - name: Audit interface templates, navigation and textual quality
+        env:
+          SECRET_KEY: test-ci-secret
+          PYTHONPATH: .
+        run: python -m scripts.quality_audit
+
       - name: Run test suite
         env:
           SECRET_KEY: test-ci-secret
