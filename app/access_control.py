@@ -147,6 +147,7 @@ OPERATIONS_ENDPOINT_PERMISSIONS = {
     "operations.remove_project_member": "projects.edit",
     "operations.change_request": "projects.progress",
     "operations.tasks": "tasks.view",
+    "operations.prepare_registered_tasks": "tasks.edit",
     "operations.task_kanban": "tasks.view",
     "operations.task_detail": "tasks.view",
     "operations.new_task": "tasks.edit",
