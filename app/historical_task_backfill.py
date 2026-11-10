@@ -83,6 +83,7 @@ def prepare_registered_clients(*, apply=False):
         by_client.setdefault(p.client_id, []).append(p)
 
     results = []
+    orphan_ids_planned = set()
     summary = {
         "clients": len(client_rows),
         "contracts": len(contracts),
@@ -176,6 +177,8 @@ def prepare_registered_clients(*, apply=False):
             "tasks": len(missing), "linked": len(orphan),
         })
 
+        orphan_ids_planned.update(task.id for task in orphan)
+
         if not apply:
             continue
 
@@ -208,5 +211,35 @@ def prepare_registered_clients(*, apply=False):
                 "La sincronización produjo una cantidad inesperada de tareas. "
                 "No se guardará una importación parcial."
             )
+
+    # Agrupa tareas antiguas que ya tienen un único proyecto inequívoco,
+    # incluso cuando ese proyecto no proviene de un contrato con beneficios.
+    for client in client_rows:
+        client_projects = by_client.get(client.id, [])
+        if all_contract_counts[client.id] > 1 or len(client_projects) != 1:
+            continue
+        project = client_projects[0]
+        if project.status in FINISHED_PROJECT_STATES:
+            continue
+        orphan = [
+            task for task in Task.query.filter_by(
+                client_id=client.id, project_id=None
+            ).all()
+            if task.id not in orphan_ids_planned
+        ]
+        if not orphan:
+            continue
+
+        summary["tasks_linked"] += len(orphan)
+        results.append({
+            "client": client.business_name,
+            "plan": project.product.name if project.product else "Proyecto existente",
+            "status": "Vincular tareas previas a proyecto único",
+            "tasks": 0, "linked": len(orphan),
+        })
+        if apply:
+            for task in orphan:
+                task.project_id = project.id
+            db.session.flush()
 
     return {"summary": summary, "rows": results}
