@@ -11,6 +11,7 @@ from app.client_v2_models import ClientContractDetail
 
 IGNORED_SECTIONS = {"CONDICIONES COMERCIALES", "CORTESÍAS", "CORTESIAS"}
 TASK_TYPE = "beneficio_plan"
+FINISHED_PROJECT_STATES = {"entregado", "completado", "cancelado"}
 
 
 def contracted_benefits(text):
@@ -42,37 +43,43 @@ def _contract_for_project(project):
     return matches[0] if len(matches) == 1 else None
 
 
-def sync_project_benefits(project, contract=None):
-    """Una tarea por beneficio; idempotente e independiente del estado de ejecución.
+def contract_benefit_entries(contract):
+    """Lista beneficios explícitos del contrato, incluidas cortesías acordadas."""
+    if contract is None:
+        return []
+    detail = ClientContractDetail.query.filter_by(contract_id=contract.id).first()
+    snapshot = (
+        detail.benefits_snapshot
+        if detail and detail.benefits_snapshot
+        else contract.product.components if contract.product else None
+    )
+    entries = contracted_benefits(snapshot)
+    if detail and detail.courtesies_snapshot:
+        for raw in detail.courtesies_snapshot.splitlines():
+            courtesy = raw.strip(" -•\t")
+            if courtesy:
+                entries.append(("Cortesía contratada", courtesy))
+    return entries
 
-    Los ítems existentes nunca se reabren ni se sobreescriben. No se incluyen
-    regalos opcionales no seleccionados ni condiciones comerciales.
-    """
-    if not project or not project.product_id:
+
+def sync_project_benefits(project, contract=None):
+    """Sincroniza entregables sin borrar, reabrir ni duplicar trabajo histórico."""
+    if not project or not project.product_id or project.status in FINISHED_PROJECT_STATES:
         return 0
     contract = contract or _contract_for_project(project)
     if contract is None:
         return 0
 
-    detail = ClientContractDetail.query.filter_by(contract_id=contract.id).first()
-    snapshot = detail.benefits_snapshot if detail and detail.benefits_snapshot else (
-        project.product.components if project.product else None
-    )
-    benefits = contracted_benefits(snapshot)
-    if detail and detail.courtesies_snapshot:
-        for courtesy in detail.courtesies_snapshot.splitlines():
-            courtesy = courtesy.strip(" -•\t")
-            if courtesy:
-                benefits.append(("Cortesía contratada", courtesy))
-
+    benefits = contract_benefit_entries(contract)
+    # Los registros anteriores pueden tener un tipo distinto: deduplicar por título.
     existing = {
-        (row.title, row.task_type)
+        row.title.strip().casefold()
         for row in Task.query.filter_by(project_id=project.id).all()
     }
     inserted = 0
     for section, benefit in benefits:
         title = benefit[:180]
-        key = (title, TASK_TYPE)
+        key = title.strip().casefold()
         if key in existing:
             continue
         db.session.add(Task(
