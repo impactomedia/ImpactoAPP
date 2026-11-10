@@ -242,7 +242,7 @@ def complete(renewal_id):
             if initial >= amount:
                 payment_mode = "contado"
             installment_rows = _payment_plan_from_request(
-                amount - initial, date.today(), payment_mode=payment_mode,
+                amount - initial, payment_date, payment_mode=payment_mode,
             )
             next_due_date = add_months(max(date.today(), renewal.due_date), 12)
         else:
