@@ -3,6 +3,7 @@ from datetime import date, datetime
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import or_
+from sqlalchemy.orm import selectinload
 
 from app.access_control import _task_allowed, _task_write_allowed
 from app.development_scope import (
@@ -12,6 +13,7 @@ from app.development_scope import (
     development_team_query,
 )
 from app.project_admin_scope import is_project_admin
+from app.task_grouping import filter_task_groups, organize_tasks
 from app.extensions import db
 from app.helpers import audit, next_code
 from app.models import ChangeRequest, Client, Collaborator, Notification, Project, Task, TaskComment
@@ -610,12 +612,38 @@ def remove_project_member(project_id, collaborator_id):
 @bp.route("/tasks")
 @login_required
 def tasks():
+    """Vista compacta de trabajo agrupado; conserva la autorización existente."""
     rows = (
         _visible_tasks_query()
+        .options(
+            selectinload(Task.project).selectinload(Project.client),
+            selectinload(Task.client),
+            selectinload(Task.assignee).selectinload(Collaborator.user),
+        )
         .order_by(Task.due_at.is_(None), Task.due_at.asc(), Task.id.desc())
         .all()
     )
-    return render_template("operations/tasks.html", tasks=rows, states=TASK_STATES)
+    all_groups = organize_tasks(rows)
+    requested_status = (request.args.get("status") or "open").strip()
+    status = requested_status if requested_status in {"open", "all", *TASK_STATES} else "open"
+    group_filter = (request.args.get("group") or "all").strip()[:60]
+    search = (request.args.get("q") or "").strip()[:100]
+    groups = filter_task_groups(
+        all_groups, status=status, group_key=group_filter, search=search
+    )
+    return render_template(
+        "operations/tasks.html",
+        groups=groups,
+        available_groups=all_groups,
+        visible_tasks=sum(len(group["tasks"]) for group in groups),
+        total_tasks=len(rows),
+        open_tasks=sum(group["open_count"] for group in all_groups),
+        overdue_tasks=sum(group["overdue_count"] for group in all_groups),
+        status=status,
+        group_filter=group_filter,
+        search=search,
+        states=TASK_STATES,
+    )
 
 
 @bp.route("/tasks/kanban")
