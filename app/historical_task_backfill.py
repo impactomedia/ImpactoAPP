@@ -45,7 +45,10 @@ def _unique_project(contract, candidates, active_pair_count, exact_contract_coun
     if len(manual) > 1:
         return None, False, "Hay varios proyectos manuales para el plan."
     if len(candidates) == 1:
-        return candidates[0], False, None
+        return None, False, (
+            "El contrato no tiene venta vinculada, pero el proyecto sí; "
+            "confirmar que corresponden antes de relacionarlos."
+        )
     if len(candidates) > 1:
         return None, False, "Hay varios proyectos de ventas anteriores para el plan."
     return None, True, None
