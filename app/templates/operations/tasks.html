@@ -1,19 +1,129 @@
 {% extends "app_base.html" %}
 {% block app_content %}
 {% set role_name = current_user.role.name if current_user.role else '' %}
+
+<style>
+  .task-group-summary { cursor: pointer; list-style: none; }
+  .task-group-summary::-webkit-details-marker { display: none; }
+  .task-group-chevron { transition: transform .2s ease; }
+  details[open] .task-group-chevron { transform: rotate(90deg); }
+  .task-group-summary:focus-visible { outline: 2px solid var(--bs-primary, #0d6efd); outline-offset: 3px; }
+  .task-metric { padding: 1rem 1.25rem; height: 100%; }
+  .task-metric-label { display: block; font-size: .85rem; color: var(--bs-secondary-color, #697586); }
+  .task-metric-value { display: block; font-size: 1.55rem; font-weight: 700; }
+  .task-group-meta { color: var(--bs-secondary-color, #697586); font-size: .85rem; }
+</style>
+
 <div class="page-heading">
-  <div><span class="eyebrow">Coordinación</span><h1>Tareas</h1><p>Trabajo interno, comercial y operativo.</p></div>
   <div>
-    {% if role_name in ['superadmin','admin','manager','supervisor','development_coordinator'] %}<a class="btn btn-light border" href="{{ url_for('operations.task_kanban') }}">Kanban</a>{% endif %}
-    {% if current_user.has_permission('tasks.edit') %}<a class="btn btn-brand" href="{{ url_for('operations.new_task') }}">Nueva tarea</a>{% endif %}
+    <span class="eyebrow">Coordinación</span>
+    <h1>Tareas por proyecto</h1>
+    <p>Organiza el trabajo por proyecto. Las tareas terminadas se pueden consultar desde los filtros.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    {% if role_name in ['superadmin','admin','manager','supervisor','development_coordinator'] %}
+    <a class="btn btn-light border" href="{{ url_for('operations.task_kanban') }}">Kanban</a>
+    {% endif %}
+    {% if current_user.has_permission('tasks.edit') %}
+    <a class="btn btn-brand" href="{{ url_for('operations.new_task') }}">Nueva tarea</a>
+    {% endif %}
   </div>
 </div>
-<section class="panel-card">
-  <div class="table-responsive"><table class="table modern-table">
-    <thead><tr><th>Tarea</th><th>Tipo</th><th>Prioridad</th><th>Estado</th><th>Responsable</th><th>Vence</th><th></th></tr></thead>
-    <tbody>
-    {% for t in tasks %}<tr><td>{{ t.title }}</td><td>{{ t.task_type|label }}</td><td>{{ t.priority|label }}</td><td>{{ t.status|label }}</td><td>{{ t.assignee.user.name if t.assignee else '—' }}</td><td>{{ t.due_at.strftime('%d/%m/%Y %H:%M') if t.due_at else '—' }}</td><td><a class="btn btn-sm btn-light border" href="{{ url_for('operations.task_detail', task_id=t.id) }}">Abrir</a></td></tr>{% else %}<tr><td colspan="7" class="text-center py-4">No hay tareas disponibles.</td></tr>{% endfor %}
-    </tbody>
-  </table></div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="panel-card task-metric"><span class="task-metric-label">Tareas activas</span><strong class="task-metric-value">{{ open_tasks }}</strong></div></div>
+  <div class="col-md-4"><div class="panel-card task-metric"><span class="task-metric-label">Tareas vencidas</span><strong class="task-metric-value">{{ overdue_tasks }}</strong></div></div>
+  <div class="col-md-4"><div class="panel-card task-metric"><span class="task-metric-label">Total registrado</span><strong class="task-metric-value">{{ total_tasks }}</strong></div></div>
+</div>
+
+<section class="panel-card mb-4">
+  <form method="get" action="{{ url_for('operations.tasks') }}" class="row g-3 align-items-end">
+    <div class="col-lg-4">
+      <label class="form-label" for="taskGroupSelect">Proyecto o cliente</label>
+      <select class="form-select" name="group" id="taskGroupSelect">
+        <option value="all">Todos los proyectos</option>
+        {% for group in available_groups %}
+        <option value="{{ group.key }}" {% if group_filter == group.key %}selected{% endif %}>{{ group.kind }}: {{ group.title }}{% if group.client_name %} · {{ group.client_name }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-3">
+      <label class="form-label" for="taskStatusSelect">Estado</label>
+      <select class="form-select" name="status" id="taskStatusSelect">
+        <option value="open" {% if status == 'open' %}selected{% endif %}>Activas (predeterminado)</option>
+        <option value="all" {% if status == 'all' %}selected{% endif %}>Todas, incluidas las cerradas</option>
+        {% for state in states %}
+        <option value="{{ state }}" {% if status == state %}selected{% endif %}>{{ state|label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-3">
+      <label class="form-label" for="taskSearch">Buscar tarea</label>
+      <input type="search" class="form-control" id="taskSearch" name="q" value="{{ search }}" maxlength="100" placeholder="Tarea, proyecto o responsable">
+    </div>
+    <div class="col-lg-2 d-flex gap-2">
+      <button class="btn btn-brand flex-fill" type="submit">Filtrar</button>
+      <a class="btn btn-light border" href="{{ url_for('operations.tasks') }}" title="Limpiar filtros" aria-label="Limpiar filtros"><i class="bi bi-arrow-counterclockwise"></i></a>
+    </div>
+  </form>
 </section>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h2 class="h6 mb-0">{{ groups|length }} grupos · {{ visible_tasks }} tareas mostradas</h2>
+  <span class="text-secondary small">Pulsa un proyecto para desplegar sus tareas.</span>
+</div>
+
+{% for group in groups %}
+<details class="panel-card mb-3" {% if group_filter != 'all' %}open{% endif %}>
+  <summary class="task-group-summary d-flex flex-wrap align-items-center gap-3 py-2">
+    <i class="bi bi-chevron-right task-group-chevron" aria-hidden="true"></i>
+    <span class="flex-grow-1">
+      <strong class="d-block">{{ group.title }}</strong>
+      <span class="task-group-meta">{{ group.kind }}{% if group.client_name %} · {{ group.client_name }}{% endif %}</span>
+    </span>
+    <span class="badge-soft">{{ group.visible_count }} mostradas</span>
+    <span class="badge-soft info">{{ group.open_count }} activas</span>
+    {% if group.overdue_count %}
+    <span class="badge-soft danger">{{ group.overdue_count }} vencidas</span>
+    {% endif %}
+  </summary>
+  <div class="table-responsive mt-3">
+    <table class="table modern-table align-middle mb-0">
+      <thead>
+        <tr>
+          <th scope="col">Tarea</th>
+          <th scope="col">Tipo</th>
+          <th scope="col">Prioridad</th>
+          <th scope="col">Estado</th>
+          <th scope="col">Responsable</th>
+          <th scope="col">Vence</th>
+          <th scope="col"><span class="visually-hidden">Acciones</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in group.tasks %}
+        <tr>
+          <td><strong>{{ task.title }}</strong></td>
+          <td>{{ task.task_type|label }}</td>
+          <td>
+            <span class="badge-soft{% if task.priority in ['urgente', 'alta'] %} danger{% endif %}">{{ task.priority|label }}</span>
+          </td>
+          <td>{{ task.status|label }}</td>
+          <td>{{ task.assignee.user.name if task.assignee and task.assignee.user else 'Sin asignar' }}</td>
+          <td>{{ task.due_at.strftime('%d/%m/%Y %H:%M') if task.due_at else 'Sin fecha' }}</td>
+          <td><a class="btn btn-sm btn-light border" href="{{ url_for('operations.task_detail', task_id=task.id) }}">Abrir</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% else %}
+<section class="panel-card text-center py-5">
+  <i class="bi bi-list-check fs-3 d-block mb-2" aria-hidden="true"></i>
+  <h2 class="h6">No hay tareas con estos filtros</h2>
+  <p class="text-secondary mb-3">Prueba otro proyecto o incluye tareas completadas y canceladas.</p>
+  <a class="btn btn-light border" href="{{ url_for('operations.tasks') }}">Ver tareas activas</a>
+</section>
+{% endfor %}
 {% endblock %}
