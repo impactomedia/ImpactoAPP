@@ -650,19 +650,30 @@ def generate_operational_work(sale):
                     )
                 )
         else:
+            is_video = bool(product and product.name == "Video")
             db.session.add(
                 Task(
-                    title=f"Procesar compra adicional: {item.description}",
-                    description=(
-                        "Revisar requisitos, materiales, responsable y fecha de entrega "
-                        "de esta compra adicional."
+                    title=(
+                        f"Producción de video: {item.description}"[:180]
+                        if is_video
+                        else f"Procesar compra adicional: {item.description}"
                     ),
-                    task_type="cliente",
+                    description=(
+                        "Confirmar brief y materiales, coordinar la producción y edición "
+                        "del video, revisión y entrega con el cliente."
+                        if is_video
+                        else (
+                            "Revisar requisitos, materiales, responsable y fecha de entrega "
+                            "de esta compra adicional."
+                        )
+                    ),
+                    task_type="video" if is_video else "cliente",
                     client_id=sale.client_id,
                     project_id=project.id,
                     priority="alta",
                     status="pendiente",
-                    due_at=datetime.utcnow() + timedelta(days=3),
+                    # El plazo del video es acordado con cada cliente: no inventar vencimiento.
+                    due_at=None if is_video else datetime.utcnow() + timedelta(days=3),
                 )
             )
 
