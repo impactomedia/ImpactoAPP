@@ -14,8 +14,8 @@
   </div>
   <div class="col-xl-8">
     <section class="panel-card">
-      <h2 class="h5">Marcaciones de hoy</h2>
-      <table class="table modern-table"><thead><tr><th>Tipo</th><th>Hora</th><th>Nota</th></tr></thead><tbody>{% for m in marks %}<tr><td>{{ m.mark_type|label }}</td><td>{{ m.marked_at.strftime('%H:%M:%S') }}</td><td>{{ m.note or '—' }}</td></tr>{% else %}<tr><td colspan="3">Aún no hay marcaciones.</td></tr>{% endfor %}</tbody></table>
+      <h2 class="h5">Marcaciones de hoy</h2><p class="text-secondary small">Horario de Nicaragua (UTC−6)</p>
+      <table class="table modern-table"><thead><tr><th>Tipo</th><th>Hora</th><th>Nota</th></tr></thead><tbody>{% for m in marks %}<tr><td>{{ m.mark_type|label }}</td><td>{{ (m.marked_at|attendance_local).strftime('%H:%M:%S') }}</td><td>{{ m.note or '—' }}</td></tr>{% else %}<tr><td colspan="3">Aún no hay marcaciones.</td></tr>{% endfor %}</tbody></table>
     </section>
   </div>
 </div>
