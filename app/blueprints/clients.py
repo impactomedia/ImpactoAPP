@@ -1018,6 +1018,15 @@ def new_client():
 @login_required
 def detail(client_id):
     client = db.get_or_404(Client, client_id)
+    role = current_user.role.name if current_user.role else ""
+    if role in {"developer", "content_creator", "development_coordinator"}:
+        # Development may consult only the operational center of its own clients,
+        # never the full commercial record (contracts, sales, payments, etc.).
+        from app.client_v3_services import client_coordination_allowed
+        if client.record_type != "cliente" or not client_coordination_allowed(client):
+            abort(403)
+        return redirect(url_for("clients_v3.coordination", client_id=client.id))
+
     if not _commercial_client_allowed(client):
         abort(404)
     if client.record_type != "cliente":
