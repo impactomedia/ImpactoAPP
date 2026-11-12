@@ -243,3 +243,25 @@ def test_content_creator_cannot_open_commercial_or_admin_pages(client):
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 403, (path, response.status_code)
     assert client.post("/sales/new", data={}).status_code == 403
+
+
+@pytest.mark.parametrize("role_index", [1, 4])
+def test_development_dashboard_links_to_authorized_client_coordination(client, app, role_index):
+    """Inicio nunca debe dirigir al desarrollador a la ficha comercial restringida."""
+    ids = app.config["TEST_NX_IDS"]
+    login(client, role_index)
+    response = client.get("/dashboard/")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "Cliente asignado" in html
+    assert "Cliente no asignado" not in html
+    assert f'href="/clients/{ids["client1"]}/coordination"' in html
+    assert f'href="/clients/{ids["client1"]}"' not in html
+
+    # El acceso directo a direcciones antiguas también lleva a coordinación
+    # solo cuando el usuario ya tenía acceso al cliente.
+    legacy = client.get(f'/clients/{ids["client1"]}', follow_redirects=True)
+    assert legacy.status_code == 200
+    assert "Centro de coordinación" in legacy.get_data(as_text=True)
+    assert client.get(f'/clients/{ids["client2"]}').status_code == 403
