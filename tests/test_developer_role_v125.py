@@ -110,7 +110,12 @@ def test_developer_can_read_only_assigned_client(client,app):
     assert b"Cliente no asignado" not in page.data
     assert client.get(f"/clients/{ids['client1']}/coordination").status_code==200
     assert client.get(f"/clients/{ids['client2']}/coordination").status_code==403
-    assert client.get(f"/clients/{ids['client1']}").status_code==403
+    legacy_link = client.get(f"/clients/{ids['client1']}", follow_redirects=False)
+    assert legacy_link.status_code == 302
+    assert legacy_link.headers["Location"].endswith(
+        f"/clients/{ids['client1']}/coordination"
+    )
+    assert client.get(f"/clients/{ids['client2']}").status_code == 403
     assert client.post(f"/clients/{ids['client1']}/coordination/comment",data={"body":"Seguimiento de desarrollo","process_type":"Desarrollo web"}).status_code==302
     assert client.post(f"/clients/{ids['client2']}/coordination/comment",data={"body":"Intento ajeno","process_type":"Desarrollo web"}).status_code==403
     with app.app_context():
@@ -188,7 +193,12 @@ def test_content_creator_sees_only_assigned_clients_and_tasks(client, app):
     assert b"Cliente no asignado" not in page.data
     assert client.get(f"/clients/{ids['client1']}/coordination").status_code == 200
     assert client.get(f"/clients/{ids['client2']}/coordination").status_code == 403
-    assert client.get(f"/clients/{ids['client1']}").status_code == 403
+    legacy_link = client.get(f"/clients/{ids['client1']}", follow_redirects=False)
+    assert legacy_link.status_code == 302
+    assert legacy_link.headers["Location"].endswith(
+        f"/clients/{ids['client1']}/coordination"
+    )
+    assert client.get(f"/clients/{ids['client2']}").status_code == 403
 
     response = client.post(
         f"/clients/{ids['client1']}/coordination/comment",
@@ -233,3 +243,25 @@ def test_content_creator_cannot_open_commercial_or_admin_pages(client):
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 403, (path, response.status_code)
     assert client.post("/sales/new", data={}).status_code == 403
+
+
+@pytest.mark.parametrize("role_index", [1, 4])
+def test_development_dashboard_links_to_authorized_client_coordination(client, app, role_index):
+    """Inicio nunca debe dirigir al desarrollador a la ficha comercial restringida."""
+    ids = app.config["TEST_NX_IDS"]
+    login(client, role_index)
+    response = client.get("/dashboard/")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    assert "Cliente asignado" in html
+    assert "Cliente no asignado" not in html
+    assert f'href="/clients/{ids["client1"]}/coordination"' in html
+    assert f'href="/clients/{ids["client1"]}"' not in html
+
+    # El acceso directo a direcciones antiguas también lleva a coordinación
+    # solo cuando el usuario ya tenía acceso al cliente.
+    legacy = client.get(f'/clients/{ids["client1"]}', follow_redirects=True)
+    assert legacy.status_code == 200
+    assert "Centro de coordinación" in legacy.get_data(as_text=True)
+    assert client.get(f'/clients/{ids["client2"]}').status_code == 403

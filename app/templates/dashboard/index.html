@@ -198,7 +198,7 @@
         <td>{{ c.owner.user.name if c.owner else 'Sin asignar' }}</td>
         <td>
           {% if c.record_type == 'cliente' and current_user.has_permission('clients.view') %}
-            {% if role_name == 'production' %}
+            {% if role_name in ['production', 'developer', 'content_creator', 'development_coordinator'] %}
             <a class="btn btn-sm btn-light border" href="{{ url_for('clients_v3.coordination', client_id=c.id) }}">Abrir</a>
             {% else %}
             <a class="btn btn-sm btn-light border" href="{{ url_for('clients.detail', client_id=c.id) }}">Abrir</a>
