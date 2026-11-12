@@ -5,6 +5,9 @@ from flask import Blueprint, abort, current_app, flash, redirect, render_templat
 from flask_login import current_user, login_required
 
 from app.decorators import roles_required
+from app.attendance_time import (
+    local_form_to_utc, to_local, today_local, utc_now, utc_range_for_local_day,
+)
 from app.extensions import db
 from app.helpers import audit, next_code, save_upload
 from app.models import (
@@ -25,6 +28,13 @@ from app.models import (
 bp = Blueprint("hr", __name__, url_prefix="/hr")
 
 MARK_TYPES = ["entrada", "break_inicio", "break_fin", "almuerzo_inicio", "almuerzo_fin", "salida"]
+
+
+@bp.app_template_filter("attendance_local")
+def attendance_local(value):
+    """Muestra las marcaciones almacenadas en UTC como hora de Managua."""
+    return to_local(value)
+
 LEAVE_TYPES = {"vacaciones", "permiso", "ausencia"}
 
 # Perfil profesional predeterminado: cargo y área se derivan del rol del usuario.
@@ -90,11 +100,15 @@ def _parse_date(value):
 @bp.route("/")
 @login_required
 def dashboard():
-    today = date.today()
+    today = today_local()
+    utc_start, utc_end = utc_range_for_local_day(today)
     collaborators = _visible_collaborator_query().order_by(Collaborator.status, Collaborator.id).all()
     collaborator_ids = [row.id for row in collaborators]
 
-    marks_query = AttendanceMark.query.filter(db.func.date(AttendanceMark.marked_at) == today)
+    marks_query = AttendanceMark.query.filter(
+        AttendanceMark.marked_at >= utc_start,
+        AttendanceMark.marked_at < utc_end,
+    )
     leaves_query = LeaveRequest.query.filter(
         LeaveRequest.start_date <= today,
         LeaveRequest.end_date >= today,
@@ -439,10 +453,12 @@ def my_day():
         flash("Tu usuario no tiene expediente de colaborador.", "warning")
         return redirect(url_for("dashboard.index"))
 
-    today = date.today()
+    today = today_local()
+    utc_start, utc_end = utc_range_for_local_day(today)
     marks = AttendanceMark.query.filter(
         AttendanceMark.collaborator_id == collaborator.id,
-        db.func.date(AttendanceMark.marked_at) == today,
+        AttendanceMark.marked_at >= utc_start,
+        AttendanceMark.marked_at < utc_end,
     ).order_by(AttendanceMark.marked_at).all()
     last = marks[-1].mark_type if marks else None
     return render_template(
@@ -461,10 +477,13 @@ def mark():
         flash("No tienes expediente de colaborador.", "danger")
         return redirect(url_for("dashboard.index"))
 
-    today = date.today()
+    stamped_at = utc_now()
+    today = to_local(stamped_at).date()
+    utc_start, utc_end = utc_range_for_local_day(today)
     marks = AttendanceMark.query.filter(
         AttendanceMark.collaborator_id == collaborator.id,
-        db.func.date(AttendanceMark.marked_at) == today,
+        AttendanceMark.marked_at >= utc_start,
+        AttendanceMark.marked_at < utc_end,
     ).order_by(AttendanceMark.marked_at).all()
     last = marks[-1].mark_type if marks else None
     allowed = _allowed_mark_types(last)
@@ -477,6 +496,7 @@ def mark():
     row = AttendanceMark(
         collaborator_id=collaborator.id,
         mark_type=mark_type,
+        marked_at=stamped_at,
         note=request.form.get("note"),
     )
     db.session.add(row)
@@ -491,8 +511,12 @@ def mark():
 @roles_required("superadmin", "admin", "manager", "hr", "supervisor")
 def attendance():
     selected = request.args.get("date")
-    day = _parse_date(selected) or date.today()
-    query = AttendanceMark.query.filter(db.func.date(AttendanceMark.marked_at) == day)
+    day = _parse_date(selected) or today_local()
+    utc_start, utc_end = utc_range_for_local_day(day)
+    query = AttendanceMark.query.filter(
+        AttendanceMark.marked_at >= utc_start,
+        AttendanceMark.marked_at < utc_end,
+    )
     if _role_name() == "supervisor" and current_user.collaborator:
         query = query.filter(AttendanceMark.collaborator_id.in_(_supervisor_team_ids()))
     marks = query.order_by(AttendanceMark.marked_at).all()
@@ -776,7 +800,8 @@ def correct_mark(mark_id):
         return redirect(url_for("hr.attendance"))
 
     try:
-        marked_at = datetime.fromisoformat(raw)
+        entered_local = datetime.fromisoformat(raw)
+        marked_at = local_form_to_utc(entered_local)
     except ValueError:
         flash("La fecha/hora indicada no es válida.", "danger")
         return redirect(url_for("hr.attendance"))
@@ -796,7 +821,7 @@ def correct_mark(mark_id):
     )
     db.session.commit()
     flash("Marcación corregida con auditoría.", "success")
-    return redirect(url_for("hr.attendance", date=mark.marked_at.date().isoformat()))
+    return redirect(url_for("hr.attendance", date=to_local(mark.marked_at).date().isoformat()))
 
 
 @bp.route("/collaborators/<int:collaborator_id>/vacation-adjust", methods=["POST"])
