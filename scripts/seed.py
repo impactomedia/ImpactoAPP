@@ -174,6 +174,8 @@ PRODUCTS = [
     dict(name="Redes Sociales", category="servicio", responsible_area="Social Media", renewal_required=True),
     dict(name="SEO Local", category="servicio", responsible_area="SEO", renewal_required=True),
     dict(name="Branding / Logo", category="servicio", responsible_area="Diseño", renewal_required=False),
+    dict(name="Video", category="servicio", responsible_area="Producción", renewal_required=False,
+         is_physical=False, description="Producción de video como compra adicional. Precio según la venta."),
     dict(name="Material Impreso", category="imprenta", responsible_area="Imprenta", is_physical=True),
 ]
 
@@ -181,7 +183,7 @@ CATALOGS = {
     "payment_method": ["efectivo", "transferencia", "ACH", "Wise", "Zelle", "tarjeta", "otro"],
     "prospect_source": ["Facebook", "Instagram", "Google", "Website", "WhatsApp", "Referido", "Llamada", "Evento", "Otro"],
     "expense_category": ["Nómina", "Comisión", "Publicidad", "Hosting", "Dominios", "Software", "Imprenta", "Envíos", "Equipo", "Reembolso", "Servicios", "Otros"],
-    "task_type": ["Interna", "Cliente", "Venta", "Diseño", "Website", "SEO", "Impresión", "Administración"],
+    "task_type": ["Interna", "Cliente", "Venta", "Diseño", "Video", "Website", "SEO", "Impresión", "Administración"],
     "ticket_type": ["Soporte", "Cambio de información", "Website", "Redes", "Pago", "Acceso", "Diseño", "Impresión", "Otro"],
 }
 
