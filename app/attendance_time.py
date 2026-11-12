@@ -4,11 +4,16 @@ Las columnas AttendanceMark.marked_at usan datetime UTC sin tzinfo.
 La conversión se hace únicamente en los límites de lectura y edición.
 """
 from datetime import date, datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 ATTENDANCE_ZONE_NAME = "America/Managua"
-ATTENDANCE_ZONE = ZoneInfo(ATTENDANCE_ZONE_NAME)
+try:
+    ATTENDANCE_ZONE = ZoneInfo(ATTENDANCE_ZONE_NAME)
+except ZoneInfoNotFoundError:
+    # Las imágenes Python slim pueden no incluir la base de zonas horarias.
+    # Nicaragua utiliza UTC−6 sin cambio de horario de verano actualmente.
+    ATTENDANCE_ZONE = timezone(timedelta(hours=-6), name=ATTENDANCE_ZONE_NAME)
 
 
 def utc_now():
