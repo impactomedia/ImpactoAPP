@@ -437,7 +437,11 @@ def _enforce_record_scope(endpoint):
     # El Coordinador de Desarrollo trabaja desde el Centro de coordinación,
     # nunca desde la ficha comercial completa.
     if request.blueprint == "clients" and role in {DEVELOPMENT_COORDINATOR_ROLE, "developer", "content_creator"}:
-        abort(403)
+        # Legacy bookmarks (/clients/<id>) may enter through the commercial route.
+        # Allow ONLY read-only detail to redirect to the already scoped operational
+        # center; every other commercial client endpoint remains forbidden.
+        if endpoint != "clients.detail" or request.method != "GET":
+            abort(403)
 
     # Clientes: las rutas por ID respetan la misma cartera comercial.
     if request.blueprint == "clients" and "client_id" in args:
