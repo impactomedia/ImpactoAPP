@@ -110,7 +110,12 @@ def test_developer_can_read_only_assigned_client(client,app):
     assert b"Cliente no asignado" not in page.data
     assert client.get(f"/clients/{ids['client1']}/coordination").status_code==200
     assert client.get(f"/clients/{ids['client2']}/coordination").status_code==403
-    assert client.get(f"/clients/{ids['client1']}").status_code==403
+    legacy_link = client.get(f"/clients/{ids['client1']}", follow_redirects=False)
+    assert legacy_link.status_code == 302
+    assert legacy_link.headers["Location"].endswith(
+        f"/clients/{ids['client1']}/coordination"
+    )
+    assert client.get(f"/clients/{ids['client2']}").status_code == 403
     assert client.post(f"/clients/{ids['client1']}/coordination/comment",data={"body":"Seguimiento de desarrollo","process_type":"Desarrollo web"}).status_code==302
     assert client.post(f"/clients/{ids['client2']}/coordination/comment",data={"body":"Intento ajeno","process_type":"Desarrollo web"}).status_code==403
     with app.app_context():
@@ -188,7 +193,12 @@ def test_content_creator_sees_only_assigned_clients_and_tasks(client, app):
     assert b"Cliente no asignado" not in page.data
     assert client.get(f"/clients/{ids['client1']}/coordination").status_code == 200
     assert client.get(f"/clients/{ids['client2']}/coordination").status_code == 403
-    assert client.get(f"/clients/{ids['client1']}").status_code == 403
+    legacy_link = client.get(f"/clients/{ids['client1']}", follow_redirects=False)
+    assert legacy_link.status_code == 302
+    assert legacy_link.headers["Location"].endswith(
+        f"/clients/{ids['client1']}/coordination"
+    )
+    assert client.get(f"/clients/{ids['client2']}").status_code == 403
 
     response = client.post(
         f"/clients/{ids['client1']}/coordination/comment",
